@@ -17,7 +17,7 @@ O devlog existe para que **outra IA consiga replicar o projeto** lendo as entrad
 4. Crie a entrada no formato do README do devlog.
 5. Atualize o índice (`aguardando revisão`). Marque como `concluída` as anteriores que já estão em commit (`git log --oneline -- docs/devlog`).
 6. Se mudou agente, skill, guarda ou convenção, atualize **Como replicar**.
-7. **Registro de tempo:** pergunte ao autor (AskUserQuestion) quantas horas a sessão desta etapa levou e acrescente a linha no array `SESSOES` de `docs/devlog/tempo.html` (`{ data: 'AAAA-MM-DD', horas: <n>, etapa: '<ID>', nota: '<resumo curto>' }`). Se ele ainda não souber, use `horas: null` e nota pedindo para preencher; mesma data e etapa já registradas → atualize a linha em vez de duplicar.
+7. **Registro de tempo (automático):** rode `node .claude/hooks/tempo.mjs fechar <ID>`. Ele soma o tempo ativo (hora do sistema, gravada pelos hooks `UserPromptSubmit`/`Stop` em `.claude/tempo.jsonl`; pausas acima de 30 min não contam) desde o último fechamento e imprime `{ data, horas, inicio, fim }`. Acrescente a linha no array `SESSOES` de `docs/devlog/tempo.html` (`{ data, horas, etapa: '<ID>', nota: '<resumo curto> (auto, <inicio>–<fim>)' }`) sem perguntar ao autor. Rode `fechar` **uma vez por etapa** (ele grava o marco). Mesma data e etapa já registradas → some as horas na linha existente.
 
 ## Regras
 - Datas absolutas (AAAA-MM-DD).

@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.5 · **Data:** 2026-11-14
+> **Versão da spec:** 0.6 · **Data:** 2026-11-14
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -128,6 +128,7 @@ O glossário termo → identificador é o de [`CONTRATO.md`](CONTRATO.md) §2 (c
 *(a definir por FEAT: casos de uso, intenções aceitas, `domainEvent` emitidos e a ordem deles)*
 
 - **FEAT-01:** `GET /health` (CONTRATO FEAT-01). Sem caso de uso, sem domínio e sem `domainEvent` (D-07).
+- **FEAT-03:** `GET /lab/config`, `PATCH /lab/config`, `POST /lab/config/reset`, só com `LAB_ENABLED` (D-14). Casos de uso `GetGameConfig`, `UpdateGameConfig`, `ResetGameConfig` (D-11). Sem `domainEvent` (config não é agregado de partida).
 
 ## Requisitos
 
@@ -138,6 +139,17 @@ Sem regra de jogo (README II.2, II.3); o comportamento observável vem de CONTRA
 - **REQ-01 — Health check:** Dado o backend no ar, quando `GET /health`, então `200` com `{ "status": "ok", "contractVersion": <versão do contrato que o backend implementa, D-06> }` (CONTRATO FEAT-01, §1.5).
 - **REQ-02 — Rota desconhecida:** Dado o backend no ar, quando chega um pedido para rota inexistente (qualquer método), então `404` com `{ "error": { "code": "NOT_FOUND", "message": "Recurso não encontrado." } }` (CONTRATO §1.4, §4).
 - **REQ-03 — Falha inesperada:** Dado um pedido que provoca uma exceção não tratada em qualquer endpoint, quando o backend responde, então `500` com `{ "error": { "code": "INTERNAL_ERROR", "message": "Erro inesperado no servidor. Tente novamente." } }`, sem vazar stack trace no corpo (CONTRATO FEAT-01, §1.4, §4). No e2e, a exceção é provocada por um controller descartável declarado só no arquivo de teste — não existe endpoint de depuração.
+
+### FEAT-03 — Esqueleto do laboratório
+
+Regras de README II.6 e Apêndice A. Valores desta FEAT (D-11): Partida (jogadores 1 a 6, README 1.3), pontos de ação por vez 3 (11.1), Pico e Vigor iniciais 10/10 (7.4), vida base / ouro / mão iniciais 20/10/7 (9.1). Os demais valores do Apêndice A entram com a FEAT que os usa (ROADMAP §1). Formatos exatos: CONTRATO, seção FEAT-03 (a propor).
+
+- **REQ-04 — Configuração padrão:** Dado o laboratório ligado (D-14) e nenhum ajuste salvo, quando `GET /lab/config`, então `200` com `values` e `defaults` iguais a `{ minPlayers: 1, maxPlayers: 6, actionPointsPerTurn: 3, initialPeak: 10, initialVigor: 10, baseHealth: 20, initialGold: 10, initialHandSize: 7 }` e `limits` com `{ min, max }` de cada chave (D-12).
+- **REQ-05 — Ajuste parcial:** Dado a configuração padrão, quando `PATCH /lab/config` com `{ "actionPointsPerTurn": 4 }`, então `200` com `values.actionPointsPerTurn = 4` e as demais chaves inalteradas; um `GET /lab/config` seguinte (inclusive após reiniciar o backend) devolve o mesmo `values` (D-13).
+- **REQ-06 — Ajuste inválido:** Dado qualquer configuração salva, quando `PATCH /lab/config` com corpo que não é objeto JSON, chave desconhecida, valor não inteiro, valor fora de `limits`, ou que deixaria `minPlayers > maxPlayers`, então `400` com `code: "LAB_CONFIG_INVALID"` e `details.fields` listando cada chave inválida com o motivo; **nada** é salvo (o pedido inteiro é rejeitado).
+- **REQ-07 — Restaurar padrões:** Dado ajustes salvos, quando `POST /lab/config/reset`, então `200` com `values` igual a `defaults`, e o próximo `GET` devolve os padrões.
+- **REQ-08 — Laboratório desligado:** Dado `LAB_ENABLED` ausente ou `false`, quando qualquer pedido a `/lab/*`, então `404` `NOT_FOUND` (as rotas não existem, README II.6).
+- **REQ-09 — Leitura pelas regras:** Dado o caso de uso `GetGameConfigUseCase`, quando não há ajuste salvo, então devolve a `GameConfig` com os padrões; quando há, devolve os valores salvos sobre os padrões (chave salva que não existe mais é ignorada; chave nova sem valor salvo usa o padrão). É a porta pela qual as regras das próximas FEATs leem os valores (Constituição 7).
 
 ## Decisões
 
@@ -152,6 +164,11 @@ Sem regra de jogo (README II.2, II.3); o comportamento observável vem de CONTRA
 - **D-09 — Env, conexão e isolamento do e2e:** o env é validado pelo schema Zod de `src/infra/env/env.ts` via `ConfigModule.forRoot({ validate })` (`PORT` padrão 3333; `DATABASE_URL` precisa ser `postgres(ql)://`); env inválido derruba o boot listando cada variável. O `DatabaseModule` faz `select 1` ao criar o pool, então banco inacessível também derruba o boot. No e2e, `test/setup-e2e.ts` cria um schema `e2e_<uuid>` por arquivo de teste, aponta o `DATABASE_URL` para ele (`options=-c search_path=…`) e o apaga no fim (2026-11-14).
 - **D-10 — CORS e forma do filtro:** origem liberada vem de `CORS_ORIGIN` (env, URL `http(s)`, padrão `http://localhost:5173`, o dev server do Vite usado pelo frontend), aplicada com `enableCors` no `main.ts`. O filtro de D-08 é registrado como `APP_FILTER` no `HttpModule` (vale também no e2e) e responde pelo `HttpAdapterHost` (sem depender de tipos do Express). Hoje toda `HttpException` que não é 404 vira 500 `INTERNAL_ERROR`, como D-08 diz; o mapeamento de 4xx entra quando o primeiro endpoint com corpo existir (2026-11-14).
 
+- **D-11 — `GameConfig` no domínio `lab`:** value object `GameConfig` em `src/domain/lab/enterprise/value-objects/game-config/`, com os padrões do Apêndice A em **um único** arquivo (`defaults.ts`) e os limites (D-12). Porta `GameConfigRepository` (`get(): GameConfig | null`, `save(config)`); casos de uso `GetGameConfigUseCase`, `UpdateGameConfigUseCase` (parcial, valida tudo antes de salvar), `ResetGameConfigUseCase`; erro `LabConfigInvalidError` (`LAB_CONFIG_INVALID`). Cada FEAT seguinte acrescenta as suas chaves ao `GameConfig`, aos padrões e aos limites. Quando a campanha existir (FEAT-05+), ela **copia** a config no momento da criação, para a regra não mudar no meio de um save (decisão do autor, 2026-11-14).
+- **D-12 — Limites (proposta, ajustável pelo autor):** todos inteiros. `minPlayers` 1–6 e `maxPlayers` 1–6 (teto do MVP, README 1.3), com `minPlayers ≤ maxPlayers`; `actionPointsPerTurn` 1–10; `initialPeak` 1–1000; `initialVigor` 0–1000; `baseHealth` 1–1000; `initialGold` 0–100000; `initialHandSize` 0–60 (2026-11-14).
+- **D-13 — Persistência da config:** tabela `game_config` com uma linha (`id = 'current'`), `values jsonb` (só as chaves ajustadas) e `updated_at`. Na leitura, o mapper mescla o salvo sobre os padrões (REQ-09), então FEAT nova que acrescenta chave não precisa migrar dados. Reset apaga a linha (decisão do autor: banco, 2026-11-14).
+- **D-14 — Flag do laboratório:** env `LAB_ENABLED` (booleano, padrão `false`; `true` no `.env.example` e no Compose de dev). O `LabModule` só é importado quando `true`, então em release as rotas não existem (404 pelo filtro de D-08). A checagem de **admin** (README II.6) entra com a autenticação (FEAT-25); até lá, não é tratada. O filtro de D-08 passa a mapear `DomainError.code` → status (`LAB_CONFIG_INVALID` → 400), e corpo JSON malformado em `/lab/*` também vira `LAB_CONFIG_INVALID` (2026-11-14).
+
 ## 4. Tarefas
 
 ### FEAT-01 — Esqueleto técnico
@@ -162,6 +179,14 @@ Contrato necessário: CONTRATO v0.4, seção FEAT-01 (`acordado`) — `GET /heal
 - [x] **T-02 — Docker Compose, env e base do Drizzle.** `docker-compose.yml` (serviços `postgres` e `backend`, com Dockerfile); `.env.example` (`PORT`, `DATABASE_URL`); `src/infra/env/` (schema Zod + `EnvModule`/`EnvService`, app não sobe com env inválido); `drizzle.config.ts`; `src/infra/database/database.module.ts` com a conexão `pg` (sem tabelas ainda — o primeiro schema nasce com o primeiro agregado persistido); `test/setup-e2e.ts` com schema Postgres único por execução e limpeza (D-03). **Verificação:** `docker compose up -d` sobe banco e backend; app conecta no banco; env inválido derruba o boot com mensagem clara.
 - [x] **T-03 — `GET /health` e filtro de erros (REQ-01, REQ-02, REQ-03).** TDD: e2e Supertest primeiro, um teste por REQ (`it('REQ-01: …')`), cenários com os valores exatos do CONTRATO FEAT-01. Depois: `src/infra/http/contract-version.ts` (D-06), `controllers/health/index.controller.ts` (D-07), exception filter global em `http/errors/` (D-08), `http.module.ts`, CORS liberado para a origem do frontend (env), `client.http` com os dois cenários do contrato. **Verificação:** `npm run test:e2e` verde; `curl` dos cenários responde byte a byte o contrato. Ao final: `/contrato` marca FEAT-01 `implementado (BE)` e gera o AVISO DE FRONTEND.
 
+### FEAT-03 — Esqueleto do laboratório
+
+Contrato necessário (seção FEAT-03, a propor pelo backend com `/contrato FEAT-03` **antes da T-04**): `GET /lab/config`, `PATCH /lab/config`, `POST /lab/config/reset`; tipo `LabConfig` (`values`, `defaults`, `limits`); glossário das chaves (`minPlayers`, `maxPlayers`, `actionPointsPerTurn`, `initialPeak`, `initialVigor`, `baseHealth`, `initialGold`, `initialHandSize`); código `LAB_CONFIG_INVALID` (400, `details.fields`); rotas só em dev (404 em release).
+
+- [ ] **T-04 — Domínio `GameConfig` (REQ-09; regras de REQ-05 a REQ-07).** TDD unitário: `GameConfig` + `defaults.ts` + limites (D-11, D-12), porta `GameConfigRepository`, `test/repositories/in-memory-game-config-repository.ts`, os três casos de uso e `LabConfigInvalidError`. **Verificação:** `npx vitest related --run` verde; `domain-guard --all` limpo.
+- [ ] **T-05 — Persistência da config (D-13).** Schema Drizzle `game_config`, **primeira migração**, mapper (mescla sobre os padrões), `DrizzleGameConfigRepository`, provider no `DatabaseModule`. **Verificação:** e2e do repositório (salvar, ler, apagar) em schema isolado; `drizzle-kit` gera a migração sem diferença pendente.
+- [ ] **T-06 — Rotas do laboratório (REQ-04 a REQ-08).** TDD e2e Supertest primeiro (um `it` por REQ, com os valores do contrato). `LAB_ENABLED` no env (D-14), `LabModule` condicional, controllers, presenter `LabConfigPresenter`, pipe do corpo, mapeamento `DomainError` → status no filtro, `client.http`. **Verificação:** `npm run test:e2e` verde; `curl` com flag ligada e desligada. Ao final: `/contrato` marca FEAT-03 `implementado (BE)` e gera o AVISO DE FRONTEND.
+
 ## 8. Histórico
 
 | Versão | Data | Mudança |
@@ -171,6 +196,7 @@ Contrato necessário: CONTRATO v0.4, seção FEAT-01 (`acordado`) — `GET /heal
 | 0.3 | 2026-11-14 | T-01 concluída: D-05 autorizado e instalado (`@nestjs/config` segue major próprio, 12.x; TypeScript fixado em 5.x — ver devlog 001). |
 | 0.4 | 2026-11-14 | T-02 concluída: D-09 (env com Zod, falha cedo sem banco, schema isolado no e2e). |
 | 0.5 | 2026-11-14 | T-03 concluída: REQ-01 a REQ-03 implementados; D-10 (CORS por `CORS_ORIGIN`, filtro como `APP_FILTER`). |
+| 0.6 | 2026-11-14 | Planejamento da FEAT-03: REQ-04 a REQ-09, D-11 a D-14, tarefas T-04 a T-06. FEAT-02 não tem lado backend. |
 
 ## Apêndice A — Conteúdo de teste
 

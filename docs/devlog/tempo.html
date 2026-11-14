@@ -8,7 +8,8 @@
      - horas: número decimal (2.5 = 2h30). Use null se ainda não souber (fica fora do total).
      - etapa: o ID do devlog (T-xx, CONTRATO, FEAT-nn, 'setup'...).
   2. Abra este arquivo no navegador (duplo clique) para ver os totais.
-  3. A skill /registrar-etapa acrescenta a sessão de cada etapa aqui.
+  3. A skill /registrar-etapa acrescenta a sessão de cada etapa aqui, com as horas
+     calculadas automaticamente pela hora do sistema (.claude/hooks/tempo.mjs; a partir de 2026-11-14).
 
   As horas pré-preenchidas foram ESTIMADAS pela janela entre o primeiro e o
   último commit de cada dia, sem descontar pausas — corrija-as.
