@@ -19,7 +19,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 |---|---|---|---|
 | 000 | FEAT-00 | Fundação: agentes, skills, guardas, spec | concluída |
 | 001 | T-01 | Ferramentas e esqueleto NestJS | concluída |
-| 002 | tempo | Registro de tempo (tempo.html) | aguardando revisão |
+| 002 | tempo | Registro de tempo (tempo.html) | concluída |
+| 003 | T-02 | Docker Compose, env e base do Drizzle | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
