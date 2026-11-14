@@ -23,3 +23,24 @@ Content-Type: application/json
 
 ### FEAT-03 — restaurar padrões (200 LabConfig)
 POST {{baseUrl}}/lab/config/reset
+
+### FEAT-04 — coleções (200 CollectionSummary[])
+GET {{baseUrl}}/catalog/collections
+
+### FEAT-04 — cartas de uma coleção (200 Card[], ordem por id)
+GET {{baseUrl}}/catalog/collections/base/cards
+
+### FEAT-04 — cartas filtradas por tipo (200 Card[])
+GET {{baseUrl}}/catalog/collections/base/cards?type=zone
+
+### FEAT-04 — filtro desconhecido (400 CATALOG_QUERY_INVALID)
+GET {{baseUrl}}/catalog/collections/base/cards?type=monster
+
+### FEAT-04 — coleção inexistente (404 COLLECTION_NOT_FOUND)
+GET {{baseUrl}}/catalog/collections/nope/cards
+
+### FEAT-04 — uma carta (200 Card)
+GET {{baseUrl}}/catalog/cards/base.dexterity-basic
+
+### FEAT-04 — carta inexistente (404 CARD_NOT_FOUND)
+GET {{baseUrl}}/catalog/cards/base.nope
