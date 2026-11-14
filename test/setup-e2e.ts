@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { config } from 'dotenv'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import { Client } from 'pg'
 import { afterAll, beforeAll } from 'vitest'
 
@@ -33,11 +35,21 @@ async function run(sql: string): Promise<void> {
 }
 
 // O app criado no e2e lê esta URL e trabalha só dentro do schema da execução.
-// As migrações entram aqui quando existir o primeiro schema do Drizzle.
 process.env.DATABASE_URL = urlWithSchema(baseUrl, schema)
 
 beforeAll(async () => {
   await run(`create schema "${schema}"`)
+  // A tabela de controle das migrações também fica no schema da execução.
+  const client = new Client({ connectionString: process.env.DATABASE_URL })
+  await client.connect()
+  try {
+    await migrate(drizzle(client), {
+      migrationsFolder: './src/infra/database/drizzle/migrations',
+      migrationsSchema: schema,
+    })
+  } finally {
+    await client.end()
+  }
 })
 
 afterAll(async () => {

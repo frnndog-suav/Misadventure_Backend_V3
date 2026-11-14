@@ -22,7 +22,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 002 | tempo | Registro de tempo (tempo.html) | concluída |
 | 003 | T-02 | Docker Compose, env e base do Drizzle | concluída |
 | 004 | T-03 | `GET /health`, filtro de erros e CORS | concluída |
-| 005 | T-04 | Domínio `GameConfig` (laboratório) | aguardando revisão |
+| 005 | T-04 | Domínio `GameConfig` (laboratório) | concluída |
+| 006 | T-05 | Persistência da config (`game_config`, primeira migração) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
