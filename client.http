@@ -1,0 +1,7 @@
+@baseUrl = http://localhost:3333
+
+### FEAT-01 — health check (200, status ok + contractVersion)
+GET {{baseUrl}}/health
+
+### FEAT-01 — rota desconhecida (404 NOT_FOUND)
+GET {{baseUrl}}/rota-que-nao-existe

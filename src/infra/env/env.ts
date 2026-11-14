@@ -3,6 +3,8 @@ import { z } from 'zod'
 export const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3333),
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+  // Origem do frontend liberada no CORS (padrão: dev server do Vite).
+  CORS_ORIGIN: z.url({ protocol: /^https?$/ }).default('http://localhost:5173'),
 })
 
 export type Env = z.infer<typeof envSchema>

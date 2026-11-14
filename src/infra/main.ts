@@ -4,8 +4,10 @@ import { EnvService } from './env/env.service'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule)
+  const env = app.get(EnvService)
   app.enableShutdownHooks()
-  await app.listen(app.get(EnvService).get('PORT'))
+  app.enableCors({ origin: env.get('CORS_ORIGIN') })
+  await app.listen(env.get('PORT'))
 }
 
 void bootstrap()

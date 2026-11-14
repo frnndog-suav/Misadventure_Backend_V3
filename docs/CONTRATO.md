@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.4 · **Data:** 2026-11-14
+> **Versão do contrato:** 0.5 · **Data:** 2026-11-14
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -152,7 +152,7 @@ Regras: README <seções>
   (os mesmos cenários alimentam as fixtures do MSW e os testes do backend)
 ```
 
-### FEAT-01 — Esqueleto técnico (endpoint mínimo) — `acordado`
+### FEAT-01 — Esqueleto técnico (endpoint mínimo) — `implementado (BE)`
 
 Regras: README II.2, II.3 (requisitos técnicos; nenhuma regra de jogo envolvida).
 
@@ -199,3 +199,4 @@ interface HealthResponse {
 | 0.2 | 2026-11-13 | BE | §1 e §2 confirmados sem mudanças → `acordado` (FEAT-00 do backend). |
 | 0.3 | 2026-11-14 | FE | FEAT-01 proposta: `GET /health` (`status` + `contractVersion`, §1.5) e código de erro `NOT_FOUND` (§4). |
 | 0.4 | 2026-11-14 | FE | FEAT-01 `acordado` com as mudanças pedidas pelo BE: `INTERNAL_ERROR` para 5xx (§1.4/§4) e cenário do `/health` sem versão fixa. |
+| 0.5 | 2026-11-14 | BE | FEAT-01 `implementado (BE)`: `GET /health`, `NOT_FOUND` e `INTERNAL_ERROR` entregues e cobertos por e2e. Sem mudança de formato. CORS libera a origem `http://localhost:5173` por padrão (configurável no backend). |

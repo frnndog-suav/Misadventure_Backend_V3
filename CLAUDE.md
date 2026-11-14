@@ -98,7 +98,8 @@ TypeScript, NestJS, Drizzle ORM, PostgreSQL, Docker Compose, Vitest, Supertest; 
 - **Erros:** classes de `DomainError` em `application/use-cases/_errors/`, cada uma com `code` do CONTRATO §4.
 - **Estilo:** Prettier (sem ponto e vírgula, aspas simples, vírgula final es5) a partir da FEAT-01. Rode `npm run format` antes de terminar.
 - **Verificação:** cada tarefa é verificada pelos testes, por comando (`curl`/`client.http`) e pelo roteiro de testes. Nenhum endpoint de depuração fora do laboratório.
-- **Commits:** o autor faz. O agente só sugere a mensagem, no formato `tipo/descrição curta em minúsculas` (ex.: `chore/backend foundation`).
+- **Commits:** o autor faz. O agente só sugere a mensagem, sempre **em inglês**, no formato `type/short description in lowercase` (ex.: `chore/backend foundation`).
+- **Docker:** ligue só quando for testar algo e desligue ao terminar (`docker compose down` e Docker Desktop parado).
 - **Datas** absolutas (AAAA-MM-DD) em tudo o que é registrado.
 
 ## Guardas automáticas

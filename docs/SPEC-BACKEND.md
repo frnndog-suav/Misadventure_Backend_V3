@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.4 · **Data:** 2026-11-14
+> **Versão da spec:** 0.5 · **Data:** 2026-11-14
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -150,6 +150,7 @@ Sem regra de jogo (README II.2, II.3); o comportamento observável vem de CONTRA
 - **D-07 — `/health` é só infra:** o endpoint não tem regra de jogo; controller em `src/infra/http/controllers/health/` responde direto, sem caso de uso, domínio ou banco (criar camadas vazias violaria "apenas o necessário"). O primeiro caso de uso real nasce na FEAT que tiver regra (2026-11-14).
 - **D-08 — Erros HTTP fora do domínio:** um exception filter global em `src/infra/http/errors/` traduz qualquer exceção para o corpo de CONTRATO §1.4: `HttpException` 404 → `NOT_FOUND`; qualquer exceção não tratada → 500 `INTERNAL_ERROR` (sem stack trace no corpo; log no servidor). O mapeamento `DomainError.code` → status entra no mesmo filtro quando os primeiros `DomainError` existirem (2026-11-14).
 - **D-09 — Env, conexão e isolamento do e2e:** o env é validado pelo schema Zod de `src/infra/env/env.ts` via `ConfigModule.forRoot({ validate })` (`PORT` padrão 3333; `DATABASE_URL` precisa ser `postgres(ql)://`); env inválido derruba o boot listando cada variável. O `DatabaseModule` faz `select 1` ao criar o pool, então banco inacessível também derruba o boot. No e2e, `test/setup-e2e.ts` cria um schema `e2e_<uuid>` por arquivo de teste, aponta o `DATABASE_URL` para ele (`options=-c search_path=…`) e o apaga no fim (2026-11-14).
+- **D-10 — CORS e forma do filtro:** origem liberada vem de `CORS_ORIGIN` (env, URL `http(s)`, padrão `http://localhost:5173`, o dev server do Vite usado pelo frontend), aplicada com `enableCors` no `main.ts`. O filtro de D-08 é registrado como `APP_FILTER` no `HttpModule` (vale também no e2e) e responde pelo `HttpAdapterHost` (sem depender de tipos do Express). Hoje toda `HttpException` que não é 404 vira 500 `INTERNAL_ERROR`, como D-08 diz; o mapeamento de 4xx entra quando o primeiro endpoint com corpo existir (2026-11-14).
 
 ## 4. Tarefas
 
@@ -159,7 +160,7 @@ Contrato necessário: CONTRATO v0.4, seção FEAT-01 (`acordado`) — `GET /heal
 
 - [x] **T-01 — Ferramentas e esqueleto NestJS.** Instalar as bibliotecas de D-05 (fixar e registrar versões); `tsconfig.json`/`tsconfig.build.json` com `@/*` → `src/*`; `nest-cli.json` (entryFile `infra/main`); `vitest.config.ts` (unitários) e `vitest.config.e2e.ts` (e2e, `setupFiles: test/setup-e2e.ts`); Prettier (sem ponto e vírgula, aspas simples, vírgula final es5); ESLint com as regras do `domain-guard` para `src/core/` e `src/domain/`; `.gitignore`; `src/infra/main.ts` + `app.module.ts` mínimos subindo na porta do env; scripts npm de CLAUDE.md (menos `validate:content`, que nasce com o validador na FEAT-04). **Verificação:** `npm run build`, `typecheck`, `lint`, `format:check` passam; `npm run start:dev` sobe.
 - [x] **T-02 — Docker Compose, env e base do Drizzle.** `docker-compose.yml` (serviços `postgres` e `backend`, com Dockerfile); `.env.example` (`PORT`, `DATABASE_URL`); `src/infra/env/` (schema Zod + `EnvModule`/`EnvService`, app não sobe com env inválido); `drizzle.config.ts`; `src/infra/database/database.module.ts` com a conexão `pg` (sem tabelas ainda — o primeiro schema nasce com o primeiro agregado persistido); `test/setup-e2e.ts` com schema Postgres único por execução e limpeza (D-03). **Verificação:** `docker compose up -d` sobe banco e backend; app conecta no banco; env inválido derruba o boot com mensagem clara.
-- [ ] **T-03 — `GET /health` e filtro de erros (REQ-01, REQ-02, REQ-03).** TDD: e2e Supertest primeiro, um teste por REQ (`it('REQ-01: …')`), cenários com os valores exatos do CONTRATO FEAT-01. Depois: `src/infra/http/contract-version.ts` (D-06), `controllers/health/index.controller.ts` (D-07), exception filter global em `http/errors/` (D-08), `http.module.ts`, CORS liberado para a origem do frontend (env), `client.http` com os dois cenários do contrato. **Verificação:** `npm run test:e2e` verde; `curl` dos cenários responde byte a byte o contrato. Ao final: `/contrato` marca FEAT-01 `implementado (BE)` e gera o AVISO DE FRONTEND.
+- [x] **T-03 — `GET /health` e filtro de erros (REQ-01, REQ-02, REQ-03).** TDD: e2e Supertest primeiro, um teste por REQ (`it('REQ-01: …')`), cenários com os valores exatos do CONTRATO FEAT-01. Depois: `src/infra/http/contract-version.ts` (D-06), `controllers/health/index.controller.ts` (D-07), exception filter global em `http/errors/` (D-08), `http.module.ts`, CORS liberado para a origem do frontend (env), `client.http` com os dois cenários do contrato. **Verificação:** `npm run test:e2e` verde; `curl` dos cenários responde byte a byte o contrato. Ao final: `/contrato` marca FEAT-01 `implementado (BE)` e gera o AVISO DE FRONTEND.
 
 ## 8. Histórico
 
@@ -169,6 +170,7 @@ Contrato necessário: CONTRATO v0.4, seção FEAT-01 (`acordado`) — `GET /heal
 | 0.2 | 2026-11-14 | Planejamento da FEAT-01 (CONTRATO v0.4): REQ-01 a REQ-03, D-05 a D-08, tarefas T-01 a T-03. |
 | 0.3 | 2026-11-14 | T-01 concluída: D-05 autorizado e instalado (`@nestjs/config` segue major próprio, 12.x; TypeScript fixado em 5.x — ver devlog 001). |
 | 0.4 | 2026-11-14 | T-02 concluída: D-09 (env com Zod, falha cedo sem banco, schema isolado no e2e). |
+| 0.5 | 2026-11-14 | T-03 concluída: REQ-01 a REQ-03 implementados; D-10 (CORS por `CORS_ORIGIN`, filtro como `APP_FILTER`). |
 
 ## Apêndice A — Conteúdo de teste
 

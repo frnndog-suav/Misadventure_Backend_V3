@@ -5,10 +5,29 @@ describe('validateEnv', () => {
   const DATABASE_URL = 'postgresql://docker:docker@localhost:5432/misadventures'
 
   it('aceita env válido e converte PORT para número', () => {
-    expect(validateEnv({ PORT: '4000', DATABASE_URL })).toEqual({
+    expect(
+      validateEnv({
+        PORT: '4000',
+        DATABASE_URL,
+        CORS_ORIGIN: 'http://localhost:4000',
+      })
+    ).toEqual({
       PORT: 4000,
       DATABASE_URL,
+      CORS_ORIGIN: 'http://localhost:4000',
     })
+  })
+
+  it('usa http://localhost:5173 quando CORS_ORIGIN falta', () => {
+    expect(validateEnv({ DATABASE_URL }).CORS_ORIGIN).toBe(
+      'http://localhost:5173'
+    )
+  })
+
+  it('rejeita CORS_ORIGIN que não é URL http(s)', () => {
+    expect(() =>
+      validateEnv({ DATABASE_URL, CORS_ORIGIN: 'localhost' })
+    ).toThrow(/CORS_ORIGIN/)
   })
 
   it('usa a porta 3333 quando PORT falta', () => {
