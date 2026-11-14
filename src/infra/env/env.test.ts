@@ -16,7 +16,16 @@ describe('validateEnv', () => {
       DATABASE_URL,
       CORS_ORIGIN: 'http://localhost:4000',
       LAB_ENABLED: 'false',
+      CONTENT_DIR: 'content',
     })
+  })
+
+  it('REQ-10: CONTENT_DIR ausente vale content; aceita outro caminho', () => {
+    expect(validateEnv({ DATABASE_URL }).CONTENT_DIR).toBe('content')
+    expect(
+      validateEnv({ DATABASE_URL, CONTENT_DIR: 'test/fixtures/content' })
+        .CONTENT_DIR
+    ).toBe('test/fixtures/content')
   })
 
   it('REQ-08: LAB_ENABLED ausente vale false', () => {

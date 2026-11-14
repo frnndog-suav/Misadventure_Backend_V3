@@ -78,6 +78,19 @@ describe('checkCatalogIntegrity', () => {
       ])
     })
 
+    it('REQ-15/D-22: id de coleção fora de kebab-case (sem ponto)', () => {
+      for (const id of ['my.collection', 'My_Collection', 'col-', '']) {
+        expect(check([], [makeCollection({ id })])).toEqual([
+          {
+            collectionId: id,
+            cardId: null,
+            field: 'id',
+            reason: 'invalidIdFormat',
+          },
+        ])
+      }
+    })
+
     it('D-22: id de carta fora da forma <coleção>.<slug-kebab>', () => {
       for (const id of [
         'healing-potion',

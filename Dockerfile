@@ -12,5 +12,6 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
+COPY content ./content
 EXPOSE 3333
 CMD ["node", "dist/infra/main"]

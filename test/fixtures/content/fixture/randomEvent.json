@@ -1,0 +1,11 @@
+[
+  {
+    "id": "fixture.wounded-traveler",
+    "title": "Viajante Ferido",
+    "flavorText": "Um estranho jaz à beira da trilha.",
+    "requirements": [{ "text": "Possuir uma Poção de Cura." }],
+    "goodOutcome": { "text": "O viajante agradece e revela um atalho." },
+    "badOutcome": { "text": "Era uma emboscada; o grupo perde suprimentos." },
+    "noEscape": false
+  }
+]

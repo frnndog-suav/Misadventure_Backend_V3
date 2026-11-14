@@ -1,0 +1,34 @@
+[
+  {
+    "id": "base.goblin-ambush",
+    "title": "Emboscada de Goblins",
+    "flavorText": "Risadas agudas vêm dos arbustos.",
+    "enemies": [
+      {
+        "name": "Goblin Salteador",
+        "flavorText": null,
+        "count": 2,
+        "enemyTypes": ["humanoid"],
+        "creature": "Goblin",
+        "enemyCategory": "common",
+        "element": null,
+        "health": 5,
+        "modifiers": {
+          "attack": 2,
+          "defense": 1,
+          "accuracy": 2,
+          "evasion": 2,
+          "celerity": 2,
+          "piercing": 0,
+          "reflection": 0
+        },
+        "vigor": null,
+        "abilities": [],
+        "behavior": "aggressive"
+      }
+    ],
+    "goodOutcome": { "text": "Os goblins fogem, largando o butim." },
+    "badOutcome": { "text": "Os goblins roubam parte dos suprimentos." },
+    "noEscape": false
+  }
+]

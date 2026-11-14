@@ -1,0 +1,11 @@
+[
+  {
+    "id": "base.healing-herb",
+    "name": "Erva Medicinal",
+    "flavorText": "Cheira a campo depois da chuva.",
+    "rarity": "common",
+    "itemCategory": "consumable",
+    "tags": ["erva"],
+    "effects": [{ "text": "Recupera 3 de vida." }]
+  }
+]

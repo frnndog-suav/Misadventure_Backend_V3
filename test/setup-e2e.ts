@@ -34,6 +34,9 @@ async function run(sql: string): Promise<void> {
   }
 }
 
+// D-21: o e2e usa o conteúdo de teste (cenários do CONTRATO FEAT-04).
+process.env.CONTENT_DIR ??= 'test/fixtures/content'
+
 // O app criado no e2e lê esta URL e trabalha só dentro do schema da execução.
 process.env.DATABASE_URL = urlWithSchema(baseUrl, schema)
 

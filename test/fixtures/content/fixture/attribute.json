@@ -1,0 +1,11 @@
+[
+  {
+    "id": "fixture.strength-basic",
+    "name": "Força",
+    "flavorText": null,
+    "rarity": "common",
+    "attributeKind": "basic",
+    "attributes": ["strength"],
+    "effects": []
+  }
+]

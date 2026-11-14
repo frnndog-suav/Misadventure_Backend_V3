@@ -1,0 +1,19 @@
+[
+  {
+    "id": "base.wooden-shield",
+    "name": "Escudo de Madeira",
+    "flavorText": "Simples, mas já salvou muita gente.",
+    "rarity": "common",
+    "slot": "shield",
+    "tags": ["escudo"],
+    "modifiers": [{ "modifier": "defense", "value": 1 }],
+    "peakRequirement": null,
+    "classRestriction": [],
+    "blocksShield": false,
+    "abilities": [],
+    "effects": [],
+    "refinement": null,
+    "enchantment": null,
+    "priceMultiplier": 1
+  }
+]

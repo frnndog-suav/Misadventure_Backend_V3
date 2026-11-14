@@ -1,0 +1,25 @@
+[
+  {
+    "id": "fixture.blade-of-dusk",
+    "name": "Lâmina do Crepúsculo",
+    "flavorText": "Forjada na hora em que o dia cede à noite.",
+    "rarity": "rare",
+    "slot": "weapon",
+    "tags": ["espada", "duas mãos"],
+    "modifiers": [
+      { "modifier": "attack", "value": 3 },
+      { "modifier": "accuracy", "value": 1 }
+    ],
+    "peakRequirement": null,
+    "classRestriction": [],
+    "blocksShield": true,
+    "abilities": [],
+    "effects": [],
+    "refinement": {
+      "maxLevel": 3,
+      "materials": { "text": "1 Minério de Ferro por nível." }
+    },
+    "enchantment": { "text": "Encantamento: causa dano sombrio extra." },
+    "priceMultiplier": 1
+  }
+]

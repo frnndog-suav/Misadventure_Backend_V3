@@ -1,0 +1,11 @@
+[
+  {
+    "id": "base.dexterity-basic",
+    "name": "Destreza",
+    "flavorText": null,
+    "rarity": "common",
+    "attributeKind": "basic",
+    "attributes": ["dexterity"],
+    "effects": []
+  }
+]

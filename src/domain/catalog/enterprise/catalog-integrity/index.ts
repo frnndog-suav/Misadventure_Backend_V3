@@ -67,6 +67,15 @@ export function checkCatalogIntegrity({
         reason: 'duplicateId',
       })
     }
+    // D-22: kebab-case, sem `.`, para o prefixo das cartas não ser ambíguo.
+    if (!SLUG.test(collection.id)) {
+      issues.push({
+        collectionId: collection.id,
+        cardId: null,
+        field: 'id',
+        reason: 'invalidIdFormat',
+      })
+    }
     collectionIds.add(collection.id)
   }
 

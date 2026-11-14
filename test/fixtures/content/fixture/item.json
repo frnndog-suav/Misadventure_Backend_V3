@@ -1,0 +1,11 @@
+[
+  {
+    "id": "fixture.healing-potion",
+    "name": "Poção de Cura",
+    "flavorText": null,
+    "rarity": "common",
+    "itemCategory": "consumable",
+    "tags": ["poção"],
+    "effects": [{ "text": "Recupera 5 de vida." }]
+  }
+]

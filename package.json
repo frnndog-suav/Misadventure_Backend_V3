@@ -13,7 +13,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "validate:content": "nest build && node dist/infra/content/validate-content.cli.js"
   },
   "repository": {
     "type": "git",

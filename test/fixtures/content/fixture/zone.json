@@ -1,0 +1,11 @@
+[
+  {
+    "id": "fixture.whispering-grove",
+    "title": "Bosque Sussurrante",
+    "zoneType": "forest",
+    "location": "Terras Selvagens",
+    "connectionArrows": 2,
+    "zoneActions": ["startEvent"],
+    "effects": []
+  }
+]

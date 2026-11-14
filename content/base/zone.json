@@ -1,0 +1,22 @@
+[
+  {
+    "id": "base.harbor-town",
+    "title": "Vila do Porto",
+    "zoneType": "urban",
+    "location": "Costa Velha",
+    "connectionArrows": 4,
+    "zoneActions": ["startEvent", "useVault", "saveRespawnPoint"],
+    "effects": []
+  },
+  {
+    "id": "base.misty-forest",
+    "title": "Floresta Nebulosa",
+    "zoneType": "forest",
+    "location": "Costa Velha",
+    "connectionArrows": 2,
+    "zoneActions": ["startEvent"],
+    "effects": [
+      { "text": "A névoa dificulta a visão.", "polarity": "negative" }
+    ]
+  }
+]

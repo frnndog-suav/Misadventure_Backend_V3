@@ -1,0 +1,293 @@
+import { readdir, readFile, stat } from 'node:fs/promises'
+import { basename, dirname, join, resolve } from 'node:path'
+import { z } from 'zod'
+
+import {
+  checkCatalogIntegrity,
+  type TCatalogContent,
+  type TCatalogIssueReason,
+} from '@/domain/catalog/enterprise/catalog-integrity'
+import {
+  CARD_TYPES,
+  type TCard,
+  type TCardType,
+  type TCollection,
+} from '@/domain/catalog/enterprise/value-objects/card'
+
+import { cardFileSchemas, collectionFileSchema } from './card-schemas'
+
+/** Um item do relatório de REQ-11. `file` usa barras normais. */
+export type TContentProblem = {
+  file: string
+  cardId: string | null
+  field: string | null
+  message: string
+}
+
+export type TLoadContentResult =
+  | { ok: true; content: TCatalogContent }
+  | { ok: false; problems: TContentProblem[] }
+
+const COLLECTION_FILE = 'collection.json'
+
+const REASON_MESSAGES: Record<TCatalogIssueReason, string> = {
+  duplicateId: 'Id repetido.',
+  unknownCollection: 'Coleção inexistente.',
+  invalidIdFormat:
+    'Formato de id inválido (coleção em kebab-case sem ponto; carta em <coleção>.<slug-kebab>).',
+  duplicateTitle: 'Título repetido na coleção.',
+  outOfRange: 'Valor fora da faixa permitida.',
+  urbanZoneRequiresFourArrows:
+    'Zona urbana precisa de exatamente 4 setas de conexão.',
+  missingRequiredAction: 'Ação de zona obrigatória ausente.',
+  actionOnlyInUrbanZone: 'Ação permitida só em zona urbana.',
+  wrongAttributeCount: 'Quantidade de atributos errada para o tipo da carta.',
+  duplicateValue: 'Valor repetido.',
+  effectsNotAllowed: 'Este tipo de carta de atributo não tem efeitos.',
+  effectsRequired: 'Carta aprimorada precisa de pelo menos 1 efeito.',
+  onlyForWeapons: 'Só armas podem bloquear o escudo.',
+  empty: 'Não pode ficar vazio.',
+}
+
+const zodLocale = z.locales.ptBR().localeError
+
+/**
+ * Lê e valida o conteúdo (REQ-10, REQ-11, D-21). `path` pode ser a raiz
+ * (pastas de coleção), a pasta de uma coleção ou um arquivo dela (nesse
+ * caso, a coleção inteira é validada). Junta todos os problemas: schema de
+ * cada arquivo e integridade (REQ-15) das cartas que passaram no schema.
+ */
+export async function loadContent(
+  inputPath: string
+): Promise<TLoadContentResult> {
+  // Absoluto: `basename('.')` e arquivo solto na raiz dariam id errado.
+  const path = resolve(inputPath)
+  const problems: TContentProblem[] = []
+  const collections: TCollection[] = []
+  const cards: TCard[] = []
+  /** Arquivo de cada carta lida, para localizar os problemas de integridade. */
+  const cardFiles: { card: TCard; file: string }[] = []
+
+  const info = await stat(path).catch(() => null)
+  if (!info) {
+    return {
+      ok: false,
+      problems: [problem(path, 'Caminho não encontrado.')],
+    }
+  }
+
+  let collectionDirs: string[]
+  if (info.isFile()) {
+    collectionDirs = [dirname(path)]
+  } else if (await exists(join(path, COLLECTION_FILE))) {
+    collectionDirs = [path]
+  } else {
+    collectionDirs = []
+    for (const entry of await sortedEntries(path)) {
+      if (entry.isDirectory()) collectionDirs.push(join(path, entry.name))
+      else {
+        problems.push(
+          problem(
+            join(path, entry.name),
+            'Arquivo desconhecido (a raiz só tem pastas de coleção).'
+          )
+        )
+      }
+    }
+  }
+
+  for (const dir of collectionDirs) {
+    const collectionId = basename(dir)
+    const collection = await readCollection(dir, problems)
+    collections.push({ id: collectionId, name: collection?.name ?? '' })
+
+    for (const type of CARD_TYPES) {
+      const file = join(dir, `${type}.json`)
+      if (!(await exists(file))) continue
+      for (const card of await readCards(file, type, collectionId, problems)) {
+        cards.push(card)
+        cardFiles.push({ card, file })
+      }
+    }
+  }
+
+  const content: TCatalogContent = { collections, cards }
+  for (const issue of checkCatalogIntegrity(content)) {
+    const files =
+      issue.cardId === null
+        ? [join(dirOf(collectionDirs, issue.collectionId), COLLECTION_FILE)]
+        : [
+            ...new Set(
+              cardFiles
+                .filter(
+                  ({ card }) =>
+                    card.id === issue.cardId &&
+                    card.collectionId === issue.collectionId
+                )
+                .map(({ file }) => file)
+            ),
+          ]
+    problems.push({
+      file: files.map(normalize).join(', '),
+      cardId: issue.cardId,
+      field: issue.field,
+      message: REASON_MESSAGES[issue.reason],
+    })
+  }
+
+  return problems.length > 0 ? { ok: false, problems } : { ok: true, content }
+}
+
+/** Texto do relatório de REQ-11 (boot e `validate:content`). */
+export function formatContentReport(problems: TContentProblem[]): string {
+  const lines = problems.map(({ file, cardId, field, message }) => {
+    const where = [
+      file,
+      ...(cardId === null ? [] : [`carta ${cardId}`]),
+      ...(field === null ? [] : [`campo ${field}`]),
+    ].join(' | ')
+    return `- ${where}: ${message}`
+  })
+  const count = `${problems.length} ${problems.length === 1 ? 'problema' : 'problemas'}`
+  return [`Conteúdo inválido (${count}):`, ...lines].join('\n')
+}
+
+/** Erro de boot com o relatório completo (REQ-11). */
+export class InvalidContentError extends Error {
+  constructor(readonly problems: TContentProblem[]) {
+    super(formatContentReport(problems))
+    this.name = 'InvalidContentError'
+  }
+}
+
+async function readCollection(
+  dir: string,
+  problems: TContentProblem[]
+): Promise<{ name: string } | null> {
+  for (const entry of await sortedEntries(dir)) {
+    const known =
+      entry.name === COLLECTION_FILE ||
+      CARD_TYPES.some((type) => entry.name === `${type}.json`)
+    if (!entry.isFile() || !known) {
+      problems.push(
+        problem(
+          join(dir, entry.name),
+          `Arquivo desconhecido (esperados ${COLLECTION_FILE} e ${CARD_TYPES.join(', ')} .json).`
+        )
+      )
+    }
+  }
+
+  const file = join(dir, COLLECTION_FILE)
+  if (!(await exists(file))) {
+    problems.push(problem(file, 'Arquivo obrigatório ausente.'))
+    return null
+  }
+  const json = await readJson(file, problems)
+  if (json === undefined) return null
+  const parsed = collectionFileSchema.safeParse(json, { error: zodLocale })
+  if (!parsed.success) {
+    pushZodIssues(parsed.error, file, null, '', problems)
+    return null
+  }
+  return parsed.data
+}
+
+async function readCards(
+  file: string,
+  type: TCardType,
+  collectionId: string,
+  problems: TContentProblem[]
+): Promise<TCard[]> {
+  const json = await readJson(file, problems)
+  if (json === undefined) return []
+  if (!Array.isArray(json)) {
+    problems.push(problem(file, 'O arquivo deve ser uma lista de cartas.'))
+    return []
+  }
+
+  const cards: TCard[] = []
+  json.forEach((raw: unknown, index) => {
+    const parsed = cardFileSchemas[type].safeParse(raw, { error: zodLocale })
+    if (parsed.success) {
+      // O schema de cada tipo espelha a variante de TCard sem os dois campos
+      // derivados do caminho; a combinação é a variante daquele `type`.
+      cards.push({ ...parsed.data, type, collectionId } as TCard)
+      return
+    }
+    const id =
+      typeof raw === 'object' &&
+      raw !== null &&
+      'id' in raw &&
+      typeof raw.id === 'string'
+        ? raw.id
+        : null
+    pushZodIssues(
+      parsed.error,
+      file,
+      id,
+      id === null ? `[${index}]` : '',
+      problems
+    )
+  })
+  return cards
+}
+
+function pushZodIssues(
+  error: z.ZodError,
+  file: string,
+  cardId: string | null,
+  prefix: string,
+  problems: TContentProblem[]
+): void {
+  for (const issue of error.issues) {
+    const path = issue.path
+      .map((segment) =>
+        typeof segment === 'number' ? `[${segment}]` : `.${String(segment)}`
+      )
+      .join('')
+    const field = `${prefix}${path}`.replace(/^\./, '')
+    problems.push({
+      file: normalize(file),
+      cardId,
+      field: field === '' ? null : field,
+      message: issue.message,
+    })
+  }
+}
+
+async function readJson(
+  file: string,
+  problems: TContentProblem[]
+): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(file, 'utf8')) as unknown
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    problems.push(problem(file, `JSON inválido: ${reason}`))
+    return undefined
+  }
+}
+
+function problem(file: string, message: string): TContentProblem {
+  return { file: normalize(file), cardId: null, field: null, message }
+}
+
+async function exists(path: string): Promise<boolean> {
+  return (await stat(path).catch(() => null)) !== null
+}
+
+async function sortedEntries(dir: string) {
+  const entries = await readdir(dir, { withFileTypes: true })
+  return entries.sort((a, b) =>
+    a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+  )
+}
+
+function dirOf(dirs: string[], collectionId: string): string {
+  return dirs.find((dir) => basename(dir) === collectionId) ?? collectionId
+}
+
+function normalize(path: string): string {
+  return path.replaceAll('\\', '/')
+}

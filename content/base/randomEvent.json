@@ -1,0 +1,11 @@
+[
+  {
+    "id": "base.abandoned-cart",
+    "title": "Carroça Abandonada",
+    "flavorText": "Há rodas quebradas e nenhum dono à vista.",
+    "requirements": [{ "text": "Teste de Sabedoria." }],
+    "goodOutcome": { "text": "O grupo encontra provisões intactas." },
+    "badOutcome": { "text": "A carroça desaba e fere quem a vasculha." },
+    "noEscape": false
+  }
+]

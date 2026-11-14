@@ -1,0 +1,34 @@
+[
+  {
+    "id": "fixture.howling-wolves",
+    "title": "Lobos Uivantes",
+    "flavorText": "Uivos ecoam entre as árvores.",
+    "enemies": [
+      {
+        "name": "Lobo Cinzento",
+        "flavorText": null,
+        "count": 2,
+        "enemyTypes": ["beast"],
+        "creature": "Lobo",
+        "enemyCategory": "common",
+        "element": null,
+        "health": 6,
+        "modifiers": {
+          "attack": 2,
+          "defense": 1,
+          "accuracy": 2,
+          "evasion": 2,
+          "celerity": 3,
+          "piercing": 0,
+          "reflection": 0
+        },
+        "vigor": null,
+        "abilities": [],
+        "behavior": "aggressive"
+      }
+    ],
+    "goodOutcome": { "text": "Os lobos fogem e deixam peles para trás." },
+    "badOutcome": { "text": "A matilha fere o grupo antes de recuar." },
+    "noEscape": false
+  }
+]

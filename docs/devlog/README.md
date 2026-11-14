@@ -26,7 +26,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 006 | T-05 | Persistência da config (`game_config`, primeira migração) | concluída |
 | 007 | T-06 | Rotas do laboratório (`/lab/config`) e FEAT-03 `implementado (BE)` | concluída |
 | 008 | retorno | FEAT-03 `validado` pelo frontend (CONTRATO v0.9, ROADMAP v0.11) | concluída |
-| 009 | T-07 | Domínio do catálogo (FEAT-04): tipos, integridade, porta, casos de uso | aguardando revisão |
+| 009 | T-07 | Domínio do catálogo (FEAT-04): tipos, integridade, porta, casos de uso | concluída |
+| 010 | T-08 | Conteúdo e validador (FEAT-04): schema, leitor, `validate:content`, fixture, coleção `base` | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
