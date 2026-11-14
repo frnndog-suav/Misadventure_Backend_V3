@@ -24,7 +24,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 004 | T-03 | `GET /health`, filtro de erros e CORS | concluída |
 | 005 | T-04 | Domínio `GameConfig` (laboratório) | concluída |
 | 006 | T-05 | Persistência da config (`game_config`, primeira migração) | concluída |
-| 007 | T-06 | Rotas do laboratório (`/lab/config`) e FEAT-03 `implementado (BE)` | aguardando revisão |
+| 007 | T-06 | Rotas do laboratório (`/lab/config`) e FEAT-03 `implementado (BE)` | concluída |
+| 008 | retorno | FEAT-03 `validado` pelo frontend (CONTRATO v0.9, ROADMAP v0.11) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
