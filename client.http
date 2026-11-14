@@ -5,3 +5,21 @@ GET {{baseUrl}}/health
 
 ### FEAT-01 — rota desconhecida (404 NOT_FOUND)
 GET {{baseUrl}}/rota-que-nao-existe
+
+### FEAT-03 — configuração em vigor (200 LabConfig; 404 com LAB_ENABLED=false)
+GET {{baseUrl}}/lab/config
+
+### FEAT-03 — ajuste parcial (200 LabConfig)
+PATCH {{baseUrl}}/lab/config
+Content-Type: application/json
+
+{ "actionPointsPerTurn": 4 }
+
+### FEAT-03 — ajuste inválido (400 LAB_CONFIG_INVALID)
+PATCH {{baseUrl}}/lab/config
+Content-Type: application/json
+
+{ "actionPointsPerTurn": 0, "foo": 1 }
+
+### FEAT-03 — restaurar padrões (200 LabConfig)
+POST {{baseUrl}}/lab/config/reset

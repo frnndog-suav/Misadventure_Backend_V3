@@ -7,6 +7,8 @@ import {
   Logger,
 } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
+import { DomainErrorException } from '../domain-error-exception'
+import { DOMAIN_ERROR_STATUS } from '../domain-error-status'
 
 type TErrorBody = { error: { code: string; message: string } }
 
@@ -21,6 +23,26 @@ const INTERNAL_ERROR: TErrorBody = {
   },
 }
 
+const LAB_CONFIG_INVALID_BODY = {
+  error: {
+    code: 'LAB_CONFIG_INVALID',
+    message: 'Configuração do laboratório inválida.',
+    details: { fields: [{ field: null, reason: 'invalidBody' }] },
+  },
+}
+
+/**
+ * JSON malformado: o Nest converte o erro do body-parser em
+ * `BadRequestException` sem a causa original. Nenhum controller do projeto
+ * lança 400 por conta própria (erros de regra são `DomainErrorException`).
+ */
+function isBodyParseError(exception: unknown): boolean {
+  return (
+    exception instanceof HttpException &&
+    exception.getStatus() === HttpStatus.BAD_REQUEST
+  )
+}
+
 // Traduz qualquer exceção para o corpo de CONTRATO §1.4 (D-08).
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -30,7 +52,31 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const { httpAdapter } = this.adapterHost
-    const response: unknown = host.switchToHttp().getResponse()
+    const http = host.switchToHttp()
+    const response: unknown = http.getResponse()
+
+    if (exception instanceof DomainErrorException) {
+      const { code, message, details } = exception.domainError
+      const status = DOMAIN_ERROR_STATUS[code]
+      if (status !== undefined) {
+        const body = details ? { code, message, details } : { code, message }
+        httpAdapter.reply(response, { error: body }, status)
+        return
+      }
+    }
+
+    // D-14: corpo JSON malformado em /lab/* é um ajuste inválido.
+    if (
+      isBodyParseError(exception) &&
+      String(httpAdapter.getRequestUrl(http.getRequest())).startsWith('/lab/')
+    ) {
+      httpAdapter.reply(
+        response,
+        LAB_CONFIG_INVALID_BODY,
+        HttpStatus.BAD_REQUEST
+      )
+      return
+    }
 
     if (
       exception instanceof HttpException &&

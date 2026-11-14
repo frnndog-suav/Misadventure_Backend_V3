@@ -5,6 +5,8 @@ export const envSchema = z.object({
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   // Origem do frontend liberada no CORS (padrão: dev server do Vite).
   CORS_ORIGIN: z.url({ protocol: /^https?$/ }).default('http://localhost:5173'),
+  // Liga as rotas /lab/* (D-14). Só 'true' ou 'false'; ausente = desligado.
+  LAB_ENABLED: z.enum(['true', 'false']).default('false'),
 })
 
 export type Env = z.infer<typeof envSchema>

@@ -15,7 +15,24 @@ describe('validateEnv', () => {
       PORT: 4000,
       DATABASE_URL,
       CORS_ORIGIN: 'http://localhost:4000',
+      LAB_ENABLED: 'false',
     })
+  })
+
+  it('REQ-08: LAB_ENABLED ausente vale false', () => {
+    expect(validateEnv({ DATABASE_URL }).LAB_ENABLED).toBe('false')
+  })
+
+  it('aceita LAB_ENABLED=true', () => {
+    expect(validateEnv({ DATABASE_URL, LAB_ENABLED: 'true' }).LAB_ENABLED).toBe(
+      'true'
+    )
+  })
+
+  it('rejeita LAB_ENABLED fora de true/false', () => {
+    expect(() => validateEnv({ DATABASE_URL, LAB_ENABLED: 'sim' })).toThrow(
+      /LAB_ENABLED/
+    )
   })
 
   it('usa http://localhost:5173 quando CORS_ORIGIN falta', () => {
