@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.2 · **Data:** 2026-11-13
+> **Versão do contrato:** 0.4 · **Data:** 2026-11-14
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -152,13 +152,44 @@ Regras: README <seções>
   (os mesmos cenários alimentam as fixtures do MSW e os testes do backend)
 ```
 
-*(nenhuma ainda)*
+### FEAT-01 — Esqueleto técnico (endpoint mínimo) — `acordado`
+
+Regras: README II.2, II.3 (requisitos técnicos; nenhuma regra de jogo envolvida).
+
+Fecho da FEAT-01: um endpoint que prova a ponte FE↔BE de ponta a ponta e informa a versão deste contrato que o backend implementa (§1.5).
+
+#### Endpoints
+
+| Método | Rota | Pedido | Resposta | Erros |
+|---|---|---|---|---|
+| GET | `/health` | — | `200` `HealthResponse` | `500` `INTERNAL_ERROR` |
+
+Qualquer rota desconhecida (qualquer método) responde `404` com o corpo de §1.4 e código `NOT_FOUND` — valida o formato de erro de ponta a ponta.
+
+Falha inesperada em qualquer endpoint (exceção não tratada, banco fora do ar) responde `500` com o corpo de §1.4, código `INTERNAL_ERROR` e mensagem "Erro inesperado no servidor. Tente novamente.". Sem cenário de validação: provocar um 500 exigiria endpoint de depuração fora do laboratório; o backend cobre o caso com um teste e2e do filtro de erros.
+
+#### Tipos
+
+```ts
+/** GET /health — prova a ponte FE↔BE e informa a versão do contrato (§1.5). */
+interface HealthResponse {
+  status: 'ok'
+  /** Versão deste arquivo que o backend implementa (ex.: "0.3"). */
+  contractVersion: string
+}
+```
+
+#### Cenários de validação
+
+- Dado o backend no ar, quando `GET /health`, então `200` com `{ "status": "ok", "contractVersion": <versão do cabeçalho deste arquivo no momento da validação> }`.
+- Dado o backend no ar, quando `GET /rota-que-nao-existe`, então `404` com `{ "error": { "code": "NOT_FOUND", "message": "Recurso não encontrado." } }`.
 
 ## 4. Códigos de erro
 
 | Código | Quando acontece | FEAT |
 |---|---|---|
-| *(nenhum ainda)* | | |
+| `NOT_FOUND` | Rota ou recurso inexistente. | FEAT-01 |
+| `INTERNAL_ERROR` | Falha inesperada no servidor (5xx). | FEAT-01 |
 
 ## 5. Histórico
 
@@ -166,3 +197,5 @@ Regras: README <seções>
 |---|---|---|---|
 | 0.1 | 2026-11-13 | FE | Versão inicial: convenções (§1) e glossário (§2) propostos. Aguarda confirmação do backend. |
 | 0.2 | 2026-11-13 | BE | §1 e §2 confirmados sem mudanças → `acordado` (FEAT-00 do backend). |
+| 0.3 | 2026-11-14 | FE | FEAT-01 proposta: `GET /health` (`status` + `contractVersion`, §1.5) e código de erro `NOT_FOUND` (§4). |
+| 0.4 | 2026-11-14 | FE | FEAT-01 `acordado` com as mudanças pedidas pelo BE: `INTERNAL_ERROR` para 5xx (§1.4/§4) e cenário do `/health` sem versão fixa. |

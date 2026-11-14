@@ -11,5 +11,33 @@
         ]
       }
     ]
+  },
+   "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npm pkg *)",
+      "Bash(npm install *)",
+      "Bash(npx *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(tail *)",
+      "Bash(echo *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(npm audit)",
+      "Bash(npm audit *)",
+      "Bash(cp package.json *)",
+      "Bash(cp package-lock.json *)",
+      "PowerShell(Set-Location *)",
+"PowerShell(npx *)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(sudo *)",
+      "Read(**/.env*)"
+    ]
   }
 }
