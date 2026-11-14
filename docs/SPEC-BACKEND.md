@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.7 · **Data:** 2026-11-14
+> **Versão da spec:** 0.10 · **Data:** 2026-11-14
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -151,6 +151,24 @@ Regras de README II.6 e Apêndice A. Valores desta FEAT (D-11): Partida (jogador
 - **REQ-08 — Laboratório desligado:** Dado `LAB_ENABLED` ausente ou `false`, quando qualquer pedido a `/lab/*`, então `404` `NOT_FOUND` (as rotas não existem, README II.6).
 - **REQ-09 — Leitura pelas regras:** Dado o caso de uso `GetGameConfigUseCase`, quando não há ajuste salvo, então devolve a `GameConfig` com os padrões; quando há, devolve os valores salvos sobre os padrões (chave salva que não existe mais é ignorada; chave nova sem valor salvo usa o padrão). É a porta pela qual as regras das próximas FEATs leem os valores (Constituição 7).
 
+### FEAT-04 — Catálogo de cartas e coleções
+
+Regras de README 3.4, 4.3, 5.1, 5.2, 14.1, 18.1, 18.2, 18.3, 24.3 (raridade) e 27. Modelo e escopo: D-18 a D-22. Formatos exatos: CONTRATO, seção FEAT-04 (a propor).
+
+- **REQ-10 — Carregar o catálogo:** Dado um diretório de conteúdo válido (`CONTENT_DIR`, D-21), quando o backend sobe, então todas as coleções e cartas ficam disponíveis pela porta `CardCatalog`, sem ler disco depois do boot.
+- **REQ-11 — Conteúdo inválido não sobe:** Dado um arquivo de conteúdo que viola o schema ou a integridade (REQ-15), quando o backend sobe, então o boot falha listando cada problema com `arquivo`, `id da carta` (se houver), `campo` e motivo; o mesmo relatório sai de `npm run validate:content -- <arquivo|dir>` (código de saída ≠ 0).
+- **REQ-12 — Listar coleções:** Dado o catálogo carregado, quando `GET /catalog/collections`, então `200` com cada coleção (`id`, `name`, total de cartas por tipo), em ordem de `id`.
+- **REQ-13 — Cartas de uma coleção:** Dado uma coleção existente, quando `GET /catalog/collections/:id/cards` (filtro opcional `?type=zone|attribute|equipment|item|event`), então `200` com as cartas no formato do contrato, ordenadas por `id`; tipo de filtro desconhecido → `400 CATALOG_QUERY_INVALID`; coleção inexistente → `404 COLLECTION_NOT_FOUND`.
+- **REQ-14 — Uma carta:** Dado uma carta existente, quando `GET /catalog/cards/:id`, então `200` com a carta; inexistente → `404 CARD_NOT_FOUND`.
+- **REQ-15 — Integridade do conteúdo** (cada item gera um problema em REQ-11):
+  - `id` de carta único em todo o catálogo; `id` de coleção único; toda carta pertence a uma coleção existente.
+  - **Zona (3.4):** `title` único na coleção; `zoneType` entre os 16 tipos de 3.3; 1 a 4 setas; zona `urban` com exatamente 4 setas; ações incluem `startEvent`; zona `urban` inclui `useVault` e `saveRespawn`; só zonas `urban` têm `saveRespawn`.
+  - **Atributo (4.3):** `basic` e `enhanced` com 1 atributo valendo 1; `enhanced` com pelo menos 1 efeito; `synergic` com 2 a 4 atributos **diferentes**, cada um valendo 1.
+  - **Equipamento (5.1):** `slot` entre as 8 categorias; `blocksShield` só em `weapon`; ajuste de preço entre ×0,8 e ×1,5; refino máx. ≤ +10 e, se refinável, materiais de refino presentes.
+  - **Item (5.2):** `category` entre as 8 categorias.
+  - **Evento (14.1, 18.1):** `random` com pelo menos 1 requisito; `combat` com pelo menos 1 inimigo; cada inimigo com 1 ou mais `enemyTypes` (18.2) sem repetição, `category` de 18.3 (`finalBoss` proibido em evento), elemento 0 ou 1, vida ≥ 1 e modificadores inteiros ≥ 0.
+  - **Toda carta com raridade** tem exatamente uma, entre as 5 de 24.3; etiquetas (`tags`) sem repetição.
+
 ## Decisões
 
 - **D-01 — Códigos de erro:** a lista única é CONTRATO §4. Todo `DomainError` usa um código de lá; código novo entra pelo `/contrato` antes do código.
@@ -172,6 +190,12 @@ Regras de README II.6 e Apêndice A. Valores desta FEAT (D-11): Partida (jogador
 - **D-16 — Detalhes da persistência (T-05):** o `save` grava em `values` só as chaves que **diferem do padrão** (padrão mudado depois vale para quem não ajustou aquela chave). Na leitura, valor salvo que não é inteiro ou está fora dos limites atuais cai no padrão; `values` que não é objeto equivale a `{}`. Tokens `PG_POOL`/`DRIZZLE`/`Database` em `database.tokens.ts` (evita import circular entre módulo e repositórios). Migrações: `npm run db:generate` / `npm run db:migrate` (drizzle-kit); no e2e, `test/setup-e2e.ts` aplica as migrações dentro do schema da execução, com a tabela de controle do Drizzle no mesmo schema (`migrationsSchema`). Limite conhecido: `minPlayers > maxPlayers` vindo do banco (só possível se padrões/limites mudarem) não é corrigido na leitura (2026-11-14).
 - **D-17 — Detalhes das rotas do laboratório (T-06):** `LAB_ENABLED` aceita só `'true'`/`'false'` (outro valor derruba o boot); `LabModule` (`src/infra/http/lab.module.ts`) entra por `ConditionalModule.registerWhen` do `@nestjs/config`, que avalia a flag **uma vez, na importação do `app.module`** (no e2e, `test/lab-app.ts` define a flag antes do import dinâmico; um valor por arquivo). Um controller por rota; o corpo do `PATCH` vai cru (`unknown`) ao caso de uso, sem pipe, porque toda a validação é do domínio (D-15). O controller converte o `left` em `DomainErrorException` (`http/errors/`), e o filtro responde com o status da tabela `DOMAIN_ERROR_STATUS`. JSON malformado chega ao filtro como `BadRequestException` sem a causa original (o Nest a descarta); por isso qualquer `HttpException` 400 em `/lab/*` vira `LAB_CONFIG_INVALID`/`invalidBody` — nenhum controller lança 400 por conta própria. Fora de `/lab/*`, 400 de transporte segue D-10 (500). `LAB_ENABLED: 'true'` no serviço `backend` do Compose (2026-11-14).
 
+- **D-18 — Contexto `catalog` (proposta):** `Card` é uma união discriminada por `type` (`zone`, `attribute`, `equipment`, `item`, `event`; `event` com `eventKind: random | combat`, inimigos embutidos no evento, README 18.1). Cartas são **value objects imutáveis** (não são agregados: não mudam nem emitem `domainEvent`). Porta `CardCatalog` (`listCollections`, `findCollection`, `listCards(collectionId, type?)`, `findCard`) em `src/domain/catalog/application/repositories/`; adaptador em memória em `test/fakes/` e adaptador de arquivo em `src/infra/content/`. Casos de uso `ListCollectionsUseCase`, `ListCollectionCardsUseCase`, `GetCardUseCase`; erros `CollectionNotFoundError`, `CardNotFoundError`, `CatalogQueryInvalidError` (2026-11-14).
+- **D-19 — Fora desta FEAT (proposta):** Carta de Dimensão (FEAT-06/19), missões (FEAT-15), montarias (FEAT-18), boosters como conteúdo (FEAT-16), limite de cópias no deck e trava (FEAT-09), estado de partida da carta (quebrado, "Reparado ×N", nível de refino atual — FEAT-17). Ofertas de serviço da zona (3.4) entram só como lista de `id` de cartas, sem regra.
+- **D-20 — Efeitos, requisitos, coisa boa/ruim e habilidades como texto (proposta, a confirmar pelo autor):** o modelo estruturado de efeitos é da FEAT-11 (README 13, III.3). Nesta FEAT, esses campos são `{ text: string }` (pt-BR, para exibição); a estrutura troca o tipo depois sem mudar o resto da carta. Requisitos de atributo do evento aleatório também são texto até a FEAT-12.
+- **D-21 — Leitura do conteúdo (proposta):** `content/<coleção>/collection.json` + `content/<coleção>/<tipo>.json`, validados por schema Zod em `src/infra/content/` e pelas regras de REQ-15 (as de integridade em função pura do domínio, testável sem disco). Diretório pelo env `CONTENT_DIR` (padrão `content`); o e2e aponta para `test/fixtures/content/`. Catálogo carregado uma vez no boot (conteúdo só muda com novo deploy, README 27). Script `npm run validate:content -- <caminho>` reusa o mesmo validador.
+- **D-22 — Ids e nomes:** `id` de carta em `kebab-case` com prefixo da coleção (`<coleção>.<slug>`), estável entre versões (saves vão referenciá-lo a partir da FEAT-05). Valores de enum em inglês `camelCase` no JSON (glossário do CONTRATO §2); textos de exibição em pt-BR.
+
 ## 4. Tarefas
 
 ### FEAT-01 — Esqueleto técnico
@@ -190,6 +214,14 @@ Contrato necessário (seção FEAT-03, a propor pelo backend com `/contrato FEAT
 - [x] **T-05 — Persistência da config (D-13, D-16).** Schema Drizzle `game_config`, **primeira migração**, mapper (mescla sobre os padrões, REQ-09: chave salva que não existe mais é ignorada, chave nova usa o padrão, com teste; valor salvo fora dos limites atuais também cai no padrão, porque `GameConfig.create` não revalida), `DrizzleGameConfigRepository`, provider no `DatabaseModule`. **Verificação:** e2e do repositório (salvar, ler, apagar) em schema isolado; `drizzle-kit` gera a migração sem diferença pendente.
 - [x] **T-06 — Rotas do laboratório (REQ-04 a REQ-08, D-17).** TDD e2e Supertest primeiro (um `it` por REQ, com os valores do contrato). `LAB_ENABLED` no env (D-14), `LabModule` condicional, controllers, presenter `LabConfigPresenter`, pipe do corpo, mapeamento `DomainError` → status no filtro, `client.http`. **Verificação:** `npm run test:e2e` verde; `curl` com flag ligada e desligada. Ao final: `/contrato` marca FEAT-03 `implementado (BE)` e gera o AVISO DE FRONTEND.
 
+### FEAT-04 — Catálogo de cartas e coleções
+
+Contrato necessário (seção FEAT-04, a propor pelo backend com `/contrato FEAT-04` **antes da T-07**): `GET /catalog/collections`, `GET /catalog/collections/:id/cards` (`?type=`), `GET /catalog/cards/:id`; tipos `CollectionSummary` e `Card` (união por `type`, com `ZoneCard`, `AttributeCard`, `EquipmentCard`, `ItemCard`, `EventCard`, `Enemy`); glossário dos enums (tipos de zona, ações, atributos, tipos de carta de atributo, slots de equipamento, categorias de item, raridades, tipos e categorias de inimigo, elementos, perfis de IA); códigos `COLLECTION_NOT_FOUND` (404), `CARD_NOT_FOUND` (404), `CATALOG_QUERY_INVALID` (400).
+
+- [ ] **T-07 — Domínio do catálogo (REQ-15; regras de REQ-12 a REQ-14).** TDD unitário: tipos de `Card` (D-18, D-20, D-22), função de integridade de REQ-15 (um teste por regra), porta `CardCatalog`, `test/fakes/in-memory-card-catalog.ts`, os três casos de uso e os três erros. **Verificação:** `npx vitest related --run` verde; `domain-guard --all` limpo.
+- [ ] **T-08 — Conteúdo e validador (REQ-10, REQ-11, D-21).** Schema Zod em `src/infra/content/`, leitor de `CONTENT_DIR` (env), script `validate:content`; conteúdo de teste do Apêndice A em `test/fixtures/content/` (agente `content-author`) e uma coleção inicial em `content/`. Testes: fixture válida carrega; um arquivo inválido por regra gera o relatório esperado. **Verificação:** `npm run validate:content -- content` e `-- test/fixtures/content` limpos; backend não sobe com fixture inválida.
+- [ ] **T-09 — Rotas do catálogo (REQ-12 a REQ-14).** TDD e2e Supertest primeiro (um `it` por REQ, valores do contrato), controllers, `CardPresenter`/`CollectionPresenter`, mapeamento dos novos códigos no `DOMAIN_ERROR_STATUS`, `client.http`. **Verificação:** `npm run test:e2e` verde; `curl` dos cenários. Ao final: `/contrato` marca FEAT-04 `implementado (BE)` e gera o AVISO DE FRONTEND.
+
 ## 8. Histórico
 
 | Versão | Data | Mudança |
@@ -203,6 +235,7 @@ Contrato necessário (seção FEAT-03, a propor pelo backend com `/contrato FEAT
 | 0.7 | 2026-11-14 | T-04 concluída: domínio `GameConfig` (REQ-09; regras de REQ-04 a REQ-07); D-11 com porta assíncrona e `delete()`; D-15 (validação e ordem de `details.fields`). Core: `Either`, `DomainError`, `ValueObject`. |
 | 0.8 | 2026-11-14 | T-05 concluída: tabela `game_config`, primeira migração, mapper com a mescla de REQ-09, `DrizzleGameConfigRepository`; D-16. |
 | 0.9 | 2026-11-14 | T-06 concluída: rotas `/lab/config` (REQ-04 a REQ-08), `LAB_ENABLED`, mapeamento `DomainError` → status; D-17. Lado BE da FEAT-03 completo. |
+| 0.10 | 2026-11-14 | Planejamento da FEAT-04: REQ-10 a REQ-15, D-18 a D-22 (propostas), tarefas T-07 a T-09. |
 
 ## Apêndice A — Conteúdo de teste
 
