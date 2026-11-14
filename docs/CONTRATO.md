@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.10 · **Data:** 2026-11-14
+> **Versão do contrato:** 0.11 · **Data:** 2026-11-14
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -305,7 +305,7 @@ Todos partem do laboratório ligado e, salvo indicação, de nenhum ajuste salvo
 - Dado o ajuste `{ "actionPointsPerTurn": 4 }` salvo, quando `POST /lab/config/reset`, então `200` com `values` igual a `defaults`.
 - Dado o laboratório desligado, quando `GET /lab/config`, então `404` com `{ "error": { "code": "NOT_FOUND", "message": "Recurso não encontrado." } }`.
 
-### FEAT-04 — Catálogo de cartas e coleções — `proposto (BE)`
+### FEAT-04 — Catálogo de cartas e coleções — `acordado`
 
 Regras: README 3.3, 3.4, 4.3, 5.1, 5.2, 8.6, 14.1, 16.2, 18.1 a 18.3, 24.3 (raridade) e 27. Só leitura: o catálogo é o conteúdo publicado (cartas como dados) e não muda durante a partida.
 
@@ -552,3 +552,4 @@ Rodam contra o **conteúdo de teste** do backend (coleção `fixture`, nome "Col
 | 0.8 | 2026-11-14 | BE | FEAT-03 `implementado (BE)`: `GET`/`PATCH /lab/config` e `POST /lab/config/reset` entregues e cobertos por e2e, sem mudança de formato. Rotas existem só com `LAB_ENABLED=true` (ligado no Compose de dev); desligado, `404` `NOT_FOUND`. JSON malformado no `PATCH` → `LAB_CONFIG_INVALID` com `invalidBody`. Ajustes ficam salvos no banco. |
 | 0.9 | 2026-11-14 | FE | FEAT-03 `validado`: os 6 cenários rodaram contra o backend real (`http://localhost:3333`) e passaram. Também passaram o JSON malformado (`invalidBody`), o `/health` com `0.8`, o CORS para `http://localhost:5173` e os e2e da área `lab` com o MSW desligado. Sem mudança de formato. |
 | 0.10 | 2026-11-14 | BE | FEAT-04 proposta: `GET /catalog/collections`, `GET /catalog/collections/:collectionId/cards` (`?type=`), `GET /catalog/cards/:cardId`; tipos `CollectionSummary` e `Card` (6 variantes por `type`); textos de regra como `RuleText` até a FEAT-11; glossário §2.7; códigos `CATALOG_QUERY_INVALID`, `COLLECTION_NOT_FOUND`, `CARD_NOT_FOUND` (§4). |
+| 0.11 | 2026-11-14 | FE | FEAT-04 `acordado` sem mudanças: os 6 `type` cobrem os tipos planejados no frontend (evento aleatório e de combate separados); textos de regra como `RuleText` batem com a decisão do frontend de só exibir texto pronto até a FEAT-11; ofertas de serviço das zonas ficam para as FEATs dos serviços. |
