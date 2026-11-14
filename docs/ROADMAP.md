@@ -1,6 +1,6 @@
 # Misadventures — Roadmap de desenvolvimento
 
-> **Versão:** 0.11 · **Data:** 2026-11-14
+> **Versão:** 0.12 · **Data:** 2026-11-14
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend; o autor copia o arquivo inteiro quando ele muda. Base: README Parte III (III.2 e III.4). As regras estão em [`README.md`](README.md); o que trafega entre os lados, em [`CONTRATO.md`](CONTRATO.md).
 
@@ -54,7 +54,7 @@ Situação por lado: `a fazer` · `em andamento` · `aguardando outro lado` · `
 
 | FEAT | Título | README | FE | BE |
 |---|---|---|---|---|
-| FEAT-04 | Catálogo de cartas e coleções: modelo das cartas, conteúdo de teste, exibição de cada tipo de carta | 3.4, 4.3, 5, 14.1, 18.1, 27 | a fazer | a fazer |
+| FEAT-04 | Catálogo de cartas e coleções: modelo das cartas, conteúdo de teste, exibição de cada tipo de carta | 3.4, 4.3, 5, 14.1, 18.1, 27 | a fazer | aguardando outro lado |
 | FEAT-05 | Campanha solo: criar grupo de 1, saves, continuar, salvamento automático, encerrar sessão, abandonar a partida | 28.1 | a fazer | a fazer |
 | FEAT-06 | Preparação da partida: classe e deck pré-pronto, valores iniciais, montagem do mapa, ordem e cidade inicial | 10.1, 3.5, 4.4, 8, 9 | a fazer | a fazer |
 | FEAT-07 | Mapa e Movimentar | 3.5, 12.2 | a fazer | a fazer |
@@ -117,3 +117,4 @@ Situação por lado: `a fazer` · `em andamento` · `aguardando outro lado` · `
 | 0.9 | 2026-11-14 | FEAT-03: BE sai de `aguardando outro lado` para `a fazer` (tarefas já planejadas na SPEC-BACKEND v0.6). |
 | 0.10 | 2026-11-14 | FEAT-03: lado BE `pronto` (T-04 a T-06); CONTRATO v0.8 marca a FEAT-03 `implementado (BE)`. |
 | 0.11 | 2026-11-14 | FEAT-03 `validado` (CONTRATO v0.9): lado FE pronto com MSW (T-08 a T-10, SPEC-FRONTEND v0.15) e cenários do contrato passando contra o backend real. FEAT concluída. |
+| 0.12 | 2026-11-14 | FEAT-04: planejada no BE (SPEC-BACKEND v0.10, T-07 a T-09); contrato proposto pelo BE (CONTRATO v0.10); BE `aguardando outro lado`. |
