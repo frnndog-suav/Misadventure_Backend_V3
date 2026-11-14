@@ -18,7 +18,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | Nº | ID | Título | Status |
 |---|---|---|---|
 | 000 | FEAT-00 | Fundação: agentes, skills, guardas, spec | concluída |
-| 001 | T-01 | Ferramentas e esqueleto NestJS | aguardando revisão |
+| 001 | T-01 | Ferramentas e esqueleto NestJS | concluída |
+| 002 | tempo | Registro de tempo (tempo.html) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
@@ -27,3 +28,4 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 4. Skills em `.claude/skills/`: `tarefa`, `mudar-spec`, `checar`, `testar`, `registrar-etapa`, `contrato`, `retorno-frontend`, `validar-cartas`.
 5. Agentes em `.claude/agents/`: `test-writer`, `domain-dev`, `infra-dev`, `spec-reviewer`, `content-author`.
 6. Reiniciar a sessão do Claude Code para carregar agentes e skills.
+7. `docs/devlog/tempo.html`: registro de tempo (array `SESSOES`); a `/registrar-etapa` acrescenta a sessão de cada etapa, perguntando as horas ao autor.
