@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.13 · **Data:** 2026-11-14
+> **Versão do contrato:** 0.14 · **Data:** 2026-11-14
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -538,7 +538,7 @@ Rodam contra o **conteúdo de teste** do backend (coleção `fixture`, nome "Col
 - Quando `GET /catalog/cards/fixture.strength-basic`, então `200` com a mesma carta do 3º cenário.
 - Quando `GET /catalog/cards/fixture.nope`, então `404` com `{ "error": { "code": "CARD_NOT_FOUND", "message": "Carta não encontrada." } }`.
 
-### FEAT-05 — Campanha solo (grupo de 1 e saves) — `proposto (BE)`
+### FEAT-05 — Campanha solo (grupo de 1 e saves) — `acordado`
 
 Regras: README 28.1 (partida e save, salvamento automático, grupos e saves, host, abandonar, encerrar sessão) e 1.3. O jogador sozinho é um **grupo de 1**; o grupo **é** o save. Até a autenticação (FEAT-25), a lista de saves é a de todo o servidor (não há dono). Classe, deck, mapa e dimensão chegam ao `Party` na FEAT-06; ajudantes de IA, na FEAT-20. O salvamento automático no fim de cada vez fica observável na FEAT-08; aqui, todo pedido que muda o grupo e é aceito já devolve o estado gravado.
 
@@ -659,3 +659,4 @@ Partem de nenhum save e do laboratório nos padrões. Os `id` e as datas são ge
 | 0.11 | 2026-11-14 | FE | FEAT-04 `acordado` sem mudanças: os 6 `type` cobrem os tipos planejados no frontend (evento aleatório e de combate separados); textos de regra como `RuleText` batem com a decisão do frontend de só exibir texto pronto até a FEAT-11; ofertas de serviço das zonas ficam para as FEATs dos serviços. |
 | 0.12 | 2026-11-14 | BE | FEAT-04 `implementado (BE)`: `GET /catalog/collections`, `GET /catalog/collections/:collectionId/cards` (`?type=`) e `GET /catalog/cards/:cardId` entregues e cobertos por e2e, sem mudança de formato. `?type=` vazio ou repetido também → `CATALOG_QUERY_INVALID`. A ordem das chaves no JSON da carta não é garantida (compare por campo). Catálogo lido de `CONTENT_DIR` no boot; os cenários usam a coleção `fixture` (`CONTENT_DIR=test/fixtures/content`). |
 | 0.13 | 2026-11-14 | BE | FEAT-05 proposta: `POST`/`GET /parties`, `GET`/`DELETE /parties/:partyId`, `POST /parties/:partyId/session` e `/session/end`; tipos `CreatePartyRequest`, `Party`, `PartyMember`, `PartySummary`, `PartyStatus`; glossário §2.8; códigos `PARTY_INVALID`, `PARTY_NOT_FOUND`, `PARTY_SESSION_NOT_ACTIVE` (§4). Lista de saves global até a FEAT-25. |
+| 0.14 | 2026-11-14 | FE | FEAT-05 `acordado` sem mudanças. O FE usa os limites de `CreatePartyRequest` (40 e 24 caracteres) como texto de UI dos erros `tooLong`. |
