@@ -17,7 +17,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 ## Índice
 | Nº | ID | Título | Status |
 |---|---|---|---|
-| 000 | FEAT-00 | Fundação: agentes, skills, guardas, spec | aguardando revisão |
+| 000 | FEAT-00 | Fundação: agentes, skills, guardas, spec | concluída |
+| 001 | T-01 | Ferramentas e esqueleto NestJS | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.2 · **Data:** 2026-11-14
+> **Versão da spec:** 0.3 · **Data:** 2026-11-14
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -33,7 +33,7 @@ O glossário termo → identificador é o de [`CONTRATO.md`](CONTRATO.md) §2 (c
 
 **Stack (README II.2, II.3):** TypeScript, NestJS, Drizzle ORM, PostgreSQL, Docker Compose (banco + backend), Vitest, Supertest. Socket.IO só no momento 3.
 
-**Bibliotecas autorizadas e instaladas:** nenhuma ainda. A proposta da FEAT-01, com versões, está em **D-05** (aguarda autorização; as versões exatas fixadas na instalação vão para o devlog da T-01). Candidatas, herdadas da organização de referência: `@nestjs/*` (core, common, platform-express, config, testing, cli), `drizzle-orm` + `drizzle-kit` + `pg`, `zod` (env, pipes, validação de conteúdo), `vitest` + `unplugin-swc` + `@swc/core` + `vite-tsconfig-paths`, `supertest`, `@faker-js/faker` (só em testes, nunca para sorteio de regra), `prettier`, `eslint`, `dotenv`.
+**Bibliotecas autorizadas e instaladas:** as de **D-05**, instaladas na T-01 (versões exatas no devlog 001). Herdadas da organização de referência: `@nestjs/*` (core, common, platform-express, config, testing, cli), `drizzle-orm` + `drizzle-kit` + `pg`, `zod` (env, pipes, validação de conteúdo), `vitest` + `unplugin-swc` + `@swc/core` + `vite-tsconfig-paths`, `supertest`, `@faker-js/faker` (só em testes, nunca para sorteio de regra), `prettier`, `eslint`, `dotenv`.
 
 **Camadas (hexagonal + DDD):**
 
@@ -145,7 +145,7 @@ Sem regra de jogo (README II.2, II.3); o comportamento observável vem de CONTRA
 - **D-02 — Estilo do domínio:** classes `Entity`/`AggregateRoot` com portas (organização de referência), mas sem estado global e sem fontes não determinísticas (decidido pelo autor em 2026-11-13).
 - **D-03 — Banco:** PostgreSQL via Drizzle; e2e com schema isolado por execução (2026-11-13).
 - **D-04 — Conteúdo:** todas as cartas são versionadas em `content/` (JSON validado por schema); não há conteúdo privado (2026-11-13).
-- **D-05 — Bibliotecas da FEAT-01 (proposta, aguarda autorização do autor):** `@nestjs/{core,common,platform-express,config,testing,cli}` 11.x, `drizzle-orm` + `drizzle-kit` (últimas estáveis) + `pg` 8.x, `zod` (última estável), `vitest` + `unplugin-swc` + `@swc/core` + `vite-tsconfig-paths` (últimas estáveis), `supertest` 7.x (+ `@types/*` necessários), `prettier` 3.x, `eslint` 9.x (+ `typescript-eslint`), `dotenv` e `dotenv-cli` (scripts de teste/drizzle). `@faker-js/faker` fica para a FEAT que primeiro precisar dele (nada na FEAT-01 o usa). **Versões exatas são fixadas na instalação (T-01) e registradas no devlog**; major novo em relação ao aqui autorizado → nova autorização.
+- **D-05 — Bibliotecas da FEAT-01 (autorizada em 2026-11-14 pela ordem de executar a T-01; instalada, versões no devlog 001):** `@nestjs/{core,common,platform-express,config,testing,cli}` 11.x, `drizzle-orm` + `drizzle-kit` (últimas estáveis) + `pg` 8.x, `zod` (última estável), `vitest` + `unplugin-swc` + `@swc/core` + `vite-tsconfig-paths` (últimas estáveis), `supertest` 7.x (+ `@types/*` necessários), `prettier` 3.x, `eslint` 9.x (+ `typescript-eslint`), `dotenv` e `dotenv-cli` (scripts de teste/drizzle). `@faker-js/faker` fica para a FEAT que primeiro precisar dele (nada na FEAT-01 o usa). **Versões exatas são fixadas na instalação (T-01) e registradas no devlog**; major novo em relação ao aqui autorizado → nova autorização.
 - **D-06 — Fonte do `contractVersion`:** constante `CONTRACT_VERSION` em `src/infra/http/contract-version.ts`, atualizada pela skill `/contrato` quando o backend passa a implementar uma versão nova. Não vem de env (não varia por ambiente) nem de parse do `CONTRATO.md` em runtime (frágil e acopla deploy ao arquivo de docs) (2026-11-14).
 - **D-07 — `/health` é só infra:** o endpoint não tem regra de jogo; controller em `src/infra/http/controllers/health/` responde direto, sem caso de uso, domínio ou banco (criar camadas vazias violaria "apenas o necessário"). O primeiro caso de uso real nasce na FEAT que tiver regra (2026-11-14).
 - **D-08 — Erros HTTP fora do domínio:** um exception filter global em `src/infra/http/errors/` traduz qualquer exceção para o corpo de CONTRATO §1.4: `HttpException` 404 → `NOT_FOUND`; qualquer exceção não tratada → 500 `INTERNAL_ERROR` (sem stack trace no corpo; log no servidor). O mapeamento `DomainError.code` → status entra no mesmo filtro quando os primeiros `DomainError` existirem (2026-11-14).
@@ -156,7 +156,7 @@ Sem regra de jogo (README II.2, II.3); o comportamento observável vem de CONTRA
 
 Contrato necessário: CONTRATO v0.4, seção FEAT-01 (`acordado`) — `GET /health`, `NOT_FOUND`, `INTERNAL_ERROR`. Nada falta no contrato.
 
-- [ ] **T-01 — Ferramentas e esqueleto NestJS.** Instalar as bibliotecas de D-05 (fixar e registrar versões); `tsconfig.json`/`tsconfig.build.json` com `@/*` → `src/*`; `nest-cli.json` (entryFile `infra/main`); `vitest.config.ts` (unitários) e `vitest.config.e2e.ts` (e2e, `setupFiles: test/setup-e2e.ts`); Prettier (sem ponto e vírgula, aspas simples, vírgula final es5); ESLint com as regras do `domain-guard` para `src/core/` e `src/domain/`; `.gitignore`; `src/infra/main.ts` + `app.module.ts` mínimos subindo na porta do env; scripts npm de CLAUDE.md (menos `validate:content`, que nasce com o validador na FEAT-04). **Verificação:** `npm run build`, `typecheck`, `lint`, `format:check` passam; `npm run start:dev` sobe.
+- [x] **T-01 — Ferramentas e esqueleto NestJS.** Instalar as bibliotecas de D-05 (fixar e registrar versões); `tsconfig.json`/`tsconfig.build.json` com `@/*` → `src/*`; `nest-cli.json` (entryFile `infra/main`); `vitest.config.ts` (unitários) e `vitest.config.e2e.ts` (e2e, `setupFiles: test/setup-e2e.ts`); Prettier (sem ponto e vírgula, aspas simples, vírgula final es5); ESLint com as regras do `domain-guard` para `src/core/` e `src/domain/`; `.gitignore`; `src/infra/main.ts` + `app.module.ts` mínimos subindo na porta do env; scripts npm de CLAUDE.md (menos `validate:content`, que nasce com o validador na FEAT-04). **Verificação:** `npm run build`, `typecheck`, `lint`, `format:check` passam; `npm run start:dev` sobe.
 - [ ] **T-02 — Docker Compose, env e base do Drizzle.** `docker-compose.yml` (serviços `postgres` e `backend`, com Dockerfile); `.env.example` (`PORT`, `DATABASE_URL`); `src/infra/env/` (schema Zod + `EnvModule`/`EnvService`, app não sobe com env inválido); `drizzle.config.ts`; `src/infra/database/database.module.ts` com a conexão `pg` (sem tabelas ainda — o primeiro schema nasce com o primeiro agregado persistido); `test/setup-e2e.ts` com schema Postgres único por execução e limpeza (D-03). **Verificação:** `docker compose up -d` sobe banco e backend; app conecta no banco; env inválido derruba o boot com mensagem clara.
 - [ ] **T-03 — `GET /health` e filtro de erros (REQ-01, REQ-02, REQ-03).** TDD: e2e Supertest primeiro, um teste por REQ (`it('REQ-01: …')`), cenários com os valores exatos do CONTRATO FEAT-01. Depois: `src/infra/http/contract-version.ts` (D-06), `controllers/health/index.controller.ts` (D-07), exception filter global em `http/errors/` (D-08), `http.module.ts`, CORS liberado para a origem do frontend (env), `client.http` com os dois cenários do contrato. **Verificação:** `npm run test:e2e` verde; `curl` dos cenários responde byte a byte o contrato. Ao final: `/contrato` marca FEAT-01 `implementado (BE)` e gera o AVISO DE FRONTEND.
 
@@ -166,6 +166,7 @@ Contrato necessário: CONTRATO v0.4, seção FEAT-01 (`acordado`) — `GET /heal
 |---|---|---|
 | 0.1 | 2026-11-13 | Versão inicial (FEAT-00): visão, arquitetura e pastas, decisões D-01 a D-04. |
 | 0.2 | 2026-11-14 | Planejamento da FEAT-01 (CONTRATO v0.4): REQ-01 a REQ-03, D-05 a D-08, tarefas T-01 a T-03. |
+| 0.3 | 2026-11-14 | T-01 concluída: D-05 autorizado e instalado (`@nestjs/config` segue major próprio, 12.x; TypeScript fixado em 5.x — ver devlog 001). |
 
 ## Apêndice A — Conteúdo de teste
 

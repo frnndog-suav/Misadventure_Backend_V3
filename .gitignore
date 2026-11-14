@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+
+# Segredos locais (infra-dev: fora do Git; .env.example entra na T-02)
+.env
+.env.test
+
+*.log
+*.tsbuildinfo

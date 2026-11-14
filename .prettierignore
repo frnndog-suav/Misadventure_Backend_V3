@@ -1,0 +1,11 @@
+# Gerados
+node_modules
+dist
+coverage
+package-lock.json
+
+# Compartilhados/tooling: nunca reformatar sem o autor (CLAUDE.md)
+docs
+CLAUDE.md
+.claude
+.vscode
