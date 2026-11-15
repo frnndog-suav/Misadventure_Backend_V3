@@ -28,9 +28,10 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 008 | retorno | FEAT-03 `validado` pelo frontend (CONTRATO v0.9, ROADMAP v0.11) | concluída |
 | 009 | T-07 | Domínio do catálogo (FEAT-04): tipos, integridade, porta, casos de uso | concluída |
 | 010 | T-08 | Conteúdo e validador (FEAT-04): schema, leitor, `validate:content`, fixture, coleção `base` | concluída |
-| 011 | T-09 | Rotas do catálogo (`/catalog/*`) e FEAT-04 `implementado (BE)` | aguardando revisão |
-| 012 | T-10 | Core: agregado, eventos, portas e RNG sfc32 | aguardando revisão |
-| 013 | T-11 | Domínio `campaign`: `Party`, saves, sessão, casos de uso | aguardando revisão |
+| 011 | T-09 | Rotas do catálogo (`/catalog/*`) e FEAT-04 `implementado (BE)` | concluída |
+| 012 | T-10 | Core: agregado, eventos, portas e RNG sfc32 | concluída |
+| 013 | T-11 | Domínio `campaign`: `Party`, saves, sessão, casos de uso | concluída |
+| 014 | T-12 | Persistência do save (`parties`) e adaptadores Clock/Ids/Seed | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
