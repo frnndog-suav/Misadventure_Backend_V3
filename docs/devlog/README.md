@@ -32,7 +32,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 012 | T-10 | Core: agregado, eventos, portas e RNG sfc32 | concluída |
 | 013 | T-11 | Domínio `campaign`: `Party`, saves, sessão, casos de uso | concluída |
 | 014 | T-12 | Persistência do save (`parties`) e adaptadores Clock/Ids/Seed | concluída |
-| 015 | T-13 | Rotas da campanha (`/parties`) e FEAT-05 `implementado (BE)` | aguardando revisão |
+| 015 | T-13 | Rotas da campanha (`/parties`) e FEAT-05 `implementado (BE)` | concluída |
+| 016 | retorno | FEAT-05 `validado` (CONTRATO v0.17, ROADMAP v0.21) | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

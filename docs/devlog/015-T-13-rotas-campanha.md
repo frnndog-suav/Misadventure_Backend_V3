@@ -1,6 +1,6 @@
 # 015 — T-13 — Rotas da campanha (`/parties`) e FEAT-05 `implementado (BE)`
 
-- **ID:** T-13 (FEAT-05) · **Data:** 2026-11-15 · **Status:** aguardando revisão
+- **ID:** T-13 (FEAT-05) · **Data:** 2026-11-15 · **Status:** concluída
 - **Spec:** v0.19 · **Contrato:** v0.16 (FEAT-05 `implementado (BE)`) · **ROADMAP:** v0.19
 
 ## Objetivo
