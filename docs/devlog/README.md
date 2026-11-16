@@ -37,7 +37,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 017 | retorno | ROADMAP v0.22 (FEAT-30, só FE) | concluída |
 | 018 | T-19 | Domínio do editor (FEAT-31): portas, 15 casos de uso, erros, fakes | concluída |
 | 019 | T-20 | Armazenamento em arquivo (FEAT-31): `FileContentStore`, parser Zod, textos D-49 | concluída |
-| 020 | T-21 | Rotas do editor (FEAT-31): 15 controllers, presenters, filtro; CONTRATO v0.23 `implementado (BE)` | aguardando revisão |
+| 020 | T-21 | Rotas do editor (FEAT-31): 15 controllers, presenters, filtro; CONTRATO v0.23 `implementado (BE)` | concluída |
+| 021 | FEAT-31-validada | Validação pelo frontend: CONTRATO v0.24 e ROADMAP v0.28 com a FEAT-31 `validado` | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
