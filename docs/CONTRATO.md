@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.19 · **Data:** 2026-11-15
+> **Versão do contrato:** 0.20 · **Data:** 2026-11-15
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -796,11 +796,15 @@ interface CollectionExport {
   formatVersion: 1
   collection: CollectionInput
   cards: EditorCard[]
+  /** `EditorClass` vem da FEAT-06; até ela, sempre `[]`. Um arquivo sem `classes` é lido como `[]`. */
+  classes: EditorClass[]
 }
 
 interface ImportResult {
   collectionId: string
   cardCount: number
+  /** FEAT-06; até ela, sempre 0. */
+  classCount: number
 }
 
 /** `details` de CONTENT_INVALID e CONTENT_ID_TAKEN. */
@@ -849,20 +853,20 @@ A preparação acontece **dentro** do `POST /parties`: o grupo já nasce na prim
 
 **Conteúdo novo e editor (FEAT-31):** a FEAT-06 traz a **Carta de Dimensão**, a **forma das setas** das zonas e as **classes com deck pré-pronto**. Os três entram no editor de conteúdo nesta FEAT (decisão do autor): a Carta de Dimensão e o `arrowLayout` pelo próprio `CardInput` (que é o `Card`), e as classes por rotas novas em `/lab/content`. Como as cartas, uma classe é `draft` ou `published`, e só as publicadas aparecem em `GET /catalog/classes` e podem ser escolhidas. O `playerClass` de uma classe publicada nunca muda (T1).
 
-**Validação da dimensão:** a composição (README 3.5, gerador item 2) é conferida ao **criar o grupo**, com só o conteúdo `published`, e pelo `validate-dimension` da FEAT-31, com os mesmos textos. Se ela falhar, ou se o gerador passar de `mapMaxAttempts` tentativas, ou se não houver Carta de Dimensão publicada, o `POST /parties` responde `500` `DIMENSION_INVALID` com os problemas (erro de conteúdo, para o designer).
+**Validação da dimensão:** a composição (README 3.5, gerador item 2) é conferida ao **criar o grupo**, com só o conteúdo `published`, e pelo `validate-dimension` da FEAT-31, com os mesmos textos. Se ela falhar, ou se o gerador passar de `mapMaxAttempts` tentativas, ou se não houver Carta de Dimensão publicada, o `POST /parties` responde `409` `DIMENSION_INVALID` com os problemas (erro de conteúdo, para o designer).
 
 **Mudanças em outras seções** (o frontend precisa ajustar e revalidar as telas afetadas):
 - **FEAT-03 (`validado`):** `GameConfigValues` ganha 11 chaves (tabela de padrões e limites).
 - **FEAT-04 (`validado`):** `ZoneCard.arrowLayout`; `CardType` e `Card` ganham `dimension`/`DimensionCard` (e `cardCounts` ganha `dimension`); a coleção `fixture` cresce (cenários 1 e 2 atualizados).
 - **FEAT-05 (`validado`):** `CreatePartyRequest.playerClass` (obrigatório); `Party.dimension`, `Party.turnOrder`, `PartyMember.player`; `PartyInvalidDetails` com `playerClass` e `unknownClass`. Os cenários passam a mandar `"playerClass": "warrior"`. Saves criados antes desta versão são **apagados** pela migração do backend (não têm classe).
-- **FEAT-31 (`proposto (FE)`):** o editor aceita o tipo `dimension` e o `arrowLayout`; `CollectionExport` e `ImportResult` ganham as classes; `DimensionValidation` passa a considerar a Carta de Dimensão; `CONTENT_IN_USE` ganha cenário. Com a `fixture` maior, os cenários dela mudam: `publishedCount` 12; `cardCounts` com `zone: 4`, `attribute: 3`, `dimension: 1` e os demais 1; `validate-dimension` da `fixture` → `{ "valid": true, "problems": [] }` (o exemplo inválido passa para `bosque`, abaixo).
+- **FEAT-31 (`proposto (FE)`):** o editor aceita o tipo `dimension` e o `arrowLayout`; `CollectionExport.classes` e `ImportResult.classCount` (definidos na seção FEAT-31) passam a ser preenchidos; `DimensionValidation` passa a considerar a Carta de Dimensão; `CONTENT_IN_USE` ganha cenário. Com a `fixture` maior, os cenários dela mudam: `publishedCount` 12; `cardCounts` com `zone: 4`, `attribute: 3`, `dimension: 1` e os demais 1; `validate-dimension` da `fixture` → `{ "valid": true, "problems": [] }` (o exemplo inválido passa para `bosque`, abaixo).
 
 #### Endpoints
 
 | Método | Rota | Pedido | Resposta | Erros |
 |---|---|---|---|---|
 | GET | `/catalog/classes` | — | `200` `ClassDefinition[]` (só `published`) | — |
-| POST | `/parties` | `CreatePartyRequest` (com `playerClass`) | `201` `Party` | `400` `PARTY_INVALID`, `500` `DIMENSION_INVALID` |
+| POST | `/parties` | `CreatePartyRequest` (com `playerClass`) | `201` `Party` | `400` `PARTY_INVALID`, `409` `DIMENSION_INVALID` |
 | GET | `/lab/content/collections/:collectionId/classes` | — | `200` `EditorClassSummary[]` | `404` `COLLECTION_NOT_FOUND` |
 | POST | `/lab/content/collections/:collectionId/classes` | `ClassInput` | `201` `EditorClass` (`draft`) | `400` `CONTENT_INVALID`, `404` `COLLECTION_NOT_FOUND`, `409` `CONTENT_ID_TAKEN` |
 | GET | `/lab/content/classes/:playerClass` | — | `200` `EditorClass` | `404` `CLASS_NOT_FOUND` |
@@ -911,20 +915,6 @@ interface EditorClassSummary {
   playerClass: PlayerClass
   name: string
   status: ContentStatus
-}
-
-/** FEAT-31, com as classes (FEAT-06). Um arquivo sem `classes` é lido como `classes: []`. */
-interface CollectionExport {
-  formatVersion: 1
-  collection: CollectionInput
-  cards: EditorCard[]
-  classes: EditorClass[]
-}
-
-interface ImportResult {
-  collectionId: string
-  cardCount: number
-  classCount: number
 }
 
 /** Direções da mesa (não da carta: a carta gira). `y` cresce para o sul. */
@@ -1038,7 +1028,7 @@ Sorteios usam semente aleatória: mapa, mão e rolagens mudam a cada grupo. Comp
 | `CONTENT_ID_TAKEN` | Identificador de coleção ou carta já usado (409); `details.fields` como em `CONTENT_INVALID`. | FEAT-31 |
 | `CONTENT_IN_USE` | Excluir ou substituir conteúdo usado por algum save (409). | FEAT-31 |
 | `CONTENT_LOCKED` | Mudar o identificador de uma carta publicada (409). | FEAT-31 |
-| `DIMENSION_INVALID` | Não há Carta de Dimensão publicada, a composição da dimensão falhou (README 3.5) ou o gerador passou do limite de tentativas, ao criar um grupo (500); `details` com `dimensionCardId` e `problems`. Erro de conteúdo, para o designer. | FEAT-06 |
+| `DIMENSION_INVALID` | Não há Carta de Dimensão publicada, a composição da dimensão falhou (README 3.5) ou o gerador passou do limite de tentativas, ao criar um grupo (409: o conteúdo publicado no servidor não permite preparar a partida); `details` com `dimensionCardId` e `problems`. Erro de conteúdo, para o designer. | FEAT-06 |
 | `CLASS_NOT_FOUND` | Classe inexistente no editor (404). | FEAT-06 |
 | `CONTENT_REFERENCED` | Excluir ou renomear uma carta de atributo que está no deck pré-pronto de uma classe (409). | FEAT-06 |
 
@@ -1065,3 +1055,4 @@ Sorteios usam semente aleatória: mapa, mão e rolagens mudam a cada grupo. Comp
 | 0.17 | 2026-11-15 | FE | FEAT-05 `validado`: os 7 cenários passaram com `curl` contra o backend real, e as telas `/`, `/novo` e `/grupo/:partyId` passaram com o MSW desligado (criar, erros por campo, `belowMinPlayers`, sessão, encerrar, continuar, abandonar, `404`). Sem mudança de formato. |
 | 0.18 | 2026-11-15 | FE | FEAT-31 proposta (editor de conteúdo, README B.19 T1): rotas `/lab/content/*` (coleções, cartas, publicar, duplicar, validar como dimensão, exportar, importar); tipos `ContentStatus`, `CollectionInput`, `CollectionPatch`, `EditorCollectionSummary`, `EditorCollection`, `CardInput`, `EditorCard`, `EditorCardSummary`, `DimensionValidation`, `CollectionExport`, `ImportResult`, `ContentInvalidDetails`; glossário §2.9; códigos `CONTENT_INVALID`, `CONTENT_ID_TAKEN`, `CONTENT_IN_USE`, `CONTENT_LOCKED` (§4). Muda o comportamento do catálogo da FEAT-04 (só cartas `published`), sem mudar o formato. |
 | 0.19 | 2026-11-15 | BE | FEAT-06 proposta: `GET /catalog/classes` (`ClassDefinition`); `POST /parties` com `playerClass` e o grupo já preparado (`Party.dimension`, `Party.turnOrder`, `PartyMember.player`); `DimensionCard`; `ZoneCard.arrowLayout`; 11 chaves novas em `GameConfigValues`; `PartyInvalidDetails` com `playerClass`/`unknownClass`; classes no editor (`/lab/content/.../classes`, `ClassInput`, `EditorClass`, `EditorClassSummary`; classes em `CollectionExport` e `ImportResult`); cenário de `CONTENT_IN_USE`; códigos `DIMENSION_INVALID`, `CLASS_NOT_FOUND`, `CONTENT_REFERENCED` (§4); glossário §2.10. Altera tipos e cenários das FEAT-03, 04 e 05 (`validado`) e da FEAT-31 (`proposto (FE)`). Mescla com a v0.18 do FE (FEAT-31), editada em paralelo. |
+| 0.20 | 2026-11-15 | BE | FEAT-06 (`proposto (BE)`) com os dois pedidos do FE aceitos: (1) `CollectionExport.classes` e `ImportResult.classCount` definidos uma vez só, na seção FEAT-31 (a FEAT-06 só os preenche); (2) `DIMENSION_INVALID` responde `409` em vez de `500` (conflito com o conteúdo publicado, não falha do servidor; `422` recusado porque o corpo do pedido está correto). |
