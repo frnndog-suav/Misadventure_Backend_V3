@@ -75,3 +75,88 @@ DELETE {{baseUrl}}/parties/{{createParty.response.body.id}}
 
 ### FEAT-05 — save inexistente (404 PARTY_NOT_FOUND)
 GET {{baseUrl}}/parties/00000000-0000-4000-8000-000000000000
+
+### FEAT-31 — coleções do editor (200 EditorCollectionSummary[]; LAB_ENABLED=true)
+GET {{baseUrl}}/lab/content/collections
+
+### FEAT-31 — criar coleção (201 EditorCollection; repetir → 409 CONTENT_ID_TAKEN)
+POST {{baseUrl}}/lab/content/collections
+Content-Type: application/json
+
+{ "id": "bosque", "name": "Bosque Sombrio", "description": "Coleção de teste do editor." }
+
+### FEAT-31 — coleção inválida (400 CONTENT_INVALID: id e name)
+POST {{baseUrl}}/lab/content/collections
+Content-Type: application/json
+
+{ "id": "Bosque X", "name": " ", "description": "" }
+
+### FEAT-31 — uma coleção (200 EditorCollection; nope → 404 COLLECTION_NOT_FOUND)
+GET {{baseUrl}}/lab/content/collections/bosque
+
+### FEAT-31 — renomear coleção (200 EditorCollection)
+PATCH {{baseUrl}}/lab/content/collections/bosque
+Content-Type: application/json
+
+{ "name": "Bosque Antigo" }
+
+### FEAT-31 — criar carta (201 EditorCard draft)
+POST {{baseUrl}}/lab/content/collections/bosque/cards
+Content-Type: application/json
+
+{ "slug": "forca", "type": "attribute", "name": "Força", "flavorText": null, "rarity": "common", "attributeKind": "basic", "attributes": ["strength"], "effects": [] }
+
+### FEAT-31 — carta inválida (400 CONTENT_INVALID em attributes)
+POST {{baseUrl}}/lab/content/collections/bosque/cards
+Content-Type: application/json
+
+{ "slug": "forca-sorte", "type": "attribute", "name": "Força", "flavorText": null, "rarity": "common", "attributeKind": "basic", "attributes": ["strength", "luck"], "effects": [] }
+
+### FEAT-31 — renomear rascunho (200, id bosque.forca-bruta)
+PUT {{baseUrl}}/lab/content/cards/bosque.forca
+Content-Type: application/json
+
+{ "slug": "forca-bruta", "type": "attribute", "name": "Força", "flavorText": null, "rarity": "common", "attributeKind": "basic", "attributes": ["strength"], "effects": [] }
+
+### FEAT-31 — uma carta do editor (200 EditorCard; inexistente → 404 CARD_NOT_FOUND)
+GET {{baseUrl}}/lab/content/cards/bosque.forca-bruta
+
+### FEAT-31 — publicar (200 EditorCard published)
+POST {{baseUrl}}/lab/content/cards/bosque.forca-bruta/publish
+
+### FEAT-31 — mudar slug de publicada (409 CONTENT_LOCKED)
+PUT {{baseUrl}}/lab/content/cards/bosque.forca-bruta
+Content-Type: application/json
+
+{ "slug": "outra", "type": "attribute", "name": "Força", "flavorText": null, "rarity": "common", "attributeKind": "basic", "attributes": ["strength"], "effects": [] }
+
+### FEAT-31 — duplicar (201 EditorCard draft, bosque.forca-bruta-copia)
+POST {{baseUrl}}/lab/content/cards/bosque.forca-bruta/duplicate
+
+### FEAT-31 — cartas do editor com filtros (200 EditorCardSummary[]; type=monster → 400)
+GET {{baseUrl}}/lab/content/collections/bosque/cards?status=draft&q=bruta
+
+### FEAT-31 — excluir carta (204)
+DELETE {{baseUrl}}/lab/content/cards/bosque.forca-bruta-copia
+
+### FEAT-31 — validar como dimensão (200 DimensionValidation)
+POST {{baseUrl}}/lab/content/collections/fixture/validate-dimension
+
+### FEAT-31 — exportar (200 CollectionExport)
+# @name exportBosque
+GET {{baseUrl}}/lab/content/collections/bosque/export
+
+### FEAT-31 — importar com replace (201 ImportResult; sem replace → 409 CONTENT_ID_TAKEN)
+POST {{baseUrl}}/lab/content/import?replace=true
+Content-Type: application/json
+
+{{exportBosque.response.body.$}}
+
+### FEAT-31 — import inválido (400 CONTENT_INVALID em formatVersion)
+POST {{baseUrl}}/lab/content/import
+Content-Type: application/json
+
+{}
+
+### FEAT-31 — excluir coleção (204)
+DELETE {{baseUrl}}/lab/content/collections/bosque

@@ -9,4 +9,7 @@ export const DOMAIN_ERROR_STATUS: Readonly<Record<string, HttpStatus>> = {
   PARTY_INVALID: HttpStatus.BAD_REQUEST,
   PARTY_NOT_FOUND: HttpStatus.NOT_FOUND,
   PARTY_SESSION_NOT_ACTIVE: HttpStatus.CONFLICT,
+  CONTENT_INVALID: HttpStatus.BAD_REQUEST,
+  CONTENT_ID_TAKEN: HttpStatus.CONFLICT,
+  CONTENT_LOCKED: HttpStatus.CONFLICT,
 }

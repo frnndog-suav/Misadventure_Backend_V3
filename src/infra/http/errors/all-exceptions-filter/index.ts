@@ -7,6 +7,10 @@ import {
   Logger,
 } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
+import type { DomainError } from '@/core/error/domain-error'
+import { ContentIdTakenError } from '@/domain/catalog/application/use-cases/_errors/content-id-taken-error'
+import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_errors/content-invalid-error'
+import { ContentIssuesPresenter } from '../../presenters/content-issues-presenter'
 import { DomainErrorException } from '../domain-error-exception'
 import { DOMAIN_ERROR_STATUS } from '../domain-error-status'
 
@@ -23,7 +27,11 @@ const INTERNAL_ERROR: TErrorBody = {
   },
 }
 
-function invalidBody(code: string, message: string) {
+type TInvalidBody = {
+  error: { code: string; message: string; details: { fields: unknown[] } }
+}
+
+function invalidBody(code: string, message: string): TInvalidBody {
   return {
     error: {
       code,
@@ -35,12 +43,23 @@ function invalidBody(code: string, message: string) {
 
 /**
  * Corpo JSON malformado vira o erro de validação da área (D-17, T-13):
- * prefixo do caminho → corpo da resposta 400.
+ * prefixo do caminho → corpo da resposta 400. O primeiro prefixo que casa
+ * vale, então `/lab/content` vem antes de `/lab/` (D-51).
  */
 const INVALID_BODY_BY_PATH: readonly {
   prefix: string
-  body: ReturnType<typeof invalidBody>
+  body: TInvalidBody
 }[] = [
+  {
+    prefix: '/lab/content',
+    body: {
+      error: {
+        code: 'CONTENT_INVALID',
+        message: 'Conteúdo inválido.',
+        details: { fields: [{ path: '', message: 'Envie um objeto JSON.' }] },
+      },
+    },
+  },
   {
     prefix: '/lab/',
     body: invalidBody(
@@ -54,7 +73,21 @@ const INVALID_BODY_BY_PATH: readonly {
   },
 ]
 
-function invalidBodyFor(url: string): ReturnType<typeof invalidBody> | null {
+/**
+ * `details` que vai na resposta: os problemas de conteúdo saem do domínio
+ * como `{ path, reason }` e ganham o texto pt-BR aqui (D-49).
+ */
+function presentDetails(error: DomainError): unknown {
+  if (
+    error instanceof ContentInvalidError ||
+    error instanceof ContentIdTakenError
+  ) {
+    return ContentIssuesPresenter.toHTTP(error.details.fields)
+  }
+  return error.details
+}
+
+function invalidBodyFor(url: string): TInvalidBody | null {
   const path = url.split('?')[0] ?? ''
   const match = INVALID_BODY_BY_PATH.find(({ prefix }) =>
     prefix.endsWith('/')
@@ -89,7 +122,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const response: unknown = http.getResponse()
 
     if (exception instanceof DomainErrorException) {
-      const { code, message, details } = exception.domainError
+      const { code, message } = exception.domainError
+      const details = presentDetails(exception.domainError)
       const status = DOMAIN_ERROR_STATUS[code]
       if (status !== undefined) {
         const body = details ? { code, message, details } : { code, message }
@@ -98,7 +132,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
     }
 
-    // D-17: corpo JSON malformado em /lab/* ou /parties é um pedido inválido.
+    // D-17, D-51: corpo JSON malformado em /lab/* ou /parties é um pedido inválido.
     if (isBodyParseError(exception)) {
       const body = invalidBodyFor(
         String(httpAdapter.getRequestUrl(http.getRequest()))

@@ -22,6 +22,8 @@ describe('Laboratório desligado (e2e)', () => {
     ['get', '/lab/config'],
     ['patch', '/lab/config'],
     ['post', '/lab/config/reset'],
+    ['get', '/lab/content/collections'],
+    ['post', '/lab/content/import'],
   ] as const)(
     'REQ-08: com LAB_ENABLED=false, %s %s responde 404 NOT_FOUND',
     async (method, path) => {

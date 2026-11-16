@@ -3,12 +3,15 @@ import { GameConfigRepository } from '@/domain/lab/application/repositories/game
 import { GetGameConfigUseCase } from '@/domain/lab/application/use-cases/get-game-config'
 import { ResetGameConfigUseCase } from '@/domain/lab/application/use-cases/reset-game-config'
 import { UpdateGameConfigUseCase } from '@/domain/lab/application/use-cases/update-game-config'
+import { ContentEditorModule } from './content-editor.module'
 import { GetLabConfigController } from './controllers/get-lab-config/index.controller'
 import { ResetLabConfigController } from './controllers/reset-lab-config/index.controller'
 import { UpdateLabConfigController } from './controllers/update-lab-config/index.controller'
 
 // Rotas /lab/*; só é importado com LAB_ENABLED=true (D-14, app.module.ts).
+// O editor de conteúdo (/lab/content/*) entra junto (D-51).
 @Module({
+  imports: [ContentEditorModule],
   controllers: [
     GetLabConfigController,
     UpdateLabConfigController,
