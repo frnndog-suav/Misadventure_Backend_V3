@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.17 · **Data:** 2026-11-15
+> **Versão do contrato:** 0.19 · **Data:** 2026-11-15
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -187,6 +187,35 @@ Base dos nomes no código dos dois lados e dos termos com destaque e tooltip (RE
 
 *(Grupo, save, sessão, host e jogo solo já estão em §2.2.)*
 
+### 2.9 Editor de conteúdo (README 27, II.6) — FEAT-31
+
+| Termo | Identificador |
+|---|---|
+| Editor de conteúdo | `contentEditor` (rotas `/lab/content`) |
+| Rascunho / publicada / situação | `draft` / `published` / `status` (`ContentStatus`) |
+| Identificador (slug) da carta | `slug` |
+| Publicar / duplicar | `publish` / `duplicate` |
+| Validar como dimensão / problemas | `validateDimension` / `problems` |
+| Exportar / importar / substituir | `export` / `import` / `replace` |
+
+### 2.10 Preparação da partida (README 3.2, 3.5, 4.4, 8, 9, 10.1, 11.2) — FEAT-06
+
+| Termo | Identificador |
+|---|---|
+| Ordem de lançamento / zona de chegada | `releaseOrder` / `arrivalZoneTitle` |
+| Forma das 2 setas: opostas / vizinhas | `arrowLayout` (`straight`, `corner`) |
+| Direção na mesa (norte, leste, sul, oeste) | `direction` (`north`, `east`, `south`, `west`) |
+| Definição de classe / deck pré-pronto | `classDefinition` / `starterDeck` |
+| Atributos essenciais / modificadores base | `essentialAttributes` / `baseModifiers` |
+| Trava cumprida | `deckLockMet` |
+| Ordem dos jogadores | `turnOrder` |
+| Vida base / vida atual | `baseHealth` / `health` |
+| Tamanho mínimo da build | `minDeckSize` |
+| Trava de classe com 1 / 2 essenciais | `lockOneEssential` / `lockTwoEssentials` |
+| Tentativas máximas do gerador de mapa | `mapMaxAttempts` |
+
+*(Dimensão, Carta de Dimensão, travessia, mapa, cidade inicial, classe, trava, build, mão, Pico, Vigor e vida máxima já estão em §2.2 e §2.3.)*
+
 ## 3. Features
 
 Uma seção por FEAT do roadmap, criada com `/contrato` (no frontend) ou pelo equivalente no backend. Modelo:
@@ -262,6 +291,18 @@ interface GameConfigValues {
   baseHealth: number // README 9.1
   initialGold: number // README 9.1
   initialHandSize: number // README 9.1
+  // FEAT-06
+  minDeckSize: number // README 4.4
+  lockOneEssential: number // README 8.2 (classe com 1 essencial)
+  lockTwoEssentials: number // README 8.2 (classe com 2 essenciais, de cada)
+  mapMaxAttempts: number // README 3.5
+  defaultAttack: number // README 8.7, linha Padrão
+  defaultDefense: number
+  defaultAccuracy: number
+  defaultEvasion: number
+  defaultCelerity: number
+  defaultPiercing: number
+  defaultReflection: number
 }
 
 type GameConfigKey = keyof GameConfigValues
@@ -303,6 +344,13 @@ Padrões e limites:
 | `baseHealth` | 20 | 1–1000 |
 | `initialGold` | 10 | 0–100000 |
 | `initialHandSize` | 7 | 0–60 |
+| `minDeckSize` (FEAT-06) | 60 | 1–200 |
+| `lockOneEssential` (FEAT-06) | 18 | 0–200 |
+| `lockTwoEssentials` (FEAT-06) | 10 | 0–200 |
+| `mapMaxAttempts` (FEAT-06) | 1000 | 1–100000 |
+| `defaultAttack` / `defaultDefense` (FEAT-06) | 5 / 3 | 0–1000 cada |
+| `defaultAccuracy` / `defaultEvasion` (FEAT-06) | 50 / 20 | 0–1000 cada |
+| `defaultCelerity` / `defaultPiercing` / `defaultReflection` (FEAT-06) | 10 / 0 / 0 | 0–1000 cada |
 
 #### Cenários de validação
 
@@ -337,7 +385,7 @@ Listas ordenadas por `id`. O `id` de uma carta tem a forma `<collectionId>.<slug
 #### Tipos
 
 ```ts
-type CardType = 'zone' | 'attribute' | 'equipment' | 'item' | 'randomEvent' | 'combatEvent'
+type CardType = 'zone' | 'attribute' | 'equipment' | 'item' | 'randomEvent' | 'combatEvent' | 'dimension' // dimension: FEAT-06
 
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' // README 24.3
 
@@ -395,7 +443,7 @@ interface CollectionSummary {
   cardCounts: Record<CardType, number>
 }
 
-type Card = ZoneCard | AttributeCard | EquipmentCard | ItemCard | RandomEventCard | CombatEventCard
+type Card = ZoneCard | AttributeCard | EquipmentCard | ItemCard | RandomEventCard | CombatEventCard | DimensionCard
 
 /** README 3.4 */
 interface ZoneCard {
@@ -409,6 +457,8 @@ interface ZoneCard {
   location: string
   /** 1 a 4; zona `urban` sempre 4. */
   connectionArrows: number
+  /** FEAT-06. Só com 2 setas: `straight` = lados opostos, `corner` = lados vizinhos. `null` com 1, 3 ou 4 setas (só há uma forma; a carta gira). */
+  arrowLayout: 'straight' | 'corner' | null
   /** Sempre tem `startEvent`; `urban` sempre tem `useVault` e `saveRespawnPoint`, e só `urban` tem `saveRespawnPoint`. */
   zoneActions: ZoneAction[]
   effects: (RuleText & { polarity: 'positive' | 'negative' })[]
@@ -519,6 +569,20 @@ interface Enemy {
   behavior: EnemyBehavior
 }
 
+/** FEAT-06 — README 3.2. No máximo 1 por coleção; as zonas da dimensão são as zonas da coleção (README 27). Conclusão, itens de conclusão, chefe final e prêmio entram na FEAT-19. */
+interface DimensionCard {
+  type: 'dimension'
+  id: string
+  collectionId: string
+  name: string
+  flavorText: string | null
+  /** Ordem de lançamento (≥ 1, única). Todo grupo novo começa pela menor (README 28.1). */
+  releaseOrder: number
+  /** Título da zona `urban` de chegada (cidade inicial); `null` = sorteada entre as `urban` sem efeito `negative`. */
+  arrivalZoneTitle: string | null
+  effects: RuleText[]
+}
+
 /** `details` do erro CATALOG_QUERY_INVALID. */
 interface CatalogQueryInvalidDetails {
   field: 'type'
@@ -530,8 +594,8 @@ interface CatalogQueryInvalidDetails {
 
 Rodam contra o **conteúdo de teste** do backend (coleção `fixture`, nome "Coleção de Teste", `test/fixtures/content/`, uma carta de cada tipo, ids abaixo). A cópia exata de cada carta vai junto no aviso da `implementado (BE)` para as fixtures do MSW.
 
-- Quando `GET /catalog/collections`, então `200` com `[{ "id": "fixture", "name": "Coleção de Teste", "cardCounts": { "zone": 1, "attribute": 1, "equipment": 1, "item": 1, "randomEvent": 1, "combatEvent": 1 } }]`.
-- Quando `GET /catalog/collections/fixture/cards`, então `200` com 6 cartas, nesta ordem de `id`: `fixture.blade-of-dusk` (equipment), `fixture.healing-potion` (item), `fixture.howling-wolves` (combatEvent), `fixture.strength-basic` (attribute), `fixture.whispering-grove` (zone), `fixture.wounded-traveler` (randomEvent).
+- Quando `GET /catalog/collections`, então `200` com `[{ "id": "fixture", "name": "Coleção de Teste", "cardCounts": { "zone": 4, "attribute": 3, "equipment": 1, "item": 1, "randomEvent": 1, "combatEvent": 1, "dimension": 1 } }]` (contagens da FEAT-06).
+- Quando `GET /catalog/collections/fixture/cards`, então `200` com 12 cartas, nesta ordem de `id` (lista da FEAT-06): `fixture.blade-of-dusk` (equipment), `fixture.dexterity-basic` (attribute), `fixture.endurance-basic` (attribute), `fixture.gray-harbor` (zone), `fixture.healing-potion` (item), `fixture.howling-wolves` (combatEvent), `fixture.old-mine` (zone), `fixture.stone-bend` (zone), `fixture.strength-basic` (attribute), `fixture.test-dimension` (dimension), `fixture.whispering-grove` (zone), `fixture.wounded-traveler` (randomEvent).
 - Quando `GET /catalog/collections/fixture/cards?type=attribute`, então `200` com `[{ "type": "attribute", "id": "fixture.strength-basic", "collectionId": "fixture", "name": "Força", "flavorText": null, "rarity": "common", "attributeKind": "basic", "attributes": ["strength"], "effects": [] }]`.
 - Quando `GET /catalog/collections/fixture/cards?type=monster`, então `400` com `{ "error": { "code": "CATALOG_QUERY_INVALID", "message": "Filtro do catálogo inválido.", "details": { "field": "type", "reason": "unknownCardType" } } }`.
 - Quando `GET /catalog/collections/nope/cards`, então `404` com `{ "error": { "code": "COLLECTION_NOT_FOUND", "message": "Coleção não encontrada." } }`.
@@ -569,6 +633,8 @@ interface CreatePartyRequest {
   name: string
   /** Nome do personagem do jogador, 1–24 caracteres. */
   characterName: string
+  /** FEAT-06. Classe primária inicial; precisa existir em `GET /catalog/classes`. */
+  playerClass: PlayerClass
 }
 
 interface PartyMember {
@@ -577,6 +643,8 @@ interface PartyMember {
   /** Na FEAT-20 entra `'aiHelper'`. */
   kind: 'human'
   isHost: boolean
+  /** FEAT-06. */
+  player: PlayerState
 }
 
 /** GET /parties/:partyId e respostas das intenções. Cresce a partir da FEAT-06. */
@@ -585,6 +653,10 @@ interface Party {
   name: string
   status: PartyStatus
   members: PartyMember[]
+  /** FEAT-06. */
+  dimension: PartyDimension
+  /** FEAT-06. Ids de membro, do 1º ao último (D20, README 11.2). */
+  turnOrder: string[]
   /** ISO 8601 UTC. */
   createdAt: string
   /** Última gravação do save, ISO 8601 UTC. */
@@ -606,13 +678,13 @@ interface PartySummary {
 interface PartyInvalidDetails {
   fields: {
     /** `null` só com `invalidBody`. */
-    field: 'name' | 'characterName' | 'members' | null
-    reason: 'invalidBody' | 'required' | 'notString' | 'blank' | 'tooLong' | 'belowMinPlayers'
+    field: 'name' | 'characterName' | 'playerClass' | 'members' | null // playerClass: FEAT-06
+    reason: 'invalidBody' | 'required' | 'notString' | 'blank' | 'tooLong' | 'unknownClass' | 'belowMinPlayers' // unknownClass: FEAT-06
   }[]
 }
 ```
 
-`invalidBody`: o corpo não é um objeto JSON ou está malformado. `blank`: só espaços. `tooLong`: acima do limite do campo. `belowMinPlayers`: o laboratório exige mais jogadores (`minPlayers`) do que o grupo de 1 tem. Ordem de `fields`: `name`, `characterName`, `members`.
+`invalidBody`: o corpo não é um objeto JSON ou está malformado. `blank`: só espaços. `tooLong`: acima do limite do campo. `unknownClass` (FEAT-06): texto que não é uma classe do catálogo. `belowMinPlayers`: o laboratório exige mais jogadores (`minPlayers`) do que o grupo de 1 tem. Ordem de `fields`: `name`, `characterName`, `playerClass`, `members`.
 
 Mensagens: `PARTY_INVALID` "Dados do grupo inválidos."; `PARTY_NOT_FOUND` "Grupo não encontrado."; `PARTY_SESSION_NOT_ACTIVE` "Não há sessão em andamento neste grupo.".
 
@@ -620,13 +692,334 @@ Mensagens: `PARTY_INVALID` "Dados do grupo inválidos."; `PARTY_NOT_FOUND` "Grup
 
 Partem de nenhum save e do laboratório nos padrões. Os `id` e as datas são gerados pelo backend: compare a forma (string não vazia, ISO 8601 UTC), não o valor.
 
-- Quando `POST /parties` com `{ "name": "Os Teimosos", "characterName": "Lia" }`, então `201` com `name: "Os Teimosos"`, `status: "idle"`, `members` com um único `{ "characterName": "Lia", "kind": "human", "isHost": true }` (e um `id`), e `createdAt` igual a `savedAt`.
-- Quando `POST /parties` com `{ "name": "   ", "characterName": "Um nome com mais de vinte e quatro letras" }`, então `400` com `{ "error": { "code": "PARTY_INVALID", "message": "Dados do grupo inválidos.", "details": { "fields": [{ "field": "name", "reason": "blank" }, { "field": "characterName", "reason": "tooLong" }] } } }`; um `GET /parties` seguinte devolve `[]`.
-- Dado `minPlayers = 2` no laboratório, quando `POST /parties` com `{ "name": "Solo", "characterName": "Lia" }`, então `400` `PARTY_INVALID` com `details.fields = [{ "field": "members", "reason": "belowMinPlayers" }]`.
+- Quando `POST /parties` com `{ "name": "Os Teimosos", "characterName": "Lia", "playerClass": "warrior" }`, então `201` com `name: "Os Teimosos"`, `status: "idle"`, `members` com um único `{ "characterName": "Lia", "kind": "human", "isHost": true }` (e um `id`), e `createdAt` igual a `savedAt`.
+- Quando `POST /parties` com `{ "name": "   ", "characterName": "Um nome com mais de vinte e quatro letras", "playerClass": "warrior" }`, então `400` com `{ "error": { "code": "PARTY_INVALID", "message": "Dados do grupo inválidos.", "details": { "fields": [{ "field": "name", "reason": "blank" }, { "field": "characterName", "reason": "tooLong" }] } } }`; um `GET /parties` seguinte devolve `[]`.
+- Dado `minPlayers = 2` no laboratório, quando `POST /parties` com `{ "name": "Solo", "characterName": "Lia", "playerClass": "warrior" }`, então `400` `PARTY_INVALID` com `details.fields = [{ "field": "members", "reason": "belowMinPlayers" }]`.
 - Dado o grupo "Os Teimosos" criado, quando `GET /parties`, então `200` com um item `{ "name": "Os Teimosos", "status": "idle", "characterNames": ["Lia"], … }`; e `GET /parties/<id>` devolve o mesmo `Party` da criação.
 - Dado o grupo `idle`, quando `POST /parties/<id>/session`, então `200` com `status: "inSession"`; repetir o pedido devolve `200` com o mesmo grupo.
 - Dado o grupo `inSession`, quando `POST /parties/<id>/session/end`, então `200` com `status: "idle"` e `savedAt` ≥ o anterior; repetir o pedido devolve `409` com `{ "error": { "code": "PARTY_SESSION_NOT_ACTIVE", "message": "Não há sessão em andamento neste grupo." } }`.
 - Dado o grupo criado, quando `DELETE /parties/<id>`, então `204`; `GET /parties/<id>` seguinte devolve `404` com `{ "error": { "code": "PARTY_NOT_FOUND", "message": "Grupo não encontrado." } }` e `GET /parties` devolve `[]`.
+
+### FEAT-31 — Editor de conteúdo (coleções e cartas) — `proposto (FE)`
+
+Regras: README 27, II.6, 3.5 (validação da dimensão; Apêndice B I5 e K7) e Apêndice B **T1** (id imutável depois de publicado; nada usado em saves é excluído). Os formatos das cartas são os da FEAT-04 (`Card` e afins); esta seção só acrescenta o que o editor precisa.
+
+**Acesso:** como na FEAT-03, as rotas `/lab/content/*` só existem com o laboratório ligado; desligado, `404` `NOT_FOUND`. Admin entra na FEAT-25.
+
+**Gravação:** o backend grava o conteúdo em **arquivos JSON** no diretório de conteúdo (`CONTENT_DIR`), versionáveis no git. O formato dos arquivos é do backend; o que trafega é o desta seção.
+
+**Rascunho e publicação:** cada carta tem `status` `draft` ou `published`. **Mudança no catálogo da FEAT-04 (sem mudança de formato):** `GET /catalog/*` passa a devolver só cartas `published`, e `cardCounts` conta só as publicadas. As cartas que já existem nos arquivos (inclusive as 6 da coleção `fixture`) são `published`. Uma coleção aparece no catálogo mesmo sem cartas publicadas (contagens zeradas).
+
+**Validação:** toda conferência de conteúdo (formato, limites, combinações entre campos do README 3.4, 4.3, 5.1, 5.2, 14.1, 18.1) é do backend, ao salvar **e** ao publicar: um rascunho também precisa estar completo e no formato do `Card` (assim o catálogo nunca recebe carta fora do formato). O texto de cada erro vem pronto em pt-BR (spec D-38).
+
+#### Endpoints
+
+| Método | Rota | Pedido | Resposta | Erros |
+|---|---|---|---|---|
+| GET | `/lab/content/collections` | — | `200` `EditorCollectionSummary[]` | — |
+| POST | `/lab/content/collections` | `CollectionInput` | `201` `EditorCollection` | `400` `CONTENT_INVALID`, `409` `CONTENT_ID_TAKEN` |
+| GET | `/lab/content/collections/:collectionId` | — | `200` `EditorCollection` | `404` `COLLECTION_NOT_FOUND` |
+| PATCH | `/lab/content/collections/:collectionId` | `CollectionPatch` | `200` `EditorCollection` | `400` `CONTENT_INVALID`, `404` `COLLECTION_NOT_FOUND` |
+| DELETE | `/lab/content/collections/:collectionId` | — | `204` | `404` `COLLECTION_NOT_FOUND`, `409` `CONTENT_IN_USE` |
+| POST | `/lab/content/collections/:collectionId/validate-dimension` | — | `200` `DimensionValidation` | `404` `COLLECTION_NOT_FOUND` |
+| GET | `/lab/content/collections/:collectionId/export` | — | `200` `CollectionExport` | `404` `COLLECTION_NOT_FOUND` |
+| POST | `/lab/content/import` | query opcional `replace` = `true`/`false` (padrão `false`); corpo `CollectionExport` | `201` `ImportResult` | `400` `CONTENT_INVALID`, `409` `CONTENT_ID_TAKEN`, `409` `CONTENT_IN_USE` |
+| GET | `/lab/content/collections/:collectionId/cards` | query opcionais `type` (`CardType`), `status` (`ContentStatus`), `q` (texto; busca no nome/título, sem diferenciar maiúsculas e acentos) | `200` `EditorCardSummary[]` | `400` `CONTENT_INVALID`, `404` `COLLECTION_NOT_FOUND` |
+| POST | `/lab/content/collections/:collectionId/cards` | `CardInput` | `201` `EditorCard` (`draft`) | `400` `CONTENT_INVALID`, `404` `COLLECTION_NOT_FOUND`, `409` `CONTENT_ID_TAKEN` |
+| GET | `/lab/content/cards/:cardId` | — | `200` `EditorCard` | `404` `CARD_NOT_FOUND` |
+| PUT | `/lab/content/cards/:cardId` | `CardInput` (substitui a carta inteira) | `200` `EditorCard` | `400` `CONTENT_INVALID`, `404` `CARD_NOT_FOUND`, `409` `CONTENT_ID_TAKEN`, `409` `CONTENT_LOCKED` |
+| POST | `/lab/content/cards/:cardId/publish` | — | `200` `EditorCard` (`published`) | `400` `CONTENT_INVALID`, `404` `CARD_NOT_FOUND` |
+| POST | `/lab/content/cards/:cardId/duplicate` | — | `201` `EditorCard` (`draft`, id novo) | `404` `CARD_NOT_FOUND` |
+| DELETE | `/lab/content/cards/:cardId` | — | `204` | `404` `CARD_NOT_FOUND`, `409` `CONTENT_IN_USE` |
+
+Listas ordenadas por `id`. `PUT` num rascunho com outro `slug` **renomeia** a carta (o `id` devolvido é o novo; o antigo deixa de existir); numa carta `published`, outro `slug` → `409` `CONTENT_LOCKED`. Publicar uma carta já publicada devolve `200` sem mudança. `duplicate` escolhe o slug `<slug>-copia` (ou `-copia-2`, `-copia-3`… se ocupado). Editar uma carta `published` grava direto e ela continua `published`.
+
+#### Tipos
+
+```ts
+type ContentStatus = 'draft' | 'published'
+
+interface CollectionInput {
+  /** Slug: letras minúsculas, números e hífens. Imutável (Apêndice B, T1). */
+  id: string
+  name: string
+  description: string
+}
+
+/** Só o que muda; o `id` nunca muda. */
+interface CollectionPatch {
+  name?: string
+  description?: string
+}
+
+interface EditorCollectionSummary {
+  id: string
+  name: string
+  description: string
+  publishedCount: number
+  draftCount: number
+}
+
+interface EditorCollection extends EditorCollectionSummary {
+  /** Todas as cartas (rascunhos e publicadas), por tipo e por raridade; 0 quando não há. Zona e eventos não têm raridade e não entram em `rarityCounts`. */
+  cardCounts: Record<CardType, number>
+  rarityCounts: Record<Rarity, number>
+  /** Etiquetas (`tags`) já usadas em equipamentos e itens da coleção, sem repetição, em ordem alfabética (sugestão do formulário). */
+  tags: string[]
+}
+
+/** O `Card` da FEAT-04 sem `id` e `collectionId` (o backend monta `<collectionId>.<slug>`), mais o `slug`. */
+type CardInput = DistributiveOmit<Card, 'id' | 'collectionId'> & { slug: string }
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
+
+interface EditorCard {
+  status: ContentStatus
+  card: Card
+}
+
+interface EditorCardSummary {
+  id: string
+  type: CardType
+  /** `name`, ou `title` em zona e eventos. */
+  name: string
+  status: ContentStatus
+}
+
+/** Só cartas `published` entram (README 3.5). */
+interface DimensionValidation {
+  valid: boolean
+  /** Textos pt-BR prontos; vazio quando `valid`. */
+  problems: string[]
+}
+
+interface CollectionExport {
+  formatVersion: 1
+  collection: CollectionInput
+  cards: EditorCard[]
+}
+
+interface ImportResult {
+  collectionId: string
+  cardCount: number
+}
+
+/** `details` de CONTENT_INVALID e CONTENT_ID_TAKEN. */
+interface ContentInvalidDetails {
+  fields: {
+    /** Caminho do campo no corpo enviado, com pontos e índices: "name", "modifiers.1.value", "enemies.0.health", "cards.3.card.name"; "" = o corpo inteiro (JSON malformado ou não objeto); nos filtros da lista, o nome do parâmetro ("type", "status"). */
+    path: string
+    /** Texto pt-BR pronto para mostrar ao lado do campo (spec D-38). */
+    message: string
+  }[]
+}
+```
+
+Mensagens (`message` do §1.4): `CONTENT_INVALID` "Conteúdo inválido."; `CONTENT_ID_TAKEN` "Este identificador já está em uso."; `CONTENT_IN_USE` "Este conteúdo é usado por algum save e não pode ser apagado."; `CONTENT_LOCKED` "O identificador de uma carta publicada não pode mudar.". Os textos de `fields[].message` são do backend; os dos cenários abaixo são os esperados.
+
+**`CONTENT_IN_USE`:** até a FEAT-06 nenhum save referencia cartas, então o erro existe no formato mas não tem cenário; o cenário entra na FEAT-06.
+
+#### Cenários de validação
+
+Partem do laboratório ligado e de um `CONTENT_DIR` com só a coleção `fixture` da FEAT-04 (6 cartas `published`, `description` `""`).
+
+- Quando `GET /lab/content/collections`, então `200` com `[{ "id": "fixture", "name": "Coleção de Teste", "description": "", "publishedCount": 6, "draftCount": 0 }]`.
+- Quando `GET /lab/content/collections/fixture`, então `200` com o resumo acima mais `cardCounts` 1 em cada tipo, `rarityCounts` só com as raridades das 3 cartas de atributo, equipamento e item (as demais 0) e `tags` com as etiquetas de `fixture.blade-of-dusk` e `fixture.healing-potion`, sem repetição e em ordem alfabética.
+- Quando `POST /lab/content/collections` com `{ "id": "bosque", "name": "Bosque Sombrio", "description": "Coleção de teste do editor." }`, então `201` com `{ "id": "bosque", "name": "Bosque Sombrio", "description": "Coleção de teste do editor.", "publishedCount": 0, "draftCount": 0, "cardCounts": { todos 0 }, "rarityCounts": { todos 0 }, "tags": [] }`; repetir o pedido → `409` com `{ "error": { "code": "CONTENT_ID_TAKEN", "message": "Este identificador já está em uso.", "details": { "fields": [{ "path": "id", "message": "Já existe uma coleção com este identificador." }] } } }`.
+- Quando `POST /lab/content/collections` com `{ "id": "Bosque X", "name": " ", "description": "" }`, então `400` com `{ "error": { "code": "CONTENT_INVALID", "message": "Conteúdo inválido.", "details": { "fields": [{ "path": "id", "message": "Use só letras minúsculas, números e hífens." }, { "path": "name", "message": "Informe o nome." }] } } }`.
+- Dado `bosque`, quando `PATCH /lab/content/collections/bosque` com `{ "name": "Bosque Antigo" }`, então `200` com `name: "Bosque Antigo"` e o mesmo `id`.
+- Dado `bosque`, quando `POST /lab/content/collections/bosque/cards` com `{ "slug": "forca", "type": "attribute", "name": "Força", "flavorText": null, "rarity": "common", "attributeKind": "basic", "attributes": ["strength"], "effects": [] }`, então `201` com `{ "status": "draft", "card": { "type": "attribute", "id": "bosque.forca", "collectionId": "bosque", "name": "Força", "flavorText": null, "rarity": "common", "attributeKind": "basic", "attributes": ["strength"], "effects": [] } }`; `GET /catalog/collections/bosque/cards` devolve `[]` (rascunho fora do catálogo).
+- Dado `bosque`, quando `POST /lab/content/collections/bosque/cards` com o corpo anterior trocando `slug` por `"forca-sorte"` e `attributes` por `["strength", "luck"]`, então `400` `CONTENT_INVALID` com `details.fields = [{ "path": "attributes", "message": "Carta básica tem exatamente 1 atributo." }]`.
+- Dado `bosque.forca` em rascunho, quando `PUT /lab/content/cards/bosque.forca` com o mesmo corpo e `"slug": "forca-bruta"`, então `200` com `card.id = "bosque.forca-bruta"`; `GET /lab/content/cards/bosque.forca` seguinte → `404` `CARD_NOT_FOUND`.
+- Dado `bosque.forca-bruta` em rascunho, quando `POST /lab/content/cards/bosque.forca-bruta/publish`, então `200` com `status: "published"`; `GET /catalog/cards/bosque.forca-bruta` → `200` com a carta; `PUT` com `"slug": "outra"` → `409` com `{ "error": { "code": "CONTENT_LOCKED", "message": "O identificador de uma carta publicada não pode mudar." } }`; `PUT` com o mesmo slug e `"name": "Força Bruta"` → `200`, continua `published`.
+- Dado `bosque.forca-bruta`, quando `POST /lab/content/cards/bosque.forca-bruta/duplicate`, então `201` com `status: "draft"` e `card.id = "bosque.forca-bruta-copia"` (demais campos iguais).
+- Dado a cópia, quando `GET /lab/content/collections/bosque/cards?status=draft`, então `200` com `[{ "id": "bosque.forca-bruta-copia", "type": "attribute", "name": "Força Bruta", "status": "draft" }]`; com `?q=bruta` → as duas cartas; com `?type=monster` → `400` `CONTENT_INVALID` com `details.fields = [{ "path": "type", "message": "Tipo de carta desconhecido." }]`.
+- Dado a cópia, quando `DELETE /lab/content/cards/bosque.forca-bruta-copia`, então `204`; um `GET` seguinte → `404` `CARD_NOT_FOUND`.
+- Quando `POST /lab/content/collections/fixture/validate-dimension`, então `200` com `{ "valid": false, "problems": ["A coleção precisa de pelo menos 1 zona Urbana publicada."] }` (a única zona da `fixture` não é Urbana; os textos exatos de cada problema são do backend e entram aqui no `implementado (BE)`).
+- Dado `bosque` com `bosque.forca-bruta` publicada, quando `GET /lab/content/collections/bosque/export`, então `200` com `{ "formatVersion": 1, "collection": { "id": "bosque", "name": "Bosque Antigo", "description": "Coleção de teste do editor." }, "cards": [{ "status": "published", "card": { … } }] }`.
+- Dado esse export guardado, quando `POST /lab/content/import` com ele, então `409` `CONTENT_ID_TAKEN` com `details.fields = [{ "path": "collection.id", "message": "Já existe uma coleção com este identificador." }]`; com `?replace=true` → `201` com `{ "collectionId": "bosque", "cardCount": 1 }`; depois de `DELETE /lab/content/collections/bosque` (`204`), o import sem `replace` → `201` com o mesmo resultado.
+- Quando `POST /lab/content/import` com `{}`, então `400` `CONTENT_INVALID` com `details.fields` contendo `{ "path": "formatVersion", "message": "Versão do arquivo não suportada." }`; nada é gravado.
+- Quando `GET /lab/content/collections/nope`, então `404` com `{ "error": { "code": "COLLECTION_NOT_FOUND", "message": "Coleção não encontrada." } }`.
+- Dado o laboratório desligado, quando `GET /lab/content/collections`, então `404` `NOT_FOUND`.
+
+### FEAT-06 — Preparação da partida — `proposto (BE)`
+
+Regras: README 10.1, 3.2 (zona de chegada), 3.5 (montagem do mapa e validação da composição), 4.4 (deck pré-pronto), 7.4 (vida máxima), 8.2 (trava), 8.6/8.7 (classes e modificadores base), 9.1 (valores iniciais), 11.2 (ordem por D20), 20.1 (spawn e respawn), 27, 28.1 (todo grupo novo começa pela primeira dimensão lançada) e Apêndice B T1.
+
+A preparação acontece **dentro** do `POST /parties`: o grupo já nasce na primeira dimensão (a Carta de Dimensão `published` de menor `releaseOrder`), com o mapa montado, a ordem decidida e cada jogador na cidade inicial, com o deck pré-pronto da classe escolhida embaralhado e 7 cartas na mão. Não existe grupo sem preparação.
+
+**Conteúdo novo e editor (FEAT-31):** a FEAT-06 traz a **Carta de Dimensão**, a **forma das setas** das zonas e as **classes com deck pré-pronto**. Os três entram no editor de conteúdo nesta FEAT (decisão do autor): a Carta de Dimensão e o `arrowLayout` pelo próprio `CardInput` (que é o `Card`), e as classes por rotas novas em `/lab/content`. Como as cartas, uma classe é `draft` ou `published`, e só as publicadas aparecem em `GET /catalog/classes` e podem ser escolhidas. O `playerClass` de uma classe publicada nunca muda (T1).
+
+**Validação da dimensão:** a composição (README 3.5, gerador item 2) é conferida ao **criar o grupo**, com só o conteúdo `published`, e pelo `validate-dimension` da FEAT-31, com os mesmos textos. Se ela falhar, ou se o gerador passar de `mapMaxAttempts` tentativas, ou se não houver Carta de Dimensão publicada, o `POST /parties` responde `500` `DIMENSION_INVALID` com os problemas (erro de conteúdo, para o designer).
+
+**Mudanças em outras seções** (o frontend precisa ajustar e revalidar as telas afetadas):
+- **FEAT-03 (`validado`):** `GameConfigValues` ganha 11 chaves (tabela de padrões e limites).
+- **FEAT-04 (`validado`):** `ZoneCard.arrowLayout`; `CardType` e `Card` ganham `dimension`/`DimensionCard` (e `cardCounts` ganha `dimension`); a coleção `fixture` cresce (cenários 1 e 2 atualizados).
+- **FEAT-05 (`validado`):** `CreatePartyRequest.playerClass` (obrigatório); `Party.dimension`, `Party.turnOrder`, `PartyMember.player`; `PartyInvalidDetails` com `playerClass` e `unknownClass`. Os cenários passam a mandar `"playerClass": "warrior"`. Saves criados antes desta versão são **apagados** pela migração do backend (não têm classe).
+- **FEAT-31 (`proposto (FE)`):** o editor aceita o tipo `dimension` e o `arrowLayout`; `CollectionExport` e `ImportResult` ganham as classes; `DimensionValidation` passa a considerar a Carta de Dimensão; `CONTENT_IN_USE` ganha cenário. Com a `fixture` maior, os cenários dela mudam: `publishedCount` 12; `cardCounts` com `zone: 4`, `attribute: 3`, `dimension: 1` e os demais 1; `validate-dimension` da `fixture` → `{ "valid": true, "problems": [] }` (o exemplo inválido passa para `bosque`, abaixo).
+
+#### Endpoints
+
+| Método | Rota | Pedido | Resposta | Erros |
+|---|---|---|---|---|
+| GET | `/catalog/classes` | — | `200` `ClassDefinition[]` (só `published`) | — |
+| POST | `/parties` | `CreatePartyRequest` (com `playerClass`) | `201` `Party` | `400` `PARTY_INVALID`, `500` `DIMENSION_INVALID` |
+| GET | `/lab/content/collections/:collectionId/classes` | — | `200` `EditorClassSummary[]` | `404` `COLLECTION_NOT_FOUND` |
+| POST | `/lab/content/collections/:collectionId/classes` | `ClassInput` | `201` `EditorClass` (`draft`) | `400` `CONTENT_INVALID`, `404` `COLLECTION_NOT_FOUND`, `409` `CONTENT_ID_TAKEN` |
+| GET | `/lab/content/classes/:playerClass` | — | `200` `EditorClass` | `404` `CLASS_NOT_FOUND` |
+| PUT | `/lab/content/classes/:playerClass` | `ClassInput` (substitui a classe inteira) | `200` `EditorClass` | `400` `CONTENT_INVALID`, `404` `CLASS_NOT_FOUND`, `409` `CONTENT_ID_TAKEN`, `409` `CONTENT_LOCKED` |
+| POST | `/lab/content/classes/:playerClass/publish` | — | `200` `EditorClass` (`published`) | `400` `CONTENT_INVALID`, `404` `CLASS_NOT_FOUND` |
+| DELETE | `/lab/content/classes/:playerClass` | — | `204` | `404` `CLASS_NOT_FOUND`, `409` `CONTENT_IN_USE` |
+
+- Listas de classes ordenadas por `playerClass`. Cada `PlayerClass` existe no máximo uma vez em todo o conteúdo (rascunho ou publicada); repetir → `409` `CONTENT_ID_TAKEN`.
+- `PUT` numa classe `draft` com outro `playerClass` a renomeia; numa `published`, → `409` `CONTENT_LOCKED`. Publicar uma já publicada → `200` sem mudança.
+- **Ao salvar** (rascunho ou publicada): formato, 1 ou 2 essenciais diferentes, 7 modificadores inteiros ≥ 0, `starterDeck` sem `cardId` repetido, cada um uma carta `attribute` existente (rascunho ou publicada) e `copies` inteiro ≥ 1. **Ao publicar**, também: toda carta do deck `published`, total de cópias = `minDeckSize` e trava cumprida (ambos pelos padrões do laboratório), e nenhuma outra classe publicada com os mesmos essenciais (README 8.5).
+- **Conteúdo usado por um save** (`CONTENT_IN_USE`, T1): a Carta de Dimensão e as zonas do mapa de um grupo, as cartas de atributo dos decks dos jogadores e as classes deles. Excluí-los (ou a coleção deles, ou substituí-la no import) → `409` `CONTENT_IN_USE`.
+- **Carta usada por uma classe** (`CONTENT_REFERENCED`): uma carta de atributo que está no `starterDeck` de alguma classe não pode ser excluída nem renomeada → `409` `CONTENT_REFERENCED`.
+- `GET /parties/:partyId` e as demais respostas de `Party` (FEAT-05) trazem os campos novos.
+
+#### Tipos
+
+```ts
+/** GET /catalog/classes — README 8.6, 8.7, 4.4. */
+interface ClassDefinition {
+  playerClass: PlayerClass
+  collectionId: string
+  /** pt-BR, ex.: "Guerreiro". */
+  name: string
+  /** 1 ou 2 atributos diferentes. */
+  essentialAttributes: Attribute[]
+  /** Modificadores base da classe (README 8.7). */
+  baseModifiers: Record<Modifier, number>
+  /** Deck pré-pronto: cartas de atributo e cópias; total = minDeckSize padrão, trava cumprida. */
+  starterDeck: StarterDeckEntry[]
+}
+
+interface StarterDeckEntry {
+  cardId: string
+  copies: number
+}
+
+/** Editor (FEAT-31). */
+type ClassInput = Omit<ClassDefinition, 'collectionId'>
+
+interface EditorClass {
+  status: ContentStatus
+  classDefinition: ClassDefinition
+}
+
+interface EditorClassSummary {
+  playerClass: PlayerClass
+  name: string
+  status: ContentStatus
+}
+
+/** FEAT-31, com as classes (FEAT-06). Um arquivo sem `classes` é lido como `classes: []`. */
+interface CollectionExport {
+  formatVersion: 1
+  collection: CollectionInput
+  cards: EditorCard[]
+  classes: EditorClass[]
+}
+
+interface ImportResult {
+  collectionId: string
+  cardCount: number
+  classCount: number
+}
+
+/** Direções da mesa (não da carta: a carta gira). `y` cresce para o sul. */
+type Direction = 'north' | 'east' | 'south' | 'west'
+
+interface PartyDimension {
+  dimensionCardId: string
+  /** Zona onde todos chegam (spawn); sempre em (0, 0). */
+  startingCityZoneId: string
+  map: PartyMap
+}
+
+/** README 3.5. Todas as zonas publicadas da coleção da dimensão, todas viradas para cima (README 3.6). */
+interface PartyMap {
+  zones: MapZone[]
+  crossings: Crossing[]
+}
+
+interface MapZone {
+  zoneId: string
+  x: number
+  y: number
+  /** Para onde as setas apontam depois da rotação escolhida pelo gerador. */
+  arrows: Direction[]
+}
+
+/** Travessia: duas zonas vizinhas com setas que apontam uma para a outra (nos dois sentidos). */
+interface Crossing {
+  /** Em ordem de `id`. */
+  zoneIds: [string, string]
+}
+
+/** Estado do jogador na partida. Valores já calculados (§1.3). */
+interface PlayerState {
+  /** Na ordem em que foram obtidas. `deckLockMet`: a build cumpre a trava (README 8.2). */
+  playerClasses: { playerClass: PlayerClass; deckLockMet: boolean }[]
+  gold: number
+  baseHealth: number
+  /** ⌊baseHealth × (1 + peak ÷ 100)⌋ (README 7.4). */
+  maxHealth: number
+  /** Vida atual. */
+  health: number
+  peak: number
+  vigor: number
+  /** Da classe ativa mais antiga; sem classe ativa, os padrões do laboratório (README 8.2, 8.4). */
+  modifiers: Record<Modifier, number>
+  /** Ids das cartas de atributo na mão, na ordem em que foram compradas. */
+  hand: string[]
+  attributeDeckCount: number
+  attributeDiscardPileCount: number
+  /** Zona onde o jogador está. */
+  zoneId: string
+  respawnZoneId: string
+}
+
+/** `details` do erro DIMENSION_INVALID. */
+interface DimensionInvalidDetails {
+  /** `null` quando não há Carta de Dimensão publicada. */
+  dimensionCardId: string | null
+  /** Os mesmos textos pt-BR do `validate-dimension` (FEAT-31), mais o do limite de tentativas do gerador. */
+  problems: string[]
+}
+```
+
+Mensagens: `DIMENSION_INVALID` "Não foi possível preparar a dimensão. Avise o designer da coleção."; `CLASS_NOT_FOUND` "Classe não encontrada."; `CONTENT_REFERENCED` "Esta carta está no deck pré-pronto de uma classe e não pode ser apagada nem renomeada.".
+
+#### Cenários de validação
+
+Rodam contra o conteúdo de teste do backend (`CONTENT_DIR=test/fixtures/content`), coleção `fixture`, tudo `published`:
+- zonas `fixture.gray-harbor` ("Porto Cinzento", `urban`, 4 setas), `fixture.whispering-grove` (2 setas, `straight`), `fixture.stone-bend` (2 setas, `corner`), `fixture.old-mine` (1 seta);
+- dimensão `fixture.test-dimension` ("Dimensão de Teste", `releaseOrder: 1`, `arrivalZoneTitle: "Porto Cinzento"`);
+- cartas `basic` `fixture.strength-basic`, `fixture.endurance-basic`, `fixture.dexterity-basic`;
+- classes `warrior` (essenciais `strength` e `endurance`; 30 + 30 cópias; modificadores 6/5/45/15/8/0/0) e `rogue` (essencial `dexterity`; 40 `dexterity` + 20 `strength`; 5/2/46/22/12/0/0).
+
+Sorteios usam semente aleatória: mapa, mão e rolagens mudam a cada grupo. Compare as invariantes, não as posições. A cópia exata do conteúdo vai junto no aviso da `implementado (BE)`. Os textos de `problems` e de `fields[].message` também entram nessa hora.
+
+- Quando `GET /catalog/classes`, então `200` com 2 itens, `rogue` e depois `warrior`; `warrior` é `{ "playerClass": "warrior", "collectionId": "fixture", "name": "Guerreiro", "essentialAttributes": ["strength", "endurance"], "baseModifiers": { "attack": 6, "defense": 5, "accuracy": 45, "evasion": 15, "celerity": 8, "piercing": 0, "reflection": 0 }, "starterDeck": [{ "cardId": "fixture.endurance-basic", "copies": 30 }, { "cardId": "fixture.strength-basic", "copies": 30 }] }`.
+- Quando `GET /catalog/cards/fixture.test-dimension`, então `200` com `{ "type": "dimension", "id": "fixture.test-dimension", "collectionId": "fixture", "name": "Dimensão de Teste", "flavorText": null, "releaseOrder": 1, "arrivalZoneTitle": "Porto Cinzento", "effects": [] }`.
+- Quando `GET /catalog/cards/fixture.stone-bend`, então `200` com `connectionArrows: 2` e `arrowLayout: "corner"`; `fixture.gray-harbor` tem `arrowLayout: null`.
+- Quando `POST /parties` com `{ "name": "Os Teimosos", "characterName": "Lia", "playerClass": "warrior" }`, então `201` e:
+  - `dimension.dimensionCardId = "fixture.test-dimension"`, `dimension.startingCityZoneId = "fixture.gray-harbor"`;
+  - `dimension.map.zones` tem as 4 zonas, cada uma uma vez, em células diferentes; `fixture.gray-harbor` em `(0, 0)` com as 4 direções; `fixture.old-mine` com 1 direção; `fixture.whispering-grove` com 2 opostas; `fixture.stone-bend` com 2 vizinhas;
+  - `dimension.map.crossings` tem pelo menos 3 itens, só entre células vizinhas, e liga as 4 zonas;
+  - `turnOrder` = `[<id do único membro>]`;
+  - `members[0].player` = `{ "playerClasses": [{ "playerClass": "warrior", "deckLockMet": true }], "gold": 10, "baseHealth": 20, "maxHealth": 22, "health": 22, "peak": 10, "vigor": 10, "modifiers": { "attack": 6, "defense": 5, "accuracy": 45, "evasion": 15, "celerity": 8, "piercing": 0, "reflection": 0 }, "attributeDeckCount": 53, "attributeDiscardPileCount": 0, "zoneId": "fixture.gray-harbor", "respawnZoneId": "fixture.gray-harbor", "hand": <7 ids, cada um fixture.strength-basic ou fixture.endurance-basic> }`;
+  - `GET /parties/<id>` devolve o mesmo `Party`.
+- Dado `lockTwoEssentials = 31` no laboratório, quando `POST /parties` com `playerClass: "warrior"`, então `201` com `playerClasses: [{ "playerClass": "warrior", "deckLockMet": false }]` e `modifiers` = `{ "attack": 5, "defense": 3, "accuracy": 50, "evasion": 20, "celerity": 10, "piercing": 0, "reflection": 0 }`.
+- Quando `POST /parties` com `{ "name": "Os Teimosos", "characterName": "Lia" }`, então `400` `PARTY_INVALID` com `details.fields = [{ "field": "playerClass", "reason": "required" }]`.
+- Quando `POST /parties` com `{ "name": "Os Teimosos", "characterName": "Lia", "playerClass": "mage" }` (sem classe publicada), então `400` `PARTY_INVALID` com `details.fields = [{ "field": "playerClass", "reason": "unknownClass" }]`; um `GET /parties` seguinte devolve `[]`.
+- Dado o grupo "Os Teimosos" criado, quando `DELETE /lab/content/cards/fixture.gray-harbor`, `DELETE /lab/content/cards/fixture.endurance-basic`, `DELETE /lab/content/classes/warrior` ou `DELETE /lab/content/collections/fixture`, então `409` com `{ "error": { "code": "CONTENT_IN_USE", "message": "Este conteúdo é usado por algum save e não pode ser apagado." } }`; depois de `DELETE /parties/<id>`, `DELETE /lab/content/cards/fixture.stone-bend` → `204`.
+- Sem grupos, quando `DELETE /lab/content/cards/fixture.dexterity-basic`, então `409` com `{ "error": { "code": "CONTENT_REFERENCED", "message": "Esta carta está no deck pré-pronto de uma classe e não pode ser apagada nem renomeada." } }`.
+- Dado `bosque` (FEAT-31) sem zonas nem Carta de Dimensão, quando `POST /lab/content/collections/bosque/validate-dimension`, então `200` com `valid: false` e `problems` com um texto para a falta de Carta de Dimensão publicada e um para a falta de zona Urbana publicada.
+- Dado `bosque`, quando `POST /lab/content/collections/bosque/classes` com `{ "playerClass": "warrior", "name": "Guerreiro", "essentialAttributes": ["strength", "endurance"], "baseModifiers": { … }, "starterDeck": [] }`, então `409` `CONTENT_ID_TAKEN` com `details.fields = [{ "path": "playerClass", … }]` (`warrior` já existe na `fixture`); com `"playerClass": "mage"`, `"essentialAttributes": ["intelligence", "spirit"]` e `"starterDeck": [{ "cardId": "fixture.strength-basic", "copies": 60 }]` → `201` com `{ "status": "draft", "classDefinition": { "playerClass": "mage", "collectionId": "bosque", … } }`; `POST /lab/content/classes/mage/publish` → `400` `CONTENT_INVALID` (trava do Mago não cumprida); `GET /catalog/classes` continua com 2 itens.
+- Dado `mage` em rascunho, quando `DELETE /lab/content/classes/mage`, então `204`; `GET /lab/content/classes/mage` seguinte → `404` com `{ "error": { "code": "CLASS_NOT_FOUND", "message": "Classe não encontrada." } }`.
+- `DIMENSION_INVALID` não tem cenário com a `fixture` (ela é uma dimensão válida). O backend cobre o caso com testes do gerador e da composição.
 
 ## 4. Códigos de erro
 
@@ -641,6 +1034,13 @@ Partem de nenhum save e do laboratório nos padrões. Os `id` e as datas são ge
 | `PARTY_INVALID` | Dados de criação do grupo inválidos (400); `details.fields` diz cada campo e o motivo. | FEAT-05 |
 | `PARTY_NOT_FOUND` | Grupo (save) inexistente ou abandonado (404). | FEAT-05 |
 | `PARTY_SESSION_NOT_ACTIVE` | Encerrar sessão num grupo sem sessão em andamento (409). | FEAT-05 |
+| `CONTENT_INVALID` | Coleção, carta, filtro ou arquivo de importação inválido (400); `details.fields` traz o caminho e o texto pronto de cada problema. | FEAT-31 |
+| `CONTENT_ID_TAKEN` | Identificador de coleção ou carta já usado (409); `details.fields` como em `CONTENT_INVALID`. | FEAT-31 |
+| `CONTENT_IN_USE` | Excluir ou substituir conteúdo usado por algum save (409). | FEAT-31 |
+| `CONTENT_LOCKED` | Mudar o identificador de uma carta publicada (409). | FEAT-31 |
+| `DIMENSION_INVALID` | Não há Carta de Dimensão publicada, a composição da dimensão falhou (README 3.5) ou o gerador passou do limite de tentativas, ao criar um grupo (500); `details` com `dimensionCardId` e `problems`. Erro de conteúdo, para o designer. | FEAT-06 |
+| `CLASS_NOT_FOUND` | Classe inexistente no editor (404). | FEAT-06 |
+| `CONTENT_REFERENCED` | Excluir ou renomear uma carta de atributo que está no deck pré-pronto de uma classe (409). | FEAT-06 |
 
 ## 5. Histórico
 
@@ -663,3 +1063,5 @@ Partem de nenhum save e do laboratório nos padrões. Os `id` e as datas são ge
 | 0.15 | 2026-11-14 | FE | FEAT-04 `validado`: os 7 cenários rodaram contra o backend real (`http://localhost:3333`, `CONTENT_DIR=test/fixtures/content`) e passaram; as 6 cartas reais passam no schema do frontend. Também passaram o CORS para `http://localhost:5173` e os e2e da área `lab` com o MSW desligado. As fixtures do MSW passaram a ser cópia exata das cartas do backend. Sem mudança de formato. |
 | 0.16 | 2026-11-15 | BE | FEAT-05 `implementado (BE)`: `POST`/`GET /parties`, `GET`/`DELETE /parties/:partyId`, `POST /parties/:partyId/session` e `/session/end` entregues e cobertos por e2e (os 7 cenários), sem mudança de formato. Saves gravados no banco; ids são uuid (id que não é uuid → `404` `PARTY_NOT_FOUND`). JSON malformado no `POST /parties` → `PARTY_INVALID` com `invalidBody`. O cenário `minPlayers = 2` usa `PATCH /lab/config` (precisa de `LAB_ENABLED=true`). |
 | 0.17 | 2026-11-15 | FE | FEAT-05 `validado`: os 7 cenários passaram com `curl` contra o backend real, e as telas `/`, `/novo` e `/grupo/:partyId` passaram com o MSW desligado (criar, erros por campo, `belowMinPlayers`, sessão, encerrar, continuar, abandonar, `404`). Sem mudança de formato. |
+| 0.18 | 2026-11-15 | FE | FEAT-31 proposta (editor de conteúdo, README B.19 T1): rotas `/lab/content/*` (coleções, cartas, publicar, duplicar, validar como dimensão, exportar, importar); tipos `ContentStatus`, `CollectionInput`, `CollectionPatch`, `EditorCollectionSummary`, `EditorCollection`, `CardInput`, `EditorCard`, `EditorCardSummary`, `DimensionValidation`, `CollectionExport`, `ImportResult`, `ContentInvalidDetails`; glossário §2.9; códigos `CONTENT_INVALID`, `CONTENT_ID_TAKEN`, `CONTENT_IN_USE`, `CONTENT_LOCKED` (§4). Muda o comportamento do catálogo da FEAT-04 (só cartas `published`), sem mudar o formato. |
+| 0.19 | 2026-11-15 | BE | FEAT-06 proposta: `GET /catalog/classes` (`ClassDefinition`); `POST /parties` com `playerClass` e o grupo já preparado (`Party.dimension`, `Party.turnOrder`, `PartyMember.player`); `DimensionCard`; `ZoneCard.arrowLayout`; 11 chaves novas em `GameConfigValues`; `PartyInvalidDetails` com `playerClass`/`unknownClass`; classes no editor (`/lab/content/.../classes`, `ClassInput`, `EditorClass`, `EditorClassSummary`; classes em `CollectionExport` e `ImportResult`); cenário de `CONTENT_IN_USE`; códigos `DIMENSION_INVALID`, `CLASS_NOT_FOUND`, `CONTENT_REFERENCED` (§4); glossário §2.10. Altera tipos e cenários das FEAT-03, 04 e 05 (`validado`) e da FEAT-31 (`proposto (FE)`). Mescla com a v0.18 do FE (FEAT-31), editada em paralelo. |
