@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.20 · **Data:** 2026-11-15
+> **Versão do contrato:** 0.22 · **Data:** 2026-11-15
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -700,7 +700,7 @@ Partem de nenhum save e do laboratório nos padrões. Os `id` e as datas são ge
 - Dado o grupo `inSession`, quando `POST /parties/<id>/session/end`, então `200` com `status: "idle"` e `savedAt` ≥ o anterior; repetir o pedido devolve `409` com `{ "error": { "code": "PARTY_SESSION_NOT_ACTIVE", "message": "Não há sessão em andamento neste grupo." } }`.
 - Dado o grupo criado, quando `DELETE /parties/<id>`, então `204`; `GET /parties/<id>` seguinte devolve `404` com `{ "error": { "code": "PARTY_NOT_FOUND", "message": "Grupo não encontrado." } }` e `GET /parties` devolve `[]`.
 
-### FEAT-31 — Editor de conteúdo (coleções e cartas) — `proposto (FE)`
+### FEAT-31 — Editor de conteúdo (coleções e cartas) — `acordado`
 
 Regras: README 27, II.6, 3.5 (validação da dimensão; Apêndice B I5 e K7) e Apêndice B **T1** (id imutável depois de publicado; nada usado em saves é excluído). Os formatos das cartas são os da FEAT-04 (`Card` e afins); esta seção só acrescenta o que o editor precisa.
 
@@ -845,7 +845,7 @@ Partem do laboratório ligado e de um `CONTENT_DIR` com só a coleção `fixture
 - Quando `GET /lab/content/collections/nope`, então `404` com `{ "error": { "code": "COLLECTION_NOT_FOUND", "message": "Coleção não encontrada." } }`.
 - Dado o laboratório desligado, quando `GET /lab/content/collections`, então `404` `NOT_FOUND`.
 
-### FEAT-06 — Preparação da partida — `proposto (BE)`
+### FEAT-06 — Preparação da partida — `acordado`
 
 Regras: README 10.1, 3.2 (zona de chegada), 3.5 (montagem do mapa e validação da composição), 4.4 (deck pré-pronto), 7.4 (vida máxima), 8.2 (trava), 8.6/8.7 (classes e modificadores base), 9.1 (valores iniciais), 11.2 (ordem por D20), 20.1 (spawn e respawn), 27, 28.1 (todo grupo novo começa pela primeira dimensão lançada) e Apêndice B T1.
 
@@ -1056,3 +1056,5 @@ Sorteios usam semente aleatória: mapa, mão e rolagens mudam a cada grupo. Comp
 | 0.18 | 2026-11-15 | FE | FEAT-31 proposta (editor de conteúdo, README B.19 T1): rotas `/lab/content/*` (coleções, cartas, publicar, duplicar, validar como dimensão, exportar, importar); tipos `ContentStatus`, `CollectionInput`, `CollectionPatch`, `EditorCollectionSummary`, `EditorCollection`, `CardInput`, `EditorCard`, `EditorCardSummary`, `DimensionValidation`, `CollectionExport`, `ImportResult`, `ContentInvalidDetails`; glossário §2.9; códigos `CONTENT_INVALID`, `CONTENT_ID_TAKEN`, `CONTENT_IN_USE`, `CONTENT_LOCKED` (§4). Muda o comportamento do catálogo da FEAT-04 (só cartas `published`), sem mudar o formato. |
 | 0.19 | 2026-11-15 | BE | FEAT-06 proposta: `GET /catalog/classes` (`ClassDefinition`); `POST /parties` com `playerClass` e o grupo já preparado (`Party.dimension`, `Party.turnOrder`, `PartyMember.player`); `DimensionCard`; `ZoneCard.arrowLayout`; 11 chaves novas em `GameConfigValues`; `PartyInvalidDetails` com `playerClass`/`unknownClass`; classes no editor (`/lab/content/.../classes`, `ClassInput`, `EditorClass`, `EditorClassSummary`; classes em `CollectionExport` e `ImportResult`); cenário de `CONTENT_IN_USE`; códigos `DIMENSION_INVALID`, `CLASS_NOT_FOUND`, `CONTENT_REFERENCED` (§4); glossário §2.10. Altera tipos e cenários das FEAT-03, 04 e 05 (`validado`) e da FEAT-31 (`proposto (FE)`). Mescla com a v0.18 do FE (FEAT-31), editada em paralelo. |
 | 0.20 | 2026-11-15 | BE | FEAT-06 (`proposto (BE)`) com os dois pedidos do FE aceitos: (1) `CollectionExport.classes` e `ImportResult.classCount` definidos uma vez só, na seção FEAT-31 (a FEAT-06 só os preenche); (2) `DIMENSION_INVALID` responde `409` em vez de `500` (conflito com o conteúdo publicado, não falha do servidor; `422` recusado porque o corpo do pedido está correto). |
+| 0.21 | 2026-11-15 | FE | FEAT-06 `acordado` sem mudanças além das da v0.20. O FE vai alinhar as seções `validado` afetadas (FEAT-03, 04, 05) e a FEAT-31 em tarefas próprias, planejadas com `/mudar-spec`. FEAT-31 continua `proposto (FE)`, aguardando o backend. |
+| 0.22 | 2026-11-15 | BE | FEAT-31 `acordado` sem mudanças de formato. Esclarecimentos: até a FEAT-06, o export traz `classes: []` e o import `classCount: 0` (os cenários os omitem; compare por campo); o `id` de coleção e o `slug` seguem `kebab-case` (sem hífen no início, no fim ou repetido), com a mesma mensagem do cenário; os cenários da FEAT-31 valem para a `fixture` de 6 cartas, e a seção FEAT-06 diz como mudam depois dela. |

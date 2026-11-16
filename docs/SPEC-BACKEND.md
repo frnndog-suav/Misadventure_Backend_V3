@@ -296,7 +296,7 @@ Contrato necessário (seção FEAT-05, a propor pelo backend com `/contrato FEAT
 
 ### FEAT-06 — Preparação da partida
 
-Contrato: CONTRATO v0.19, seção FEAT-06 `proposto (BE)` — tem de estar `acordado` **antes da T-14**. Ordem (D-45): estas tarefas começam depois das tarefas BE da FEAT-31.
+Contrato: CONTRATO v0.22, seção FEAT-06 `acordado` (2026-11-15). Ordem (D-45): estas tarefas começam depois das tarefas BE da FEAT-31.
 
 - [ ] **T-14 — Domínio: catálogo e configuração (REQ-26, REQ-29, REQ-30; regras de REQ-27 e REQ-28).** Inclui o alinhamento de REQ-04 e REQ-15 (tarefas `[x]`): `defaults.ts`/limites com as chaves de D-41; `arrowLayout`, `DimensionCard` e `ClassDefinition` nos tipos (D-37, D-39, D-40); `checkCatalogIntegrity` com as regras de REQ-26 (um teste por regra); função pura `isClassActive` (REQ-30); `CardCatalog` com `listClasses`/`findClass`; `ListClassesUseCase`; filtro `dimension` no `ListCollectionCards`. **Verificação:** `npx vitest related --run` verde; `domain-guard --all` limpo.
 - [ ] **T-15 — Conteúdo, leitor e rotas do catálogo (REQ-10, REQ-11 e REQ-26 no disco; REQ-27, REQ-28; REQ-29 nas rotas do laboratório).** Schemas Zod de `dimension.json`, `class.json` e `arrowLayout`; `ContentCardCatalog` com classes; fixture (`content-author`): uma dimensão pequena com cidade de chegada, zonas com as duas formas de 2 setas, `warrior` (2 essenciais) e uma classe de 1 essencial, com as cartas `basic` necessárias; `content/base`: 9 `basic`, dimensão provisória e as 12 classes provisórias (D-40); `GET /catalog/classes` + `ClassPresenter`; e2e de REQ-04/REQ-29 com as chaves novas. **Verificação:** `validate:content` limpo em `content` e na fixture; `npm run test:e2e` verde; `curl` dos cenários.
