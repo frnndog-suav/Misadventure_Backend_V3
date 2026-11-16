@@ -1,6 +1,9 @@
 import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import { ContentStore } from '@/domain/catalog/application/repositories/content-store'
-import type { TCard } from '@/domain/catalog/enterprise/value-objects/card'
+import type {
+  TCard,
+  TClassDefinition,
+} from '@/domain/catalog/enterprise/value-objects/card'
 import type {
   TContentCollection,
   TContentStatus,
@@ -14,6 +17,7 @@ import type {
 export class InMemoryContentStore implements ContentStore, CardCatalog {
   public collections: TContentCollection[] = []
   public cards: TEditorCard[] = []
+  public classes: TClassDefinition[] = []
 
   // ContentStore
 
@@ -91,5 +95,16 @@ export class InMemoryContentStore implements ContentStore, CardCatalog {
   async findCard(id: string): Promise<TCard | null> {
     const entry = this.cards.find((current) => current.card.id === id)
     return entry?.status === 'published' ? entry.card : null
+  }
+
+  // Classes no editor (rascunho/publicada) entram na T-18.
+  async listClasses(): Promise<TClassDefinition[]> {
+    return [...this.classes]
+  }
+
+  async findClass(playerClass: string): Promise<TClassDefinition | null> {
+    return (
+      this.classes.find((entry) => entry.playerClass === playerClass) ?? null
+    )
   }
 }

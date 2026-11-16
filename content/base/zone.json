@@ -5,6 +5,7 @@
     "zoneType": "urban",
     "location": "Costa Velha",
     "connectionArrows": 4,
+    "arrowLayout": null,
     "zoneActions": ["startEvent", "useVault", "saveRespawnPoint"],
     "effects": []
   },
@@ -14,6 +15,7 @@
     "zoneType": "forest",
     "location": "Costa Velha",
     "connectionArrows": 2,
+    "arrowLayout": "straight",
     "zoneActions": ["startEvent"],
     "effects": [
       { "text": "A névoa dificulta a visão.", "polarity": "negative" }

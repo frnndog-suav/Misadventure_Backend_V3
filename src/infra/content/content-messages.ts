@@ -29,6 +29,20 @@ const CATALOG_MESSAGES: Record<TCatalogIssueReason, string> = {
   effectsRequired: 'Carta aprimorada precisa de pelo menos 1 efeito.',
   onlyForWeapons: 'Só armas podem bloquear o escudo.',
   empty: 'Não pode ficar vazio.',
+  arrowLayoutRequired:
+    'Zona com 2 setas precisa da forma das setas (straight ou corner).',
+  arrowLayoutNotAllowed: 'Forma das setas só existe em zona com 2 setas.',
+  tooManyDimensions: 'A coleção tem no máximo 1 Carta de Dimensão.',
+  duplicateName: 'Nome repetido no catálogo.',
+  essentialAttributeCount: 'A classe tem 1 ou 2 atributos essenciais.',
+  duplicateEssentials:
+    'Outra classe já tem o mesmo conjunto de atributos essenciais.',
+  unknownCard: 'Carta inexistente.',
+  notAnAttributeCard: 'O deck pré-pronto só tem cartas de atributo.',
+  starterDeckSize:
+    'O deck pré-pronto precisa ter o tamanho mínimo do deck (padrão).',
+  starterDeckLockNotMet:
+    'O deck pré-pronto precisa cumprir a trava da classe (padrão).',
 }
 
 /** Relatório de REQ-11 (o arquivo e a carta já localizam o problema). */
@@ -106,6 +120,16 @@ export function contentIssueMessage(issue: TContentIssue): string {
     case 'effectsRequired':
     case 'onlyForWeapons':
     case 'empty':
+    case 'arrowLayoutRequired':
+    case 'arrowLayoutNotAllowed':
+    case 'tooManyDimensions':
+    case 'duplicateName':
+    case 'essentialAttributeCount':
+    case 'duplicateEssentials':
+    case 'unknownCard':
+    case 'notAnAttributeCard':
+    case 'starterDeckSize':
+    case 'starterDeckLockNotMet':
       return CATALOG_MESSAGES[reason]
     default: {
       const _exhaustive: never = reason

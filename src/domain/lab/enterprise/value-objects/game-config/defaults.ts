@@ -10,6 +10,17 @@ export interface TGameConfigValues {
   baseHealth: number // README 9.1
   initialGold: number // README 9.1
   initialHandSize: number // README 9.1
+  minDeckSize: number // README 4.4
+  lockOneEssential: number // README 8.2
+  lockTwoEssentials: number // README 8.2
+  mapMaxAttempts: number // README 3.5 (D-38)
+  defaultAttack: number // README 8.7 (Padrão)
+  defaultDefense: number // README 8.7
+  defaultAccuracy: number // README 8.7
+  defaultEvasion: number // README 8.7
+  defaultCelerity: number // README 8.7
+  defaultPiercing: number // README 8.7
+  defaultReflection: number // README 8.7
 }
 
 export type TGameConfigKey = keyof TGameConfigValues
@@ -28,6 +39,17 @@ export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
   baseHealth: 20,
   initialGold: 10,
   initialHandSize: 7,
+  minDeckSize: 60,
+  lockOneEssential: 18,
+  lockTwoEssentials: 10,
+  mapMaxAttempts: 1000,
+  defaultAttack: 5,
+  defaultDefense: 3,
+  defaultAccuracy: 50,
+  defaultEvasion: 20,
+  defaultCelerity: 10,
+  defaultPiercing: 0,
+  defaultReflection: 0,
 })
 
 /** Inteiros, inclusivos. Além deles, `minPlayers ≤ maxPlayers`. */
@@ -42,4 +64,15 @@ export const GAME_CONFIG_LIMITS: Readonly<
   baseHealth: { min: 1, max: 1000 },
   initialGold: { min: 0, max: 100000 },
   initialHandSize: { min: 0, max: 60 },
+  minDeckSize: { min: 1, max: 200 },
+  lockOneEssential: { min: 0, max: 200 },
+  lockTwoEssentials: { min: 0, max: 200 },
+  mapMaxAttempts: { min: 1, max: 100000 },
+  defaultAttack: { min: 0, max: 1000 },
+  defaultDefense: { min: 0, max: 1000 },
+  defaultAccuracy: { min: 0, max: 1000 },
+  defaultEvasion: { min: 0, max: 1000 },
+  defaultCelerity: { min: 0, max: 1000 },
+  defaultPiercing: { min: 0, max: 1000 },
+  defaultReflection: { min: 0, max: 1000 },
 })

@@ -367,7 +367,7 @@ describe('loadContent', () => {
           cardId: null,
           field: null,
           message:
-            'Arquivo desconhecido (esperados collection.json e zone, attribute, equipment, item, randomEvent, combatEvent .json).',
+            'Arquivo desconhecido (esperados collection.json e zone, attribute, equipment, item, randomEvent, combatEvent, dimension .json).',
         },
         {
           file: rel('fixture/collection.json'),

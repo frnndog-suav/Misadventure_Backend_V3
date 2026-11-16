@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
   makeAttributeCard,
+  makeDimensionCard,
   makeCollection,
   makeItemCard,
   makeZoneCard,
@@ -26,7 +27,7 @@ describe('ListCollectionsUseCase', () => {
     expect(result.value.collections).toEqual([])
   })
 
-  it('REQ-12: devolve cada coleção com o total de cartas por tipo, em ordem de id', async () => {
+  it('REQ-12, REQ-28: devolve cada coleção com o total de cartas por tipo (com dimension), em ordem de id', async () => {
     catalog.collections = [
       makeCollection({ id: 'zeta', name: 'Zeta' }),
       makeCollection(),
@@ -36,6 +37,7 @@ describe('ListCollectionsUseCase', () => {
       makeAttributeCard(),
       makeItemCard(),
       makeItemCard({ id: 'fixture.antidote' }),
+      makeDimensionCard(),
     ]
 
     const result = await sut.execute()
@@ -51,6 +53,7 @@ describe('ListCollectionsUseCase', () => {
           item: 2,
           randomEvent: 0,
           combatEvent: 0,
+          dimension: 1,
         },
       },
       {
@@ -63,6 +66,7 @@ describe('ListCollectionsUseCase', () => {
           item: 0,
           randomEvent: 0,
           combatEvent: 0,
+          dimension: 0,
         },
       },
     ])

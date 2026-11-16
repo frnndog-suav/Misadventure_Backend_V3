@@ -15,6 +15,7 @@ const ZERO_TYPES = {
   item: 0,
   randomEvent: 0,
   combatEvent: 0,
+  dimension: 0,
 }
 const ZERO_RARITIES = { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 }
 

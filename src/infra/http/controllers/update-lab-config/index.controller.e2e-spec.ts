@@ -13,6 +13,17 @@ const DEFAULTS = {
   baseHealth: 20,
   initialGold: 10,
   initialHandSize: 7,
+  minDeckSize: 60,
+  lockOneEssential: 18,
+  lockTwoEssentials: 10,
+  mapMaxAttempts: 1000,
+  defaultAttack: 5,
+  defaultDefense: 3,
+  defaultAccuracy: 50,
+  defaultEvasion: 20,
+  defaultCelerity: 10,
+  defaultPiercing: 0,
+  defaultReflection: 0,
 }
 
 function invalid(fields: { field: string | null; reason: string }[]) {

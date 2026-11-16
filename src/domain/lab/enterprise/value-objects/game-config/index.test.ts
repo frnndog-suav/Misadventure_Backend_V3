@@ -14,12 +14,49 @@ describe('GameConfig', () => {
       baseHealth: 20,
       initialGold: 10,
       initialHandSize: 7,
+      minDeckSize: 60,
+      lockOneEssential: 18,
+      lockTwoEssentials: 10,
+      mapMaxAttempts: 1000,
+      defaultAttack: 5,
+      defaultDefense: 3,
+      defaultAccuracy: 50,
+      defaultEvasion: 20,
+      defaultCelerity: 10,
+      defaultPiercing: 0,
+      defaultReflection: 0,
     })
     expect(GameConfig.withDefaults().values).toEqual(GAME_CONFIG_DEFAULTS)
   })
 
+  it('REQ-29: chaves novas com os limites de D-41', () => {
+    expect(GAME_CONFIG_LIMITS).toMatchObject({
+      minDeckSize: { min: 1, max: 200 },
+      lockOneEssential: { min: 0, max: 200 },
+      lockTwoEssentials: { min: 0, max: 200 },
+      mapMaxAttempts: { min: 1, max: 100000 },
+      defaultAttack: { min: 0, max: 1000 },
+      defaultDefense: { min: 0, max: 1000 },
+      defaultAccuracy: { min: 0, max: 1000 },
+      defaultEvasion: { min: 0, max: 1000 },
+      defaultCelerity: { min: 0, max: 1000 },
+      defaultPiercing: { min: 0, max: 1000 },
+      defaultReflection: { min: 0, max: 1000 },
+    })
+  })
+
+  it('REQ-29: as chaves novas aceitam ajuste e respeitam o limite (REQ-05, REQ-06)', () => {
+    const ok = GameConfig.withDefaults().applyPatch({ minDeckSize: 40 })
+    expect(ok.isRight() && ok.value.values.minDeckSize).toBe(40)
+
+    const bad = GameConfig.withDefaults().applyPatch({ mapMaxAttempts: 0 })
+    expect(bad.isLeft() && bad.value).toEqual([
+      { field: 'mapMaxAttempts', reason: 'outOfRange' },
+    ])
+  })
+
   it('REQ-04: limites inclusivos de cada chave (D-12)', () => {
-    expect(GAME_CONFIG_LIMITS).toEqual({
+    expect(GAME_CONFIG_LIMITS).toMatchObject({
       minPlayers: { min: 1, max: 6 },
       maxPlayers: { min: 1, max: 6 },
       actionPointsPerTurn: { min: 1, max: 10 },

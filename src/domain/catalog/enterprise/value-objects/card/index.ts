@@ -11,6 +11,7 @@ export const CARD_TYPES = [
   'item',
   'randomEvent',
   'combatEvent',
+  'dimension',
 ] as const
 export type TCardType = (typeof CARD_TYPES)[number]
 
@@ -201,6 +202,10 @@ export type TRuleText = Readonly<{ text: string }>
 
 export type TAbility = Readonly<{ name: string; text: string }>
 
+/** README 3.5, D-37: forma da zona com 2 setas (lados opostos ou vizinhos). */
+export const ARROW_LAYOUTS = ['straight', 'corner'] as const
+export type TArrowLayout = (typeof ARROW_LAYOUTS)[number]
+
 export type TZoneCard = Readonly<{
   type: 'zone'
   id: string
@@ -209,6 +214,8 @@ export type TZoneCard = Readonly<{
   zoneType: TZoneType
   location: string
   connectionArrows: number
+  /** Só com 2 setas (D-37); `null` com 1, 3 ou 4. */
+  arrowLayout: TArrowLayout | null
   zoneActions: readonly TZoneAction[]
   effects: readonly Readonly<TRuleText & { polarity: TZoneEffectPolarity }>[]
 }>
@@ -296,6 +303,18 @@ export type TCombatEventCard = Readonly<{
   noEscape: boolean
 }>
 
+/** README 3.2, mínima (D-39): as zonas da dimensão são as da sua coleção. */
+export type TDimensionCard = Readonly<{
+  type: 'dimension'
+  id: string
+  collectionId: string
+  name: string
+  flavorText: string | null
+  releaseOrder: number
+  arrivalZoneTitle: string | null
+  effects: readonly TRuleText[]
+}>
+
 export type TCard =
   | TZoneCard
   | TAttributeCard
@@ -303,8 +322,21 @@ export type TCard =
   | TItemCard
   | TRandomEventCard
   | TCombatEventCard
+  | TDimensionCard
 
 export type TCollection = Readonly<{ id: string; name: string }>
+
+/** Classe com deck pré-pronto (README 8.5 a 8.7, 4.4; D-40). Não é carta. */
+export type TStarterDeckEntry = Readonly<{ cardId: string; copies: number }>
+
+export type TClassDefinition = Readonly<{
+  playerClass: TPlayerClass
+  collectionId: string
+  name: string
+  essentialAttributes: readonly TAttribute[]
+  baseModifiers: Readonly<Record<TModifier, number>>
+  starterDeck: readonly TStarterDeckEntry[]
+}>
 
 export function isCardType(value: unknown): value is TCardType {
   return (

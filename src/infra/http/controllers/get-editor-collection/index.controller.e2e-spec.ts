@@ -32,6 +32,7 @@ describe('GET /lab/content/collections/:collectionId (e2e)', () => {
         item: 1,
         randomEvent: 1,
         combatEvent: 1,
+        dimension: 0,
       },
       rarityCounts: { common: 2, uncommon: 0, rare: 1, epic: 0, legendary: 0 },
       tags: ['duas mãos', 'espada', 'poção'],

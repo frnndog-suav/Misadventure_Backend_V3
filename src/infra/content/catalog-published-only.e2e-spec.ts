@@ -67,7 +67,7 @@ describe('Catálogo só com publicadas (e2e)', () => {
       cardCounts: Record<string, number>
     }[]
     expect(bosque?.id).toBe('bosque')
-    expect(Object.values(bosque?.cardCounts ?? {})).toEqual(Array(6).fill(0))
+    expect(Object.values(bosque?.cardCounts ?? {})).toEqual(Array(7).fill(0))
     expect(fixture?.cardCounts.attribute).toBe(1)
   })
 

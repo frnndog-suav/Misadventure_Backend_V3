@@ -1,8 +1,10 @@
 import type {
   TAttributeCard,
   TCard,
+  TClassDefinition,
   TCollection,
   TCombatEventCard,
+  TDimensionCard,
   TEnemy,
   TEquipmentCard,
   TItemCard,
@@ -27,6 +29,7 @@ export function makeZoneCard(override: Partial<TZoneCard> = {}): TZoneCard {
     zoneType: 'forest',
     location: 'Bosque',
     connectionArrows: 2,
+    arrowLayout: 'straight',
     zoneActions: ['startEvent', 'scavenge'],
     effects: [],
     ...override,
@@ -42,6 +45,7 @@ export function makeUrbanZoneCard(
     zoneType: 'urban',
     location: 'Cidade',
     connectionArrows: 4,
+    arrowLayout: null,
     zoneActions: [
       'startEvent',
       'useVault',
@@ -176,4 +180,49 @@ export function toCardInput(
 ): Record<string, unknown> {
   const { id, collectionId, ...rest } = card
   return { ...rest, slug: slug ?? id.slice(collectionId.length + 1) }
+}
+
+export function makeDimensionCard(
+  override: Partial<TDimensionCard> = {}
+): TDimensionCard {
+  return {
+    type: 'dimension',
+    id: 'fixture.misty-realm',
+    collectionId: 'fixture',
+    name: 'Reino Enevoado',
+    flavorText: null,
+    releaseOrder: 1,
+    arrivalZoneTitle: 'Porto Cinzento',
+    effects: [],
+    ...override,
+  }
+}
+
+/**
+ * Classe válida pelos padrões (REQ-26): 1 essencial (força) e deck de 60 =
+ * 18 de `fixture.strength-basic` + 42 de `fixture.dexterity-basic`.
+ */
+export function makeClassDefinition(
+  override: Partial<TClassDefinition> = {}
+): TClassDefinition {
+  return {
+    playerClass: 'warrior',
+    collectionId: 'fixture',
+    name: 'Guerreiro',
+    essentialAttributes: ['strength'],
+    baseModifiers: {
+      attack: 6,
+      defense: 4,
+      accuracy: 50,
+      evasion: 15,
+      celerity: 8,
+      piercing: 0,
+      reflection: 0,
+    },
+    starterDeck: [
+      { cardId: 'fixture.strength-basic', copies: 18 },
+      { cardId: 'fixture.dexterity-basic', copies: 42 },
+    ],
+    ...override,
+  }
 }

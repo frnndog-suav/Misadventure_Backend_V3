@@ -5,6 +5,7 @@
     "zoneType": "forest",
     "location": "Terras Selvagens",
     "connectionArrows": 2,
+    "arrowLayout": "straight",
     "zoneActions": ["startEvent"],
     "effects": []
   }

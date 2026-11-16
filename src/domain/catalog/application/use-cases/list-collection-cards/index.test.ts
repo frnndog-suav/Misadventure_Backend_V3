@@ -6,6 +6,7 @@ import {
   makeAttributeCard,
   makeCollection,
   makeCombatEventCard,
+  makeDimensionCard,
   makeEquipmentCard,
   makeItemCard,
   makeRandomEventCard,
@@ -60,6 +61,18 @@ describe('ListCollectionCardsUseCase', () => {
 
     if (result.isLeft()) throw new Error('esperava right')
     expect(result.value.cards).toEqual([makeAttributeCard()])
+  })
+
+  it('REQ-28: filtra pela Carta de Dimensão', async () => {
+    catalog.cards.push(makeDimensionCard())
+
+    const result = await sut.execute({
+      collectionId: 'fixture',
+      type: 'dimension',
+    })
+
+    if (result.isLeft()) throw new Error('esperava right')
+    expect(result.value.cards).toEqual([makeDimensionCard()])
   })
 
   it('REQ-13: tipo de filtro desconhecido → CatalogQueryInvalidError', async () => {

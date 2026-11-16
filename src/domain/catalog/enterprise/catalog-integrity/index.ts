@@ -1,12 +1,18 @@
 import {
+  type TBuildEntry,
+  isClassActive,
+} from '@/domain/catalog/enterprise/class-lock'
+import {
   MODIFIERS,
   type TAttributeCard,
   type TCard,
+  type TClassDefinition,
   type TCollection,
   type TCombatEventCard,
   type TEquipmentCard,
   type TZoneCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
+import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
 /**
  * Motivos de um problema de integridade (REQ-15). Não trafega para o
@@ -29,11 +35,25 @@ export type TCatalogIssueReason =
   | 'effectsRequired'
   | 'onlyForWeapons'
   | 'empty'
+  // REQ-26
+  | 'arrowLayoutRequired'
+  | 'arrowLayoutNotAllowed'
+  | 'tooManyDimensions'
+  | 'duplicateName'
+  | 'essentialAttributeCount'
+  | 'duplicateEssentials'
+  | 'unknownCard'
+  | 'notAnAttributeCard'
+  | 'starterDeckSize'
+  | 'starterDeckLockNotMet'
 
 export type TCatalogIssue = {
   collectionId: string
+  /** `null` para problema da coleção ou de uma classe. */
   cardId: string | null
-  /** Caminho do campo na carta, ex.: `enemies[0].health`. */
+  /** Só em problema de classe (REQ-26): a classe que o tem. */
+  playerClass?: string
+  /** Caminho do campo na carta ou na classe, ex.: `enemies[0].health`. */
   field: string
   reason: TCatalogIssueReason
 }
@@ -41,6 +61,8 @@ export type TCatalogIssue = {
 export type TCatalogContent = {
   collections: readonly TCollection[]
   cards: readonly TCard[]
+  /** Classes (D-40); ausente = nenhuma. */
+  classes?: readonly TClassDefinition[]
 }
 
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/
@@ -56,6 +78,7 @@ type TReport = (field: string, reason: TCatalogIssueReason) => void
 export function checkCatalogIntegrity({
   collections,
   cards,
+  classes = [],
 }: TCatalogContent): TCatalogIssue[] {
   const issues: TCatalogIssue[] = []
 
@@ -83,6 +106,8 @@ export function checkCatalogIntegrity({
 
   const cardIds = new Set<string>()
   const zoneTitles = new Set<string>()
+  const dimensionCollections = new Set<string>()
+  const releaseOrders = new Set<number>()
 
   for (const card of cards) {
     const report: TReport = (field, reason) =>
@@ -131,6 +156,19 @@ export function checkCatalogIntegrity({
       case 'combatEvent':
         checkCombatEvent(card, report)
         break
+      case 'dimension':
+        // REQ-26: a composição é conferida fora daqui (REQ-36).
+        if (dimensionCollections.has(card.collectionId)) {
+          report('type', 'tooManyDimensions')
+        }
+        dimensionCollections.add(card.collectionId)
+        if (!isIntegerBetween(card.releaseOrder, 1, Infinity)) {
+          report('releaseOrder', 'outOfRange')
+        } else if (releaseOrders.has(card.releaseOrder)) {
+          report('releaseOrder', 'duplicateValue')
+        }
+        releaseOrders.add(card.releaseOrder)
+        break
       default: {
         const _exhaustive: never = card
         void _exhaustive
@@ -138,7 +176,117 @@ export function checkCatalogIntegrity({
     }
   }
 
+  checkClasses(classes, cards, issues)
+
   return issues
+}
+
+/** README 8.5 a 8.7, 4.4 (REQ-26), com os padrões da `GameConfig` (D-40). */
+function checkClasses(
+  classes: readonly TClassDefinition[],
+  cards: readonly TCard[],
+  issues: TCatalogIssue[]
+): void {
+  const cardsById = new Map(cards.map((card) => [card.id, card]))
+  const playerClasses = new Set<string>()
+  const names = new Set<string>()
+  const essentialSets = new Set<string>()
+
+  for (const definition of classes) {
+    const report: TReport = (field, reason) =>
+      issues.push({
+        collectionId: definition.collectionId,
+        cardId: null,
+        playerClass: definition.playerClass,
+        field,
+        reason,
+      })
+
+    if (playerClasses.has(definition.playerClass)) {
+      report('playerClass', 'duplicateId')
+    }
+    playerClasses.add(definition.playerClass)
+
+    if (names.has(definition.name)) report('name', 'duplicateName')
+    names.add(definition.name)
+
+    const essentials = definition.essentialAttributes
+    const essentialsValid =
+      essentials.length >= 1 &&
+      essentials.length <= 2 &&
+      new Set(essentials).size === essentials.length
+    if (essentials.length < 1 || essentials.length > 2) {
+      report('essentialAttributes', 'essentialAttributeCount')
+    }
+    checkNoDuplicates(essentials, 'essentialAttributes', report)
+    const essentialKey = JSON.stringify([...new Set(essentials)].sort())
+    if (essentialsValid && essentialSets.has(essentialKey)) {
+      report('essentialAttributes', 'duplicateEssentials')
+    }
+    essentialSets.add(essentialKey)
+
+    for (const modifier of MODIFIERS) {
+      if (!isIntegerBetween(definition.baseModifiers[modifier], 0, Infinity)) {
+        report(`baseModifiers.${modifier}`, 'outOfRange')
+      }
+    }
+
+    checkStarterDeck(definition, cardsById, essentialsValid, report)
+  }
+}
+
+function checkStarterDeck(
+  definition: TClassDefinition,
+  cardsById: ReadonlyMap<string, TCard>,
+  essentialsValid: boolean,
+  report: TReport
+): void {
+  const deck = definition.starterDeck
+  checkNoDuplicates(
+    deck.map((entry) => entry.cardId),
+    'starterDeck',
+    report
+  )
+
+  const build: TBuildEntry[] = []
+  let valid = true
+  deck.forEach((entry, index) => {
+    const path = `starterDeck[${index}]`
+    const card = cardsById.get(entry.cardId)
+    if (!card) {
+      report(`${path}.cardId`, 'unknownCard')
+      valid = false
+    } else if (card.type !== 'attribute') {
+      report(`${path}.cardId`, 'notAnAttributeCard')
+      valid = false
+    } else {
+      build.push({ card, copies: entry.copies })
+    }
+    if (!isIntegerBetween(entry.copies, 1, Infinity)) {
+      report(`${path}.copies`, 'outOfRange')
+      valid = false
+    }
+  })
+
+  // Tamanho e trava só fazem sentido com todas as entradas válidas.
+  if (!valid) return
+
+  const total = deck.reduce((sum, entry) => sum + entry.copies, 0)
+  if (total !== GAME_CONFIG_DEFAULTS.minDeckSize) {
+    report('starterDeck', 'starterDeckSize')
+  }
+  // A trava depende das essenciais: com elas inválidas, o problema já está lá.
+  if (
+    essentialsValid &&
+    !isClassActive({
+      build,
+      essentialAttributes: definition.essentialAttributes,
+      lockOneEssential: GAME_CONFIG_DEFAULTS.lockOneEssential,
+      lockTwoEssentials: GAME_CONFIG_DEFAULTS.lockTwoEssentials,
+    })
+  ) {
+    report('starterDeck', 'starterDeckLockNotMet')
+  }
 }
 
 /** README 3.4 */
@@ -147,8 +295,16 @@ function checkZone(card: TZoneCard, report: TReport): void {
 
   if (!isIntegerBetween(card.connectionArrows, 1, 4)) {
     report('connectionArrows', 'outOfRange')
-  } else if (isUrban && card.connectionArrows !== 4) {
-    report('connectionArrows', 'urbanZoneRequiresFourArrows')
+  } else {
+    if (isUrban && card.connectionArrows !== 4) {
+      report('connectionArrows', 'urbanZoneRequiresFourArrows')
+    }
+    // D-37: só conferida com as setas na faixa (`outOfRange` tem precedência).
+    if (card.connectionArrows === 2 && card.arrowLayout === null) {
+      report('arrowLayout', 'arrowLayoutRequired')
+    } else if (card.connectionArrows !== 2 && card.arrowLayout !== null) {
+      report('arrowLayout', 'arrowLayoutNotAllowed')
+    }
   }
 
   const required = isUrban

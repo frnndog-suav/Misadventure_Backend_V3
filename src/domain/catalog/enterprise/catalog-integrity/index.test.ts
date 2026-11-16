@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest'
 
 import type {
   TCard,
+  TClassDefinition,
   TCollection,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import {
   makeAttributeCard,
+  makeClassDefinition,
   makeCollection,
   makeCombatEventCard,
+  makeDimensionCard,
   makeEnemy,
   makeEquipmentCard,
   makeItemCard,
@@ -424,6 +427,361 @@ describe('checkCatalogIntegrity', () => {
       expect(
         check([makeCombatEventCard({ enemies: [makeEnemy({ vigor: 0 })] })])
       ).toEqual([])
+    })
+  })
+
+  describe('REQ-26: zona — forma das setas (D-37)', () => {
+    const zoneIssue = (reason: string) => ({
+      collectionId: 'fixture',
+      cardId: 'fixture.whispering-grove',
+      field: 'arrowLayout',
+      reason,
+    })
+
+    it('REQ-26: zona de 2 setas sem arrowLayout', () => {
+      expect(check([makeZoneCard({ arrowLayout: null })])).toEqual([
+        zoneIssue('arrowLayoutRequired'),
+      ])
+      expect(check([makeZoneCard({ arrowLayout: 'corner' })])).toEqual([])
+    })
+
+    it('REQ-26: setas fora da faixa ocultam a regra de arrowLayout (D-56)', () => {
+      expect(
+        check([makeZoneCard({ connectionArrows: 5, arrowLayout: 'straight' })])
+      ).toEqual([
+        {
+          collectionId: 'fixture',
+          cardId: 'fixture.whispering-grove',
+          field: 'connectionArrows',
+          reason: 'outOfRange',
+        },
+      ])
+    })
+
+    it('REQ-26: arrowLayout presente com 1, 3 ou 4 setas', () => {
+      for (const connectionArrows of [1, 3, 4]) {
+        expect(
+          check([makeZoneCard({ connectionArrows, arrowLayout: 'straight' })])
+        ).toEqual([zoneIssue('arrowLayoutNotAllowed')])
+        expect(
+          check([makeZoneCard({ connectionArrows, arrowLayout: null })])
+        ).toEqual([])
+      }
+    })
+  })
+
+  describe('REQ-26: Carta de Dimensão', () => {
+    it('REQ-26: Carta de Dimensão válida não tem problemas', () => {
+      expect(check([makeDimensionCard()])).toEqual([])
+    })
+
+    it('REQ-26: no máximo 1 Carta de Dimensão por coleção', () => {
+      expect(
+        check([
+          makeDimensionCard(),
+          makeDimensionCard({ id: 'fixture.second-realm', releaseOrder: 2 }),
+        ])
+      ).toEqual([
+        {
+          collectionId: 'fixture',
+          cardId: 'fixture.second-realm',
+          field: 'type',
+          reason: 'tooManyDimensions',
+        },
+      ])
+    })
+
+    it('REQ-26: releaseOrder inteiro ≥ 1', () => {
+      for (const releaseOrder of [0, -1, 1.5]) {
+        expect(check([makeDimensionCard({ releaseOrder })])).toEqual([
+          {
+            collectionId: 'fixture',
+            cardId: 'fixture.misty-realm',
+            field: 'releaseOrder',
+            reason: 'outOfRange',
+          },
+        ])
+      }
+    })
+
+    it('REQ-26: releaseOrder único no catálogo', () => {
+      expect(
+        check(
+          [
+            makeDimensionCard(),
+            makeDimensionCard({
+              id: 'other.misty-realm',
+              collectionId: 'other',
+            }),
+          ],
+          [makeCollection(), makeCollection({ id: 'other', name: 'Outra' })]
+        )
+      ).toEqual([
+        {
+          collectionId: 'other',
+          cardId: 'other.misty-realm',
+          field: 'releaseOrder',
+          reason: 'duplicateValue',
+        },
+      ])
+    })
+  })
+
+  describe('REQ-26: classe', () => {
+    const deckCards: TCard[] = [
+      makeAttributeCard(),
+      makeAttributeCard({
+        id: 'fixture.dexterity-basic',
+        name: 'Destreza',
+        attributes: ['dexterity'],
+      }),
+    ]
+
+    function checkClasses(
+      classes: TClassDefinition[],
+      cards: TCard[] = deckCards
+    ) {
+      return checkCatalogIntegrity({
+        collections: [makeCollection()],
+        cards,
+        classes,
+      })
+    }
+
+    const classIssue = (
+      field: string,
+      reason: string,
+      playerClass = 'warrior'
+    ) => ({
+      collectionId: 'fixture',
+      cardId: null,
+      playerClass,
+      field,
+      reason,
+    })
+
+    const mage = makeClassDefinition({
+      playerClass: 'mage',
+      name: 'Mago',
+      essentialAttributes: ['dexterity'],
+      starterDeck: [
+        { cardId: 'fixture.strength-basic', copies: 42 },
+        { cardId: 'fixture.dexterity-basic', copies: 18 },
+      ],
+    })
+
+    it('REQ-26: classes válidas não têm problemas', () => {
+      expect(checkClasses([makeClassDefinition(), mage])).toEqual([])
+    })
+
+    it('REQ-26: playerClass único no catálogo', () => {
+      expect(
+        checkClasses([
+          makeClassDefinition(),
+          { ...mage, playerClass: 'warrior' },
+        ])
+      ).toEqual([classIssue('playerClass', 'duplicateId')])
+    })
+
+    it('REQ-26: name único no catálogo', () => {
+      expect(
+        checkClasses([makeClassDefinition(), { ...mage, name: 'Guerreiro' }])
+      ).toEqual([classIssue('name', 'duplicateName', 'mage')])
+    })
+
+    it('REQ-26: essentialAttributes com 1 ou 2 atributos', () => {
+      expect(
+        checkClasses([makeClassDefinition({ essentialAttributes: [] })])
+      ).toEqual([classIssue('essentialAttributes', 'essentialAttributeCount')])
+      expect(
+        checkClasses([
+          makeClassDefinition({
+            essentialAttributes: ['strength', 'dexterity', 'luck'],
+          }),
+        ])
+      ).toEqual([classIssue('essentialAttributes', 'essentialAttributeCount')])
+    })
+
+    it('REQ-26: essentialAttributes diferentes', () => {
+      expect(
+        checkClasses([
+          makeClassDefinition({
+            essentialAttributes: ['strength', 'strength'],
+          }),
+        ])
+      ).toEqual([classIssue('essentialAttributes', 'duplicateValue')])
+    })
+
+    it('REQ-26: essenciais inválidas não geram duplicateEssentials nem trava (D-56)', () => {
+      expect(
+        checkClasses([
+          makeClassDefinition(),
+          {
+            ...mage,
+            essentialAttributes: ['strength', 'strength'],
+            starterDeck: [
+              { cardId: 'fixture.strength-basic', copies: 1 },
+              { cardId: 'fixture.dexterity-basic', copies: 59 },
+            ],
+          },
+        ])
+      ).toEqual([classIssue('essentialAttributes', 'duplicateValue', 'mage')])
+    })
+
+    it('REQ-26: entrada inválida no deck oculta tamanho e trava (D-56)', () => {
+      expect(
+        checkClasses([
+          makeClassDefinition({
+            starterDeck: [{ cardId: 'fixture.ghost', copies: 5 }],
+          }),
+        ])
+      ).toEqual([classIssue('starterDeck[0].cardId', 'unknownCard')])
+    })
+
+    it('REQ-26: duas classes com o mesmo conjunto de essenciais (8.5)', () => {
+      expect(
+        checkClasses([
+          makeClassDefinition(),
+          {
+            ...mage,
+            essentialAttributes: ['strength'],
+            starterDeck: makeClassDefinition().starterDeck,
+          },
+        ])
+      ).toEqual([
+        classIssue('essentialAttributes', 'duplicateEssentials', 'mage'),
+      ])
+    })
+
+    it('REQ-26: o mesmo conjunto em outra ordem também conta', () => {
+      const twoA = makeClassDefinition({
+        essentialAttributes: ['strength', 'dexterity'],
+        starterDeck: [
+          { cardId: 'fixture.strength-basic', copies: 30 },
+          { cardId: 'fixture.dexterity-basic', copies: 30 },
+        ],
+      })
+      const twoB: TClassDefinition = {
+        ...twoA,
+        playerClass: 'mage',
+        name: 'Mago',
+        essentialAttributes: ['dexterity', 'strength'],
+      }
+      expect(checkClasses([twoA, twoB])).toEqual([
+        classIssue('essentialAttributes', 'duplicateEssentials', 'mage'),
+      ])
+    })
+
+    it('REQ-26: os 7 modificadores base inteiros ≥ 0', () => {
+      expect(
+        checkClasses([
+          makeClassDefinition({
+            baseModifiers: {
+              ...makeClassDefinition().baseModifiers,
+              attack: -1,
+              evasion: 1.5,
+            },
+          }),
+        ])
+      ).toEqual([
+        classIssue('baseModifiers.attack', 'outOfRange'),
+        classIssue('baseModifiers.evasion', 'outOfRange'),
+      ])
+    })
+
+    it('REQ-26: starterDeck sem cardId repetido', () => {
+      expect(
+        checkClasses([
+          makeClassDefinition({
+            starterDeck: [
+              { cardId: 'fixture.strength-basic', copies: 18 },
+              { cardId: 'fixture.dexterity-basic', copies: 21 },
+              { cardId: 'fixture.dexterity-basic', copies: 21 },
+            ],
+          }),
+        ])
+      ).toEqual([classIssue('starterDeck', 'duplicateValue')])
+    })
+
+    it('REQ-26: starterDeck com carta inexistente', () => {
+      expect(
+        checkClasses([
+          makeClassDefinition({
+            starterDeck: [
+              { cardId: 'fixture.strength-basic', copies: 18 },
+              { cardId: 'fixture.dexterity-basic', copies: 41 },
+              { cardId: 'fixture.ghost', copies: 1 },
+            ],
+          }),
+        ])
+      ).toEqual([classIssue('starterDeck[2].cardId', 'unknownCard')])
+    })
+
+    it('REQ-26: starterDeck com carta que não é de atributo', () => {
+      expect(
+        checkClasses(
+          [
+            makeClassDefinition({
+              starterDeck: [
+                { cardId: 'fixture.strength-basic', copies: 18 },
+                { cardId: 'fixture.dexterity-basic', copies: 41 },
+                { cardId: 'fixture.healing-potion', copies: 1 },
+              ],
+            }),
+          ],
+          [...deckCards, makeItemCard()]
+        )
+      ).toEqual([classIssue('starterDeck[2].cardId', 'notAnAttributeCard')])
+    })
+
+    // Com entrada inválida, tamanho e trava não são conferidos (precedência).
+    it('REQ-26: copies inteiro ≥ 1', () => {
+      const luck = makeAttributeCard({
+        id: 'fixture.luck-basic',
+        attributes: ['luck'],
+      })
+      for (const copies of [0, 1.5]) {
+        expect(
+          checkClasses(
+            [
+              makeClassDefinition({
+                starterDeck: [
+                  { cardId: 'fixture.strength-basic', copies: 18 },
+                  { cardId: 'fixture.dexterity-basic', copies: 42 },
+                  { cardId: 'fixture.luck-basic', copies },
+                ],
+              }),
+            ],
+            [...deckCards, luck]
+          )
+        ).toEqual([classIssue('starterDeck[2].copies', 'outOfRange')])
+      }
+    })
+
+    it('REQ-26: total de cópias diferente do minDeckSize padrão (60)', () => {
+      expect(
+        checkClasses([
+          makeClassDefinition({
+            starterDeck: [
+              { cardId: 'fixture.strength-basic', copies: 18 },
+              { cardId: 'fixture.dexterity-basic', copies: 41 },
+            ],
+          }),
+        ])
+      ).toEqual([classIssue('starterDeck', 'starterDeckSize')])
+    })
+
+    it('REQ-26: deck pré-pronto sem cumprir a trava (padrões)', () => {
+      expect(
+        checkClasses([
+          makeClassDefinition({
+            starterDeck: [
+              { cardId: 'fixture.strength-basic', copies: 17 },
+              { cardId: 'fixture.dexterity-basic', copies: 43 },
+            ],
+          }),
+        ])
+      ).toEqual([classIssue('starterDeck', 'starterDeckLockNotMet')])
     })
   })
 })

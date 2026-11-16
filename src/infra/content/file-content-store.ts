@@ -7,6 +7,7 @@ import {
   CARD_TYPES,
   type TCard,
   type TCardType,
+  type TClassDefinition,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import type {
   TContentCollection,
@@ -88,6 +89,15 @@ export class FileContentStore extends ContentStore implements CardCatalog {
   async findCard(id: string): Promise<TCard | null> {
     const entry = this.state.cards.find((e) => e.card.id === id)
     return entry?.status === 'published' ? entry.card : null
+  }
+
+  // Ponte da T-14: as classes passam a ser lidas de `class.json` na T-15.
+  async listClasses(): Promise<TClassDefinition[]> {
+    return []
+  }
+
+  async findClass(): Promise<TClassDefinition | null> {
+    return null
   }
 
   // Gravação

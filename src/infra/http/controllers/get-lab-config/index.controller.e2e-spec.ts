@@ -12,6 +12,17 @@ const DEFAULTS = {
   baseHealth: 20,
   initialGold: 10,
   initialHandSize: 7,
+  minDeckSize: 60,
+  lockOneEssential: 18,
+  lockTwoEssentials: 10,
+  mapMaxAttempts: 1000,
+  defaultAttack: 5,
+  defaultDefense: 3,
+  defaultAccuracy: 50,
+  defaultEvasion: 20,
+  defaultCelerity: 10,
+  defaultPiercing: 0,
+  defaultReflection: 0,
 }
 
 const LIMITS = {
@@ -23,6 +34,17 @@ const LIMITS = {
   baseHealth: { min: 1, max: 1000 },
   initialGold: { min: 0, max: 100000 },
   initialHandSize: { min: 0, max: 60 },
+  minDeckSize: { min: 1, max: 200 },
+  lockOneEssential: { min: 0, max: 200 },
+  lockTwoEssentials: { min: 0, max: 200 },
+  mapMaxAttempts: { min: 1, max: 100000 },
+  defaultAttack: { min: 0, max: 1000 },
+  defaultDefense: { min: 0, max: 1000 },
+  defaultAccuracy: { min: 0, max: 1000 },
+  defaultEvasion: { min: 0, max: 1000 },
+  defaultCelerity: { min: 0, max: 1000 },
+  defaultPiercing: { min: 0, max: 1000 },
+  defaultReflection: { min: 0, max: 1000 },
 }
 
 describe('GET /lab/config (e2e)', () => {
@@ -36,7 +58,7 @@ describe('GET /lab/config (e2e)', () => {
     await app.close()
   })
 
-  it('REQ-04: sem ajuste salvo, responde 200 com padrões e limites do contrato', async () => {
+  it('REQ-04, REQ-29: sem ajuste salvo, responde 200 com padrões e limites do contrato', async () => {
     const response = await request(app.getHttpServer()).get('/lab/config')
 
     expect(response.status).toBe(200)

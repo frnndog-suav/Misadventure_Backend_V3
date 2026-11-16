@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import {
+  ARROW_LAYOUTS,
   ATTRIBUTE_KINDS,
   ATTRIBUTES,
   ELEMENTS,
@@ -64,6 +65,7 @@ const cardSchemas = {
     zoneType: z.enum(ZONE_TYPES),
     location: text,
     connectionArrows: z.number(),
+    arrowLayout: z.enum(ARROW_LAYOUTS).nullable(),
     zoneActions: z.array(z.enum(ZONE_ACTIONS)),
     effects: z.array(
       z.strictObject({ text, polarity: z.enum(ZONE_EFFECT_POLARITIES) })
@@ -126,6 +128,14 @@ const cardSchemas = {
     badOutcome: ruleText,
     noEscape: z.boolean(),
   }),
+  dimension: z.strictObject({
+    id,
+    name: text,
+    flavorText,
+    releaseOrder: z.number(),
+    arrivalZoneTitle: text.nullable(),
+    effects: z.array(ruleText),
+  }),
 } satisfies Record<TCardType, z.ZodType>
 
 const status = z.enum(CONTENT_STATUSES).optional()
@@ -138,6 +148,7 @@ export const cardFileSchemas = {
   item: cardSchemas.item.extend({ status }),
   randomEvent: cardSchemas.randomEvent.extend({ status }),
   combatEvent: cardSchemas.combatEvent.extend({ status }),
+  dimension: cardSchemas.dimension.extend({ status }),
 } satisfies Record<TCardType, z.ZodType>
 
 function inputKeys<T extends TCardType>(type: T) {

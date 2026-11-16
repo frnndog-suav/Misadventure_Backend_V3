@@ -35,7 +35,7 @@ describe('CreateCollectionUseCase', () => {
       tags: [],
     })
     expect(Object.values(result.value.collection.cardCounts)).toEqual(
-      Array(6).fill(0)
+      Array(7).fill(0) // CardType com `dimension` (CONTRATO FEAT-06)
     )
     expect(Object.values(result.value.collection.rarityCounts)).toEqual(
       Array(5).fill(0)
