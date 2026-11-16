@@ -21,7 +21,9 @@ export type TCatalogIssueReason =
   | 'urbanZoneRequiresFourArrows'
   | 'missingRequiredAction'
   | 'actionOnlyInUrbanZone'
-  | 'wrongAttributeCount'
+  | 'basicAttributeCount'
+  | 'enhancedAttributeCount'
+  | 'synergyAttributeCount'
   | 'duplicateValue'
   | 'effectsNotAllowed'
   | 'effectsRequired'
@@ -165,10 +167,23 @@ function checkZone(card: TZoneCard, report: TReport): void {
 
 /** README 4.3 */
 function checkAttribute(card: TAttributeCard, report: TReport): void {
+  // Um motivo por tipo, para o texto pt-BR dizer a regra certa (D-49).
   const count = card.attributes.length
-  const countOk =
-    card.attributeKind === 'synergy' ? count >= 2 && count <= 4 : count === 1
-  if (!countOk) report('attributes', 'wrongAttributeCount')
+  switch (card.attributeKind) {
+    case 'basic':
+      if (count !== 1) report('attributes', 'basicAttributeCount')
+      break
+    case 'enhanced':
+      if (count !== 1) report('attributes', 'enhancedAttributeCount')
+      break
+    case 'synergy':
+      if (count < 2 || count > 4) report('attributes', 'synergyAttributeCount')
+      break
+    default: {
+      const _exhaustive: never = card.attributeKind
+      void _exhaustive
+    }
+  }
 
   checkNoDuplicates(card.attributes, 'attributes', report)
 

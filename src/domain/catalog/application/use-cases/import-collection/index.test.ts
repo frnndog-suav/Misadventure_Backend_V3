@@ -130,7 +130,7 @@ describe('ImportCollectionUseCase', () => {
     )
 
     expect(out?.fields).toEqual([
-      { path: 'cards.1.card.attributes', reason: 'wrongAttributeCount' },
+      { path: 'cards.1.card.attributes', reason: 'basicAttributeCount' },
     ])
   })
 

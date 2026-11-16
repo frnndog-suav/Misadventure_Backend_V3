@@ -18,13 +18,15 @@ import {
   type TCardType,
   type TModifier,
 } from '@/domain/catalog/enterprise/value-objects/card'
+import { CONTENT_STATUSES } from '@/domain/catalog/enterprise/value-objects/content'
 
 /**
  * Forma dos arquivos de `content/` (D-21). Cada `<tipo>.json` é um array de
  * cartas no formato do contrato **sem** `type` e `collectionId`, que vêm do
  * caminho (decisão do autor, 2026-11-14). Objetos estritos: campo
  * desconhecido é erro (pega erro de digitação). Faixas e regras entre campos
- * ficam em `checkCatalogIntegrity` (REQ-15, D-23).
+ * ficam em `checkCatalogIntegrity` (REQ-15, D-23). `status` (ausente =
+ * `published`) e `description` (ausente = `""`) são opcionais (D-47).
  */
 
 const text = z.string().min(1)
@@ -55,7 +57,7 @@ const enemy = z.strictObject({
 
 const id = text
 
-export const cardFileSchemas = {
+const cardSchemas = {
   zone: z.strictObject({
     id,
     title: text,
@@ -126,4 +128,37 @@ export const cardFileSchemas = {
   }),
 } satisfies Record<TCardType, z.ZodType>
 
-export const collectionFileSchema = z.strictObject({ name: text })
+const status = z.enum(CONTENT_STATUSES).optional()
+
+/** Uma carta do `<tipo>.json`. */
+export const cardFileSchemas = {
+  zone: cardSchemas.zone.extend({ status }),
+  attribute: cardSchemas.attribute.extend({ status }),
+  equipment: cardSchemas.equipment.extend({ status }),
+  item: cardSchemas.item.extend({ status }),
+  randomEvent: cardSchemas.randomEvent.extend({ status }),
+  combatEvent: cardSchemas.combatEvent.extend({ status }),
+} satisfies Record<TCardType, z.ZodType>
+
+function inputKeys<T extends TCardType>(type: T) {
+  return { type: z.literal(type), slug: z.string() }
+}
+
+/**
+ * `CardInput` do editor (CONTRATO FEAT-31): o `Card` sem `id` e
+ * `collectionId`, com `type` e `slug`. O `kebab-case` do slug é regra do
+ * domínio (REQ-43).
+ */
+export const cardInputSchema = z.discriminatedUnion('type', [
+  cardSchemas.zone.omit({ id: true }).extend(inputKeys('zone')),
+  cardSchemas.attribute.omit({ id: true }).extend(inputKeys('attribute')),
+  cardSchemas.equipment.omit({ id: true }).extend(inputKeys('equipment')),
+  cardSchemas.item.omit({ id: true }).extend(inputKeys('item')),
+  cardSchemas.randomEvent.omit({ id: true }).extend(inputKeys('randomEvent')),
+  cardSchemas.combatEvent.omit({ id: true }).extend(inputKeys('combatEvent')),
+])
+
+export const collectionFileSchema = z.strictObject({
+  name: text,
+  description: z.string().optional(),
+})

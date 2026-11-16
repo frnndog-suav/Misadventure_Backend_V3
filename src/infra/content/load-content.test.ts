@@ -67,7 +67,9 @@ describe('loadContent', () => {
     expect(result).toEqual({
       ok: true,
       content: {
-        collections: [{ id: 'fixture', name: 'Coleção de Teste' }],
+        collections: [
+          { id: 'fixture', name: 'Coleção de Teste', description: '' },
+        ],
         cards: [
           makeZoneCard(),
           makeAttributeCard(),
@@ -75,9 +77,67 @@ describe('loadContent', () => {
           makeItemCard(),
           makeRandomEventCard(),
           makeCombatEventCard(),
+        ].map((card) => ({ status: 'published', card })),
+      },
+    })
+  })
+
+  it('REQ-41/D-47: status e description dos arquivos (ausentes = published e "")', async () => {
+    await write('fixture/collection.json', {
+      name: 'Coleção de Teste',
+      description: 'Descrição.',
+    })
+    await write('fixture/attribute.json', [
+      { ...fileCard(makeAttributeCard()), status: 'draft' },
+    ])
+    await write('fixture/item.json', [
+      { ...fileCard(makeItemCard()), status: 'published' },
+    ])
+
+    const result = await loadContent(root)
+
+    expect(result).toEqual({
+      ok: true,
+      content: {
+        collections: [
+          {
+            id: 'fixture',
+            name: 'Coleção de Teste',
+            description: 'Descrição.',
+          },
+        ],
+        cards: [
+          { status: 'draft', card: makeAttributeCard() },
+          { status: 'published', card: makeItemCard() },
         ],
       },
     })
+  })
+
+  it('D-48: rascunhos também passam pelo schema e pela integridade no boot', async () => {
+    await write('fixture/collection.json', { name: 'Coleção de Teste' })
+    await write('fixture/attribute.json', [
+      {
+        ...fileCard(makeAttributeCard({ attributes: ['strength', 'luck'] })),
+        status: 'draft',
+      },
+      {
+        ...fileCard(
+          makeAttributeCard({ id: 'fixture.luck-basic', attributes: ['luck'] })
+        ),
+        status: 'rascunho',
+      },
+    ])
+
+    const result = await loadContent(root)
+
+    expect(!result.ok && result.problems.map((p) => p.field)).toEqual([
+      'status',
+      'attributes',
+    ])
+    expect(!result.ok && result.problems[1]?.message).toBe(
+      'Carta básica tem exatamente 1 atributo.'
+    )
   })
 
   it('REQ-10: arquivo de tipo ausente = nenhuma carta daquele tipo', async () => {
@@ -86,7 +146,9 @@ describe('loadContent', () => {
 
     const result = await loadContent(root)
 
-    expect(result.ok && result.content.cards).toEqual([makeItemCard()])
+    expect(result.ok && result.content.cards).toEqual([
+      { status: 'published', card: makeItemCard() },
+    ])
   })
 
   it('REQ-10: aceita a pasta de uma coleção ou um arquivo dela (validate:content)', async () => {
@@ -99,7 +161,7 @@ describe('loadContent', () => {
     ]) {
       const result = await loadContent(path)
       expect(result.ok && result.content.collections).toEqual([
-        { id: 'fixture', name: 'Coleção de Teste' },
+        { id: 'fixture', name: 'Coleção de Teste', description: '' },
       ])
     }
   })
@@ -110,10 +172,13 @@ describe('loadContent', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.content.collections).toEqual([
-      { id: 'fixture', name: 'Coleção de Teste' },
+      { id: 'fixture', name: 'Coleção de Teste', description: '' },
     ])
+    expect(result.content.cards.every((e) => e.status === 'published')).toBe(
+      true
+    )
     expect(
-      result.content.cards.map(({ id, type }) => [id, type]).sort()
+      result.content.cards.map(({ card: { id, type } }) => [id, type]).sort()
     ).toEqual([
       ['fixture.blade-of-dusk', 'equipment'],
       ['fixture.healing-potion', 'item'],
@@ -123,7 +188,9 @@ describe('loadContent', () => {
       ['fixture.wounded-traveler', 'randomEvent'],
     ])
     expect(
-      result.content.cards.find(({ id }) => id === 'fixture.strength-basic')
+      result.content.cards.find(
+        ({ card }) => card.id === 'fixture.strength-basic'
+      )?.card
     ).toEqual({
       type: 'attribute',
       id: 'fixture.strength-basic',

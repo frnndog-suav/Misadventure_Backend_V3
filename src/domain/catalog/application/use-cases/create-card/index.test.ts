@@ -116,7 +116,7 @@ describe('CreateCardUseCase', () => {
 
     expect(error).toMatchObject({
       details: {
-        fields: [{ path: 'attributes', reason: 'wrongAttributeCount' }],
+        fields: [{ path: 'attributes', reason: 'basicAttributeCount' }],
       },
     })
     expect(store.cards).toEqual([])

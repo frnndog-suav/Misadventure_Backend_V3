@@ -64,7 +64,7 @@ describe('PublishCardUseCase', () => {
     expect(result.value).toBeInstanceOf(ContentInvalidError)
     expect(result.value).toMatchObject({
       details: {
-        fields: [{ path: 'attributes', reason: 'wrongAttributeCount' }],
+        fields: [{ path: 'attributes', reason: 'basicAttributeCount' }],
       },
     })
     expect(store.cards[0]?.status).toBe('draft')

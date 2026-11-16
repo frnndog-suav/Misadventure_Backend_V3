@@ -217,7 +217,7 @@ describe('checkCatalogIntegrity', () => {
     it('REQ-15: básica com número de atributos diferente de 1', () => {
       expect(
         check([makeAttributeCard({ attributes: ['strength', 'luck'] })])
-      ).toEqual([issue('attributes', 'wrongAttributeCount')])
+      ).toEqual([issue('attributes', 'basicAttributeCount')])
     })
 
     it('REQ-15: aprimorada com número de atributos diferente de 1', () => {
@@ -229,7 +229,7 @@ describe('checkCatalogIntegrity', () => {
             effects: [{ text: 'Ao ser paga, compre 1 carta.' }],
           }),
         ])
-      ).toEqual([issue('attributes', 'wrongAttributeCount')])
+      ).toEqual([issue('attributes', 'enhancedAttributeCount')])
     })
 
     it('REQ-15: sinérgica fora de 2 a 4 atributos', () => {
@@ -239,7 +239,7 @@ describe('checkCatalogIntegrity', () => {
       ] as const) {
         expect(
           check([makeAttributeCard({ attributeKind: 'synergy', attributes })])
-        ).toEqual([issue('attributes', 'wrongAttributeCount')])
+        ).toEqual([issue('attributes', 'synergyAttributeCount')])
       }
     })
 

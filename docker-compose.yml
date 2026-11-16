@@ -25,6 +25,9 @@ services:
       LAB_ENABLED: 'true'
     ports:
       - '3333:3333'
+    # D-52: o que o editor grava cai no repositório (sem isso, morre com o container).
+    volumes:
+      - ./content:/app/content
     depends_on:
       postgres:
         condition: service_healthy
