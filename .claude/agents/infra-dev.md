@@ -20,7 +20,7 @@ Você liga o domínio ao mundo, sem colocar regra de negócio na infra. Leia ant
 - **Drizzle:** schema em `database/drizzle/schema/`, migração gerada para toda mudança de schema, mapper domínio ↔ linha, repositório implementa a porta. O estado do RNG é persistido junto com o agregado.
 - **Adaptadores determinísticos onde importa:** o adaptador de `Rng` usa algoritmo com semente; a semente inicial pode vir de fonte do sistema **só aqui na infra**, e fica salva.
 - **Env** validado na inicialização; segredos só em `.env` (fora do Git), com `.env.example` atualizado.
-- **Docker Compose:** banco e backend; dados locais fora do Git.
+- **Docker Compose:** banco e backend; dados locais fora do Git. Você edita os arquivos (`docker-compose.yml`, `Dockerfile`), mas **nunca** abre/fecha o Docker Desktop nem sobe/para/reconstrói containers: se precisar do banco ou do compose rodando, pare e diga ao agente principal qual comando o autor deve rodar (ex.: `docker compose up -d postgres`). Só leitura é permitida (`docker compose ps`, `docker compose logs`).
 - **domainEvent:** puxados do agregado após salvar e despachados/retornados conforme a spec.
 - Sem endpoint de depuração; sem lib nova sem autorização; sem `any`.
 

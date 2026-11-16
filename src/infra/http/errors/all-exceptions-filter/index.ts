@@ -23,12 +23,45 @@ const INTERNAL_ERROR: TErrorBody = {
   },
 }
 
-const LAB_CONFIG_INVALID_BODY = {
-  error: {
-    code: 'LAB_CONFIG_INVALID',
-    message: 'Configuração do laboratório inválida.',
-    details: { fields: [{ field: null, reason: 'invalidBody' }] },
+function invalidBody(code: string, message: string) {
+  return {
+    error: {
+      code,
+      message,
+      details: { fields: [{ field: null, reason: 'invalidBody' }] },
+    },
+  }
+}
+
+/**
+ * Corpo JSON malformado vira o erro de validação da área (D-17, T-13):
+ * prefixo do caminho → corpo da resposta 400.
+ */
+const INVALID_BODY_BY_PATH: readonly {
+  prefix: string
+  body: ReturnType<typeof invalidBody>
+}[] = [
+  {
+    prefix: '/lab/',
+    body: invalidBody(
+      'LAB_CONFIG_INVALID',
+      'Configuração do laboratório inválida.'
+    ),
   },
+  {
+    prefix: '/parties',
+    body: invalidBody('PARTY_INVALID', 'Dados do grupo inválidos.'),
+  },
+]
+
+function invalidBodyFor(url: string): ReturnType<typeof invalidBody> | null {
+  const path = url.split('?')[0] ?? ''
+  const match = INVALID_BODY_BY_PATH.find(({ prefix }) =>
+    prefix.endsWith('/')
+      ? path.startsWith(prefix)
+      : path === prefix || path.startsWith(`${prefix}/`)
+  )
+  return match?.body ?? null
 }
 
 /**
@@ -65,17 +98,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
     }
 
-    // D-14: corpo JSON malformado em /lab/* é um ajuste inválido.
-    if (
-      isBodyParseError(exception) &&
-      String(httpAdapter.getRequestUrl(http.getRequest())).startsWith('/lab/')
-    ) {
-      httpAdapter.reply(
-        response,
-        LAB_CONFIG_INVALID_BODY,
-        HttpStatus.BAD_REQUEST
+    // D-17: corpo JSON malformado em /lab/* ou /parties é um pedido inválido.
+    if (isBodyParseError(exception)) {
+      const body = invalidBodyFor(
+        String(httpAdapter.getRequestUrl(http.getRequest()))
       )
-      return
+      if (body) {
+        httpAdapter.reply(response, body, HttpStatus.BAD_REQUEST)
+        return
+      }
     }
 
     if (

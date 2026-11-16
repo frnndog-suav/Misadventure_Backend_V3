@@ -44,3 +44,34 @@ GET {{baseUrl}}/catalog/cards/base.dexterity-basic
 
 ### FEAT-04 — carta inexistente (404 CARD_NOT_FOUND)
 GET {{baseUrl}}/catalog/cards/base.nope
+
+### FEAT-05 — criar grupo de 1 (201 Party)
+# @name createParty
+POST {{baseUrl}}/parties
+Content-Type: application/json
+
+{ "name": "Os Teimosos", "characterName": "Lia" }
+
+### FEAT-05 — criação inválida (400 PARTY_INVALID: blank + tooLong)
+POST {{baseUrl}}/parties
+Content-Type: application/json
+
+{ "name": "   ", "characterName": "Um nome com mais de vinte e quatro letras" }
+
+### FEAT-05 — saves (200 PartySummary[], savedAt mais recente primeiro)
+GET {{baseUrl}}/parties
+
+### FEAT-05 — um save (200 Party)
+GET {{baseUrl}}/parties/{{createParty.response.body.id}}
+
+### FEAT-05 — continuar (200 Party inSession; repetir não muda nada)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/session
+
+### FEAT-05 — encerrar sessão (200 Party idle; repetir → 409 PARTY_SESSION_NOT_ACTIVE)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/session/end
+
+### FEAT-05 — abandonar (204; depois 404 PARTY_NOT_FOUND)
+DELETE {{baseUrl}}/parties/{{createParty.response.body.id}}
+
+### FEAT-05 — save inexistente (404 PARTY_NOT_FOUND)
+GET {{baseUrl}}/parties/00000000-0000-4000-8000-000000000000

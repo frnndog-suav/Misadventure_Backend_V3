@@ -31,7 +31,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 011 | T-09 | Rotas do catálogo (`/catalog/*`) e FEAT-04 `implementado (BE)` | concluída |
 | 012 | T-10 | Core: agregado, eventos, portas e RNG sfc32 | concluída |
 | 013 | T-11 | Domínio `campaign`: `Party`, saves, sessão, casos de uso | concluída |
-| 014 | T-12 | Persistência do save (`parties`) e adaptadores Clock/Ids/Seed | aguardando revisão |
+| 014 | T-12 | Persistência do save (`parties`) e adaptadores Clock/Ids/Seed | concluída |
+| 015 | T-13 | Rotas da campanha (`/parties`) e FEAT-05 `implementado (BE)` | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
@@ -41,4 +42,4 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 5. Agentes em `.claude/agents/`: `test-writer`, `domain-dev`, `infra-dev`, `spec-reviewer`, `content-author`.
 6. Reiniciar a sessão do Claude Code para carregar agentes e skills.
 7. `docs/devlog/tempo.html`: registro de tempo (array `SESSOES`); a `/registrar-etapa` acrescenta a sessão de cada etapa, perguntando as horas ao autor.
-8. Convenções do autor (2026-11-14): mensagem de commit sugerida sempre em inglês; Docker ligado só para testar e desligado ao terminar.
+8. Convenções do autor (2026-11-14): mensagem de commit sugerida sempre em inglês; Docker ligado só para testar e desligado ao terminar. Revisão 2026-11-15: o Docker é manual (o autor abre o Docker Desktop e sobe/para containers; o agente só pede e confere com `docker compose ps`).

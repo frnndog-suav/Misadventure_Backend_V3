@@ -27,7 +27,7 @@ git ls-files --others --exclude-standard
 - Mudança em `content/**` ou `test/fixtures/content/**` → testes do contexto `catalog` + `npm run validate:content`.
 
 ## 3. E2E (Supertest, `*.e2e-spec.ts`)
-Pré-requisito: banco no ar (`docker compose up -d`). Se não estiver, diga e pergunte se pode subir.
+Pré-requisito: banco no ar. Confira só com `docker compose ps` (leitura). Se não estiver, **não suba**: pare e peça ao autor para abrir o Docker Desktop e rodar `docker compose up -d postgres`; continue quando ele confirmar. Nunca derrube containers ao terminar; diga ao autor o que ele pode derrubar.
 
 `npm run test:e2e -- <arquivos e2e>` para:
 

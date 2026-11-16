@@ -99,7 +99,7 @@ TypeScript, NestJS, Drizzle ORM, PostgreSQL, Docker Compose, Vitest, Supertest; 
 - **Estilo:** Prettier (sem ponto e vírgula, aspas simples, vírgula final es5) a partir da FEAT-01. Rode `npm run format` antes de terminar.
 - **Verificação:** cada tarefa é verificada pelos testes, por comando (`curl`/`client.http`) e pelo roteiro de testes. Nenhum endpoint de depuração fora do laboratório.
 - **Commits:** o autor faz. O agente só sugere a mensagem, sempre **em inglês**, no formato `type/short description in lowercase` (ex.: `chore/backend foundation`).
-- **Docker:** ligue só quando for testar algo e desligue ao terminar (`docker compose down` e Docker Desktop parado).
+- **Docker (manual, só o autor):** o agente **nunca** abre ou fecha o Docker Desktop nem roda/para containers (`docker compose up/down/start/stop/restart/build`, `docker run/stop`). Quando algo precisar do Docker (e2e, migração, roteiro de testes), **pare e peça ao autor**: abrir o Docker Desktop e qual comando rodar (ex.: `docker compose up -d postgres`); ao terminar, diga o que ele pode derrubar. Comandos só de leitura (`docker compose ps`, `docker compose logs`) são permitidos para conferir o estado.
 - **Datas** absolutas (AAAA-MM-DD) em tudo o que é registrado.
 
 ## Guardas automáticas
@@ -110,7 +110,7 @@ TypeScript, NestJS, Drizzle ORM, PostgreSQL, Docker Compose, Vitest, Supertest; 
 ## Comandos (existem a partir da FEAT-01)
 
 ```
-docker compose up -d
+docker compose up -d        # o autor roda (ver "Docker" acima)
 npm run start:dev
 npm test
 npx vitest related --run <arquivos>
