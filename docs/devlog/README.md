@@ -35,6 +35,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 015 | T-13 | Rotas da campanha (`/parties`) e FEAT-05 `implementado (BE)` | concluída |
 | 016 | retorno | FEAT-05 `validado` (CONTRATO v0.17, ROADMAP v0.21) | concluída |
 | 017 | retorno | ROADMAP v0.22 (FEAT-30, só FE) | concluída |
+| 018 | T-19 | Domínio do editor (FEAT-31): portas, 15 casos de uso, erros, fakes | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

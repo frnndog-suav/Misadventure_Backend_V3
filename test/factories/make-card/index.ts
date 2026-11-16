@@ -1,5 +1,6 @@
 import type {
   TAttributeCard,
+  TCard,
   TCollection,
   TCombatEventCard,
   TEnemy,
@@ -166,4 +167,13 @@ export function makeCombatEventCard(
     noEscape: false,
     ...override,
   }
+}
+
+/** O `Card` como corpo de `CardInput`: sem `id` e `collectionId`, com `slug`. */
+export function toCardInput(
+  card: TCard,
+  slug?: string
+): Record<string, unknown> {
+  const { id, collectionId, ...rest } = card
+  return { ...rest, slug: slug ?? id.slice(collectionId.length + 1) }
 }
