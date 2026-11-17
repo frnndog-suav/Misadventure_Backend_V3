@@ -12,6 +12,7 @@ import type {
 } from '@/domain/catalog/enterprise/value-objects/card'
 import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
+import { connectedZones } from '../../connected-zones'
 import type { TPartyEvent } from '../../events/party-events'
 import { assembleMap, type TPartyMap } from '../../map-assembly'
 import { createStartingPlayer } from '../../starting-player'
@@ -320,6 +321,64 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         return _exhaustive
       }
     }
+  }
+
+  /**
+   * Movimentar (README 12.2; REQ-51 a REQ-53). Até a FEAT-08 quem age é o host
+   * (D-61). Ordem das recusas: fora de sessão, zona fora do mapa, zona sem
+   * travessia (inclusive a própria). Recusado, nada muda. O RNG não é usado.
+   */
+  move(
+    zoneId: string,
+    at: Date
+  ): Either<'sessionNotActive' | 'zoneNotInMap' | 'notConnected', void> {
+    switch (this.props.status) {
+      case 'idle':
+        return left('sessionNotActive')
+      case 'inSession':
+        break
+      default: {
+        const _exhaustive: never = this.props.status
+        return _exhaustive
+      }
+    }
+
+    const { map } = this.props.dimension
+    if (!map.zones.some((zone) => zone.zoneId === zoneId)) {
+      return left('zoneNotInMap')
+    }
+
+    const index = this.props.members.findIndex((member) =>
+      member.id.equals(this.props.hostMemberId)
+    )
+    const host = this.props.members[index]
+    const fromZoneId = host.player.zoneId
+    if (!connectedZones(map, fromZoneId).includes(zoneId)) {
+      return left('notConnected')
+    }
+
+    this.props.members = this.props.members.map((member, i) =>
+      i === index
+        ? PartyMember.create(
+            {
+              characterName: member.characterName,
+              kind: member.kind,
+              player: { ...member.player, zoneId },
+            },
+            member.id
+          )
+        : member
+    )
+    this.props.savedAt = at
+    this.addDomainEvent({
+      type: 'PlayerMoved',
+      memberId: host.id,
+      fromZoneId,
+      toZoneId: zoneId,
+      occurredAt: at,
+      aggregateId: this.id,
+    })
+    return right(undefined)
   }
 
   /** Abandonar (REQ-24): vale em qualquer status; o save é apagado pelo repositório. */

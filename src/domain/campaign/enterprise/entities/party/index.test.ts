@@ -12,7 +12,9 @@ import { makeParty } from '../../../../../../test/factories/make-party'
 import { fixedClock } from '../../../../../../test/fakes/fixed-clock'
 import { sequentialIds } from '../../../../../../test/fakes/sequential-ids'
 
+import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { assembleMap } from '../../map-assembly'
+import { PartyMember } from '../party-member'
 import { createStartingPlayer } from '../../starting-player'
 import { Party, type TCreatePartyInput } from '.'
 
@@ -436,5 +438,149 @@ describe('Party', () => {
     expect(party.pullDomainEvents().map((e) => e.type)).toEqual([
       'PartyAbandoned',
     ])
+  })
+
+  describe('move (REQ-51, REQ-52)', () => {
+    const HARBOR = 'fixture.gray-harbor'
+    const MINE = 'fixture.old-mine'
+    // Mapa de 3 zonas: porto—mina com travessia; a ilha está no mapa sem travessia.
+    const dimension = {
+      dimensionCardId: 'fixture.test-dimension',
+      startingCityZoneId: HARBOR,
+      map: {
+        zones: [
+          { zoneId: HARBOR, x: 0, y: 0, arrows: ['east'] as const },
+          { zoneId: MINE, x: 1, y: 0, arrows: ['west'] as const },
+          { zoneId: 'fixture.island', x: 5, y: 5, arrows: [] as const },
+        ],
+        crossings: [{ zoneIds: [HARBOR, MINE] as const }],
+      },
+    }
+    const inSession = () =>
+      makeParty({ status: 'inSession', dimension, savedAt: NOW })
+
+    it('REQ-51: move para zona conectada: zoneId muda, o resto do jogador não', () => {
+      const party = inSession()
+      const before = party.members[0].player
+
+      const result = party.move(MINE, LATER)
+
+      expect(result.isRight()).toBe(true)
+      const after = party.members[0].player
+      expect(after.zoneId).toBe(MINE)
+      expect(after.respawnZoneId).toBe(HARBOR)
+      expect({ ...after, zoneId: before.zoneId }).toEqual(before)
+      expect(party.savedAt.toISOString()).toBe(LATER.toISOString())
+    })
+
+    it('REQ-51: PlayerMoved com membro, origem e destino', () => {
+      const party = inSession()
+
+      party.move(MINE, LATER)
+
+      const events = party.pullDomainEvents()
+      expect(events.map((e) => e.type)).toEqual(['PlayerMoved'])
+      const moved = events[0]
+      if (moved.type !== 'PlayerMoved') throw new Error('evento errado')
+      expect(moved.memberId.toString()).toBe('member-1')
+      expect(moved.fromZoneId).toBe(HARBOR)
+      expect(moved.toZoneId).toBe(MINE)
+      expect(moved.aggregateId.equals(party.id)).toBe(true)
+      expect(moved.occurredAt.toISOString()).toBe(LATER.toISOString())
+    })
+
+    it('REQ-51: mover de novo, inclusive de volta, é aceito; eventos em ordem', () => {
+      const party = inSession()
+
+      expect(party.move(MINE, LATER).isRight()).toBe(true)
+      expect(party.move(HARBOR, LATER).isRight()).toBe(true)
+      expect(party.move(MINE, LATER).isRight()).toBe(true)
+
+      expect(party.members[0].player.zoneId).toBe(MINE)
+      const route = party
+        .pullDomainEvents()
+        .map((e) =>
+          e.type === 'PlayerMoved' ? `${e.fromZoneId}>${e.toZoneId}` : e.type
+        )
+      expect(route).toEqual([
+        `${HARBOR}>${MINE}`,
+        `${MINE}>${HARBOR}`,
+        `${HARBOR}>${MINE}`,
+      ])
+    })
+
+    it('REQ-51: quem move é o host, mesmo que não seja o 1º membro (D-61)', () => {
+      const base = inSession()
+      const host = base.members[0]
+      const other = PartyMember.create(
+        { characterName: 'Bo', kind: 'human', player: host.player },
+        new UniqueEntityID('member-0')
+      )
+      const party = makeParty({
+        status: 'inSession',
+        dimension,
+        members: [other, host],
+        hostMemberId: host.id,
+      })
+
+      party.move(MINE, LATER)
+
+      expect(party.members[0].player.zoneId).toBe(HARBOR)
+      expect(party.members[1].player.zoneId).toBe(MINE)
+    })
+
+    it('REQ-51: o RNG não é consumido', () => {
+      const party = inSession()
+      const before = [...party.rngState]
+
+      party.move(MINE, LATER)
+
+      expect([...party.rngState]).toEqual(before)
+    })
+
+    it('REQ-52: zona que não é do mapa → zoneNotInMap, nada muda', () => {
+      const party = inSession()
+
+      const result = party.move('fixture.nowhere', LATER)
+
+      expect(result.isLeft()).toBe(true)
+      if (result.isLeft()) expect(result.value).toBe('zoneNotInMap')
+      expect(party.members[0].player.zoneId).toBe(HARBOR)
+      expect(party.savedAt.toISOString()).toBe(NOW.toISOString())
+      expect(party.pullDomainEvents()).toEqual([])
+    })
+
+    it('REQ-52: zona do mapa sem travessia → notConnected, nada muda', () => {
+      const party = inSession()
+
+      const result = party.move('fixture.island', LATER)
+
+      expect(result.isLeft()).toBe(true)
+      if (result.isLeft()) expect(result.value).toBe('notConnected')
+      expect(party.members[0].player.zoneId).toBe(HARBOR)
+      expect(party.savedAt.toISOString()).toBe(NOW.toISOString())
+      expect(party.pullDomainEvents()).toEqual([])
+    })
+
+    it('REQ-52: a própria zona atual → notConnected', () => {
+      const party = inSession()
+
+      const result = party.move(HARBOR, LATER)
+
+      expect(result.isLeft()).toBe(true)
+      if (result.isLeft()) expect(result.value).toBe('notConnected')
+      expect(party.pullDomainEvents()).toEqual([])
+    })
+
+    it('REQ-53: fora de sessão → sessionNotActive, antes de conferir a zona', () => {
+      const party = makeParty({ status: 'idle', dimension, savedAt: NOW })
+
+      const result = party.move('fixture.nowhere', LATER)
+
+      expect(result.isLeft()).toBe(true)
+      if (result.isLeft()) expect(result.value).toBe('sessionNotActive')
+      expect(party.savedAt.toISOString()).toBe(NOW.toISOString())
+      expect(party.pullDomainEvents()).toEqual([])
+    })
   })
 })

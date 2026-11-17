@@ -36,6 +36,14 @@ export interface SessionEndedEvent extends DomainEvent {
   readonly type: 'SessionEnded'
 }
 
+/** Movimentar (README 12.2; REQ-51). */
+export interface PlayerMovedEvent extends DomainEvent {
+  readonly type: 'PlayerMoved'
+  readonly memberId: UniqueEntityID
+  readonly fromZoneId: string
+  readonly toZoneId: string
+}
+
 /** Registrado antes de apagar o save, para o despacho. */
 export interface PartyAbandonedEvent extends DomainEvent {
   readonly type: 'PartyAbandoned'
@@ -49,4 +57,5 @@ export type TPartyEvent =
   | PlayersArrivedEvent
   | SessionStartedEvent
   | SessionEndedEvent
+  | PlayerMovedEvent
   | PartyAbandonedEvent
