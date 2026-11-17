@@ -2,10 +2,20 @@ import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { type Either, left, right } from '@/core/error/either'
 import { AggregateRoot } from '@/core/pattern/aggregate-root'
 import type { IdGenerator } from '@/core/ports/id-generator'
-import type { RngState } from '@/core/rng/seeded-rng'
+import { type RngState, SeededRng } from '@/core/rng/seeded-rng'
+import { checkDimensionComposition } from '@/domain/catalog/enterprise/dimension-composition'
+import type {
+  TAttributeCard,
+  TClassDefinition,
+  TDimensionCard,
+  TZoneCard,
+} from '@/domain/catalog/enterprise/value-objects/card'
 import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
 import type { TPartyEvent } from '../../events/party-events'
+import { assembleMap, type TPartyMap } from '../../map-assembly'
+import { createStartingPlayer } from '../../starting-player'
+import { rollTurnOrder } from '../../turn-order'
 import { PartyMember } from '../party-member'
 
 /** Limites de CONTRATO FEAT-05 (`CreatePartyRequest`, D-30). */
@@ -15,14 +25,31 @@ export const CHARACTER_NAME_MAX_LENGTH = 24
 /** Máquina de estados do save (D-27); `frozen` entra na FEAT-19. */
 export type TPartyStatus = 'idle' | 'inSession'
 
-/** Motivos de CONTRATO FEAT-05 (`PartyInvalidDetails`). */
+/** Motivos de CONTRATO FEAT-05/FEAT-06 (`PartyInvalidDetails`). */
 export type TPartyIssue =
   | { field: null; reason: 'invalidBody' }
   | {
       field: 'name' | 'characterName'
       reason: 'required' | 'notString' | 'blank' | 'tooLong'
     }
+  | { field: 'playerClass'; reason: 'required' | 'notString' | 'unknownClass' }
   | { field: 'members'; reason: 'belowMinPlayers' }
+
+/** Por que a criação falhou: dados do pedido (REQ-17, REQ-35) ou conteúdo (REQ-36). */
+export type TCreatePartyFailure =
+  | { type: 'invalid'; issues: TPartyIssue[] }
+  | {
+      type: 'dimensionInvalid'
+      dimensionCardId: string | null
+      problems: string[]
+    }
+
+/** Dimensão do grupo (D-42; CONTRATO `PartyDimension`). */
+export type TPartyDimension = Readonly<{
+  dimensionCardId: string
+  startingCityZoneId: string
+  map: TPartyMap
+}>
 
 export interface TPartyProps {
   name: string
@@ -32,18 +59,34 @@ export interface TPartyProps {
   /** Cópia da `GameConfig` na criação (D-11, REQ-23). */
   config: TGameConfigValues
   rngState: RngState
+  dimension: TPartyDimension
+  /** Ids de membro, do 1º ao último (REQ-33). */
+  turnOrder: UniqueEntityID[]
   createdAt: Date
   savedAt: Date
 }
 
 export interface TCreatePartyInput {
-  /** Ainda não validados (REQ-17). */
+  /** Ainda não validados (REQ-17, REQ-35). */
   name: unknown
   characterName: unknown
+  playerClass: unknown
+  /** A classe publicada de `playerClass` (ou `null` se não houver). */
+  classDefinition: TClassDefinition | null
+  /** Cartas de atributo do `starterDeck` da classe. */
+  attributeCards: readonly TAttributeCard[]
+  /** A Carta de Dimensão publicada de menor `releaseOrder` (ou `null`). */
+  dimension: TDimensionCard | null
+  /** Zonas publicadas da coleção da dimensão. */
+  zones: readonly TZoneCard[]
   config: TGameConfigValues
   rngState: RngState
   now: Date
 }
+
+/** Texto do limite de tentativas do gerador (D-44). */
+export const mapAttemptsProblem = (attempts: number): string =>
+  `O gerador não montou o mapa dentro do limite de tentativas (mapMaxAttempts = ${attempts}).`
 
 /** O grupo é o save (README 28.1, D-27). */
 export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
@@ -71,6 +114,14 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return this.props.rngState
   }
 
+  get dimension(): TPartyDimension {
+    return this.props.dimension
+  }
+
+  get turnOrder(): readonly UniqueEntityID[] {
+    return [...this.props.turnOrder]
+  }
+
   get createdAt(): Date {
     return this.props.createdAt
   }
@@ -84,13 +135,16 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   }
 
   /**
-   * Grupo de 1 com o host (REQ-16, REQ-17). Os ids só são gerados quando os
-   * dados são válidos. Problemas na ordem `name`, `characterName`, `members`.
+   * Grupo de 1 com o host, já preparado (README 10.1; REQ-16, REQ-17, REQ-31
+   * a REQ-36). Primeiro os dados do pedido (problemas na ordem `name`,
+   * `characterName`, `playerClass`, `members`), depois a dimensão. Os ids só
+   * são gerados quando tudo é válido. Sorteios na ordem: mapa, deck de cada
+   * membro, ordem dos jogadores.
    */
   static create(
     input: TCreatePartyInput,
     ids: IdGenerator
-  ): Either<TPartyIssue[], Party> {
+  ): Either<TCreatePartyFailure, Party> {
     const issues: TPartyIssue[] = []
     const name = checkName('name', input.name, PARTY_NAME_MAX_LENGTH, issues)
     const characterName = checkName(
@@ -99,45 +153,107 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       CHARACTER_NAME_MAX_LENGTH,
       issues
     )
+    const classDefinition = checkPlayerClass(input, issues)
     const memberCount = 1
     if (memberCount < input.config.minPlayers) {
       issues.push({ field: 'members', reason: 'belowMinPlayers' })
     }
 
-    if (issues.length > 0 || name === null || characterName === null) {
-      return left(issues)
+    if (
+      issues.length > 0 ||
+      name === null ||
+      characterName === null ||
+      classDefinition === null
+    ) {
+      return left({ type: 'invalid', issues })
     }
+
+    const { dimension, zones } = input
+    const problems = checkDimensionComposition({ dimension, zones })
+    if (dimension === null || problems.length > 0) {
+      return left({
+        type: 'dimensionInvalid',
+        dimensionCardId: dimension?.id ?? null,
+        problems,
+      })
+    }
+
+    const rng = SeededRng.fromState(input.rngState)
+    const assembled = assembleMap({
+      zones,
+      arrivalZoneTitle: dimension.arrivalZoneTitle,
+      rng,
+      maxAttempts: input.config.mapMaxAttempts,
+    })
+    if (assembled.isLeft()) {
+      return left({
+        type: 'dimensionInvalid',
+        dimensionCardId: dimension.id,
+        problems: [mapAttemptsProblem(input.config.mapMaxAttempts)],
+      })
+    }
+    const { startingCityZoneId, map } = assembled.value
 
     const partyId = ids.next()
     const host = PartyMember.create(
-      { characterName, kind: 'human' },
+      {
+        characterName,
+        kind: 'human',
+        player: createStartingPlayer({
+          config: input.config,
+          classDefinition,
+          attributeCards: input.attributeCards,
+          startingCityZoneId,
+          rng,
+        }),
+      },
       ids.next()
     )
+    const members = [host]
+    const turnOrder = rollTurnOrder(
+      members.map((member) => member.id),
+      rng
+    )
+
     const party = new Party(
       {
         name,
-        members: [host],
+        members,
         hostMemberId: host.id,
         status: 'idle',
         config: { ...input.config },
-        rngState: input.rngState,
+        rngState: rng.state(),
+        dimension: { dimensionCardId: dimension.id, startingCityZoneId, map },
+        turnOrder,
         createdAt: input.now,
         savedAt: input.now,
       },
       partyId
     )
-    party.addDomainEvent({
-      type: 'PartyCreated',
-      occurredAt: input.now,
-      aggregateId: partyId,
-    })
+    const at = { occurredAt: input.now, aggregateId: partyId }
+    party.addDomainEvent({ type: 'PartyCreated', ...at })
+    party.addDomainEvent({ type: 'MapAssembled', ...at })
+    for (const member of members) {
+      party.addDomainEvent({
+        type: 'StarterDeckGiven',
+        memberId: member.id,
+        ...at,
+      })
+    }
+    party.addDomainEvent({ type: 'TurnOrderDecided', ...at })
+    party.addDomainEvent({ type: 'PlayersArrived', ...at })
     return right(party)
   }
 
   /** Reconstrói um save gravado (repositórios, factories). Não registra eventos. */
   static restore(props: TPartyProps, id: UniqueEntityID): Party {
     return new Party(
-      { ...props, members: [...props.members], config: { ...props.config } },
+      {
+        ...props,
+        members: [...props.members],
+        config: { ...props.config },
+        turnOrder: [...props.turnOrder],
+      },
       id
     )
   }
@@ -195,6 +311,26 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       aggregateId: this.id,
     })
   }
+}
+
+/** REQ-35: `unknownClass` quando o texto não tem classe publicada. */
+function checkPlayerClass(
+  { playerClass, classDefinition }: TCreatePartyInput,
+  issues: TPartyIssue[]
+): TClassDefinition | null {
+  if (playerClass === undefined) {
+    issues.push({ field: 'playerClass', reason: 'required' })
+    return null
+  }
+  if (typeof playerClass !== 'string') {
+    issues.push({ field: 'playerClass', reason: 'notString' })
+    return null
+  }
+  if (classDefinition === null || classDefinition.playerClass !== playerClass) {
+    issues.push({ field: 'playerClass', reason: 'unknownClass' })
+    return null
+  }
+  return classDefinition
 }
 
 function checkName(

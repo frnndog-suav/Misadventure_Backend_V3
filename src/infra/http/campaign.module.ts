@@ -5,6 +5,7 @@ import { SeedGenerator } from '@/core/ports/seed-generator'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import { AbandonPartyUseCase } from '@/domain/campaign/application/use-cases/abandon-party'
 import { CreatePartyUseCase } from '@/domain/campaign/application/use-cases/create-party'
+import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import { EndSessionUseCase } from '@/domain/campaign/application/use-cases/end-session'
 import { GetPartyUseCase } from '@/domain/campaign/application/use-cases/get-party'
 import { ListPartiesUseCase } from '@/domain/campaign/application/use-cases/list-parties'
@@ -48,6 +49,7 @@ import { StartSessionController } from './controllers/start-session/index.contro
       inject: [
         PartiesRepository,
         GetGameConfigUseCase,
+        CardCatalog,
         Clock,
         IdGenerator,
         SeedGenerator,
@@ -55,10 +57,19 @@ import { StartSessionController } from './controllers/start-session/index.contro
       useFactory: (
         parties: PartiesRepository,
         getGameConfig: GetGameConfigUseCase,
+        catalog: CardCatalog,
         clock: Clock,
         ids: IdGenerator,
         seeds: SeedGenerator
-      ) => new CreatePartyUseCase(parties, getGameConfig, clock, ids, seeds),
+      ) =>
+        new CreatePartyUseCase(
+          parties,
+          getGameConfig,
+          catalog,
+          clock,
+          ids,
+          seeds
+        ),
     },
     {
       provide: ListPartiesUseCase,

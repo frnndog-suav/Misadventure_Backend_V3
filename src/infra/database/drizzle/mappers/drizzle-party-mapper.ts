@@ -3,13 +3,20 @@ import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { RngState } from '@/core/rng/seeded-rng'
 import { Party } from '@/domain/campaign/enterprise/entities/party'
 import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
+import { DIRECTIONS } from '@/domain/campaign/enterprise/map-assembly'
+import {
+  MODIFIERS,
+  PLAYER_CLASSES,
+  type TModifier,
+} from '@/domain/catalog/enterprise/value-objects/card'
 import {
   GAME_CONFIG_DEFAULTS,
   type TGameConfigKey,
   type TGameConfigValues,
 } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
-const SCHEMA_VERSION = 1
+// D-43: save v2 (FEAT-06). Os saves v1 são apagados pela migração 0002 (T-17).
+const SCHEMA_VERSION = 2
 
 const uint32 = z
   .number()
@@ -26,6 +33,54 @@ const configSchema = z.strictObject(
   ) as Record<TGameConfigKey, z.ZodNumber>
 )
 
+const modifiersSchema = z.strictObject(
+  Object.fromEntries(MODIFIERS.map((m) => [m, z.number().int()])) as Record<
+    TModifier,
+    z.ZodNumber
+  >
+)
+
+const id = z.string().min(1)
+
+const playerSchema = z.strictObject({
+  playerClasses: z.array(
+    z.strictObject({
+      playerClass: z.enum(PLAYER_CLASSES),
+      deckLockMet: z.boolean(),
+    })
+  ),
+  build: z.array(
+    z.strictObject({ cardId: id, copies: z.number().int().min(1) })
+  ),
+  deck: z.array(id),
+  hand: z.array(id),
+  discard: z.array(id),
+  gold: z.number().int(),
+  baseHealth: z.number().int(),
+  health: z.number().int(),
+  peak: z.number().int(),
+  vigor: z.number().int(),
+  modifiers: modifiersSchema,
+  zoneId: id,
+  respawnZoneId: id,
+})
+
+const dimensionSchema = z.strictObject({
+  dimensionCardId: id,
+  startingCityZoneId: id,
+  map: z.strictObject({
+    zones: z.array(
+      z.strictObject({
+        zoneId: id,
+        x: z.number().int(),
+        y: z.number().int(),
+        arrows: z.array(z.enum(DIRECTIONS)),
+      })
+    ),
+    crossings: z.array(z.strictObject({ zoneIds: z.tuple([id, id]) })),
+  }),
+})
+
 // D-31: o banco não valida o jsonb; o mapper valida antes de `SeededRng.fromState` (D-32).
 const stateSchema = z
   .strictObject({
@@ -33,15 +88,18 @@ const stateSchema = z
     members: z
       .array(
         z.strictObject({
-          id: z.string().min(1),
+          id,
           characterName: z.string().min(1),
           kind: z.literal('human'),
+          player: playerSchema,
         })
       )
       .min(1),
-    hostMemberId: z.string().min(1),
+    hostMemberId: id,
     config: configSchema,
     rngState: z.tuple([uint32, uint32, uint32, uint32]),
+    dimension: dimensionSchema,
+    turnOrder: z.array(id),
   })
   .refine((state) => state.members.some((m) => m.id === state.hostMemberId), {
     message: 'hostMemberId fora dos membros',
@@ -71,7 +129,7 @@ export class DrizzlePartyMapper {
         name: row.name,
         members: state.members.map((m) =>
           PartyMember.create(
-            { characterName: m.characterName, kind: m.kind },
+            { characterName: m.characterName, kind: m.kind, player: m.player },
             new UniqueEntityID(m.id)
           )
         ),
@@ -79,6 +137,8 @@ export class DrizzlePartyMapper {
         status,
         config: state.config satisfies TGameConfigValues,
         rngState: state.rngState satisfies RngState,
+        dimension: state.dimension,
+        turnOrder: state.turnOrder.map((m) => new UniqueEntityID(m)),
         createdAt: row.createdAt,
         savedAt: row.savedAt,
       },
@@ -88,6 +148,7 @@ export class DrizzlePartyMapper {
 
   static toDrizzle(party: Party): TPartyRow & { state: TPartyState } {
     const [a, b, c, d] = party.rngState
+    const { dimensionCardId, startingCityZoneId, map } = party.dimension
     return {
       id: party.id.toString(),
       name: party.name,
@@ -100,10 +161,30 @@ export class DrizzlePartyMapper {
           id: m.id.toString(),
           characterName: m.characterName,
           kind: m.kind,
+          player: {
+            ...m.player,
+            playerClasses: m.player.playerClasses.map((c) => ({ ...c })),
+            build: m.player.build.map((e) => ({ ...e })),
+            deck: [...m.player.deck],
+            hand: [...m.player.hand],
+            discard: [...m.player.discard],
+            modifiers: { ...m.player.modifiers },
+          },
         })),
         hostMemberId: party.hostMemberId.toString(),
         config: party.config,
         rngState: [a, b, c, d],
+        dimension: {
+          dimensionCardId,
+          startingCityZoneId,
+          map: {
+            zones: map.zones.map((z) => ({ ...z, arrows: [...z.arrows] })),
+            crossings: map.crossings.map(({ zoneIds: [first, second] }) => ({
+              zoneIds: [first, second],
+            })),
+          },
+        },
+        turnOrder: party.turnOrder.map((m) => m.toString()),
       },
     }
   }

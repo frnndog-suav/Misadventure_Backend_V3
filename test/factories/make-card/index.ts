@@ -226,3 +226,84 @@ export function makeClassDefinition(
     ...override,
   }
 }
+
+/**
+ * O conteúdo da `fixture` de CONTRATO FEAT-06, só publicado: 4 zonas
+ * (Porto Cinzento em `urban` com 4 setas, `straight`, `corner`, 1 seta),
+ * `fixture.test-dimension` e as classes `warrior` (30 + 30) e `rogue`.
+ */
+export function makeFixtureContent(): {
+  collections: TCollection[]
+  cards: TCard[]
+  classes: TClassDefinition[]
+} {
+  return {
+    collections: [makeCollection()],
+    cards: [
+      makeUrbanZoneCard(),
+      makeZoneCard(),
+      makeZoneCard({
+        id: 'fixture.stone-bend',
+        title: 'Curva de Pedra',
+        arrowLayout: 'corner',
+      }),
+      makeZoneCard({
+        id: 'fixture.old-mine',
+        title: 'Mina Velha',
+        connectionArrows: 1,
+        arrowLayout: null,
+      }),
+      makeDimensionCard({
+        id: 'fixture.test-dimension',
+        name: 'Dimensão de Teste',
+      }),
+      makeAttributeCard(),
+      makeAttributeCard({
+        id: 'fixture.endurance-basic',
+        name: 'Resistência',
+        attributes: ['endurance'],
+      }),
+      makeAttributeCard({
+        id: 'fixture.dexterity-basic',
+        name: 'Destreza',
+        attributes: ['dexterity'],
+      }),
+    ],
+    classes: [
+      makeClassDefinition({
+        essentialAttributes: ['strength', 'endurance'],
+        baseModifiers: {
+          attack: 6,
+          defense: 5,
+          accuracy: 45,
+          evasion: 15,
+          celerity: 8,
+          piercing: 0,
+          reflection: 0,
+        },
+        starterDeck: [
+          { cardId: 'fixture.endurance-basic', copies: 30 },
+          { cardId: 'fixture.strength-basic', copies: 30 },
+        ],
+      }),
+      makeClassDefinition({
+        playerClass: 'rogue',
+        name: 'Ladino',
+        essentialAttributes: ['dexterity'],
+        baseModifiers: {
+          attack: 5,
+          defense: 2,
+          accuracy: 46,
+          evasion: 22,
+          celerity: 12,
+          piercing: 0,
+          reflection: 0,
+        },
+        starterDeck: [
+          { cardId: 'fixture.dexterity-basic', copies: 40 },
+          { cardId: 'fixture.strength-basic', copies: 20 },
+        ],
+      }),
+    ],
+  }
+}

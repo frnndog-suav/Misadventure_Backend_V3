@@ -1,20 +1,42 @@
 import { describe, expect, it } from 'vitest'
 
 import { SeededRng } from '@/core/rng/seeded-rng'
+import type {
+  TAttributeCard,
+  TDimensionCard,
+  TZoneCard,
+} from '@/domain/catalog/enterprise/value-objects/card'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
+import { makeFixtureContent } from '../../../../../../test/factories/make-card'
 import { makeParty } from '../../../../../../test/factories/make-party'
 import { fixedClock } from '../../../../../../test/fakes/fixed-clock'
 import { sequentialIds } from '../../../../../../test/fakes/sequential-ids'
 
+import { assembleMap } from '../../map-assembly'
+import { createStartingPlayer } from '../../starting-player'
 import { Party, type TCreatePartyInput } from '.'
 
 const NOW = fixedClock('2026-11-14T12:00:00.000Z').now()
 const LATER = fixedClock('2026-11-14T13:00:00.000Z').now()
 
+const FIXTURE = makeFixtureContent()
+const warrior = FIXTURE.classes[0]
+const dimension =
+  FIXTURE.cards.find((c): c is TDimensionCard => c.type === 'dimension') ?? null
+const zones = FIXTURE.cards.filter((c): c is TZoneCard => c.type === 'zone')
+const attributeCards = FIXTURE.cards.filter(
+  (c): c is TAttributeCard => c.type === 'attribute'
+)
+
 function input(override: Partial<TCreatePartyInput> = {}): TCreatePartyInput {
   return {
     name: 'Os Teimosos',
     characterName: 'Lia',
+    playerClass: 'warrior',
+    classDefinition: warrior,
+    attributeCards,
+    dimension,
+    zones,
     config: { ...GAME_CONFIG_DEFAULTS },
     rngState: SeededRng.fromSeed(42).state(),
     now: NOW,
@@ -41,12 +63,21 @@ describe('Party', () => {
     expect(party.savedAt.toISOString()).toBe(NOW.toISOString())
   })
 
-  it('REQ-16: registra PartyCreated', () => {
+  it('REQ-16/REQ-31: registra PartyCreated e os eventos da preparação, na ordem', () => {
     const result = Party.create(input(), sequentialIds('p'))
     if (!result.isRight()) throw new Error('esperava sucesso')
 
     const events = result.value.pullDomainEvents()
-    expect(events.map((e) => e.type)).toEqual(['PartyCreated'])
+    expect(events.map((e) => e.type)).toEqual([
+      'PartyCreated',
+      'MapAssembled',
+      'StarterDeckGiven',
+      'TurnOrderDecided',
+      'PlayersArrived',
+    ])
+    const given = events[2]
+    if (given.type !== 'StarterDeckGiven') throw new Error('evento errado')
+    expect(given.memberId.toString()).toBe('p-2')
     expect(events[0].aggregateId.equals(result.value.id)).toBe(true)
     expect(events[0].occurredAt.toISOString()).toBe(NOW.toISOString())
   })
@@ -83,7 +114,10 @@ describe('Party', () => {
 
     expect(result.isLeft()).toBe(true)
     if (result.isLeft())
-      expect(result.value).toEqual([{ field: 'name', reason }])
+      expect(result.value).toEqual({
+        type: 'invalid',
+        issues: [{ field: 'name', reason }],
+      })
   })
 
   it.each([
@@ -96,7 +130,10 @@ describe('Party', () => {
 
     expect(result.isLeft()).toBe(true)
     if (result.isLeft())
-      expect(result.value).toEqual([{ field: 'characterName', reason }])
+      expect(result.value).toEqual({
+        type: 'invalid',
+        issues: [{ field: 'characterName', reason }],
+      })
   })
 
   it('REQ-17: minPlayers > 1 → belowMinPlayers, depois dos campos', () => {
@@ -111,11 +148,14 @@ describe('Party', () => {
 
     expect(result.isLeft()).toBe(true)
     if (result.isLeft())
-      expect(result.value).toEqual([
-        { field: 'name', reason: 'blank' },
-        { field: 'characterName', reason: 'tooLong' },
-        { field: 'members', reason: 'belowMinPlayers' },
-      ])
+      expect(result.value).toEqual({
+        type: 'invalid',
+        issues: [
+          { field: 'name', reason: 'blank' },
+          { field: 'characterName', reason: 'tooLong' },
+          { field: 'members', reason: 'belowMinPlayers' },
+        ],
+      })
   })
 
   it('REQ-17: criação inválida não consome ids', () => {
@@ -133,6 +173,212 @@ describe('Party', () => {
     config.actionPointsPerTurn = 4
 
     expect(result.value.config.actionPointsPerTurn).toBe(3)
+  })
+
+  it('REQ-31: o grupo nasce preparado: dimensão, mapa, ordem e jogador na cidade inicial', () => {
+    const result = Party.create(input(), sequentialIds('p'))
+    if (!result.isRight()) throw new Error('esperava sucesso')
+    const party = result.value
+
+    expect(party.dimension.dimensionCardId).toBe('fixture.test-dimension')
+    expect(party.dimension.startingCityZoneId).toBe('fixture.gray-harbor')
+    expect(party.dimension.map.zones.map((z) => z.zoneId).sort()).toEqual(
+      zones.map((z) => z.id).sort()
+    )
+    expect(party.turnOrder.map((id) => id.toString())).toEqual(['p-2'])
+    const { player } = party.members[0]
+    expect(player.playerClasses).toEqual([
+      { playerClass: 'warrior', deckLockMet: true },
+    ])
+    expect(player.hand).toHaveLength(7)
+    expect(player.deck).toHaveLength(53)
+    expect(player.zoneId).toBe('fixture.gray-harbor')
+    expect(player.respawnZoneId).toBe('fixture.gray-harbor')
+    expect(party.members[0].maxHealth).toBe(22)
+  })
+
+  it('REQ-31: sorteios na ordem mapa → deck → ordem; o save guarda o RNG depois deles', () => {
+    const result = Party.create(input(), sequentialIds('p'))
+    if (!result.isRight()) throw new Error('esperava sucesso')
+
+    const rng = SeededRng.fromSeed(42)
+    const map = assembleMap({
+      zones,
+      arrivalZoneTitle: 'Porto Cinzento',
+      rng,
+      maxAttempts: GAME_CONFIG_DEFAULTS.mapMaxAttempts,
+    })
+    const player = createStartingPlayer({
+      config: { ...GAME_CONFIG_DEFAULTS },
+      classDefinition: warrior,
+      attributeCards,
+      startingCityZoneId: 'fixture.gray-harbor',
+      rng,
+    })
+    rng.nextInt(1, 20)
+
+    if (map.isLeft()) throw new Error('esperava mapa')
+    expect(result.value.dimension.map).toEqual(map.value.map)
+    expect(result.value.members[0].player).toEqual(player)
+    expect(result.value.rngState).toEqual(rng.state())
+  })
+
+  it('REQ-31: mesmo estado do RNG → mesmo grupo preparado', () => {
+    const a = Party.create(input(), sequentialIds('p'))
+    const b = Party.create(input(), sequentialIds('p'))
+    if (!a.isRight() || !b.isRight()) throw new Error('esperava sucesso')
+
+    expect(b.value.dimension).toEqual(a.value.dimension)
+    expect(b.value.members[0].player).toEqual(a.value.members[0].player)
+    expect(b.value.rngState).toEqual(a.value.rngState)
+  })
+
+  it.each([
+    ['required', undefined],
+    ['notString', 7],
+    ['unknownClass', 'mage'],
+  ])('REQ-35: playerClass inválido → %s', (reason, playerClass) => {
+    const result = Party.create(
+      input({
+        playerClass,
+        classDefinition: playerClass === 'mage' ? null : warrior,
+      }),
+      sequentialIds()
+    )
+
+    expect(result.isLeft()).toBe(true)
+    if (result.isLeft())
+      expect(result.value).toEqual({
+        type: 'invalid',
+        issues: [{ field: 'playerClass', reason }],
+      })
+  })
+
+  it('REQ-35: classDefinition de outro playerClass → unknownClass', () => {
+    const result = Party.create(
+      input({ playerClass: 'rogue' }),
+      sequentialIds()
+    )
+
+    expect(result.isLeft()).toBe(true)
+    if (result.isLeft())
+      expect(result.value).toEqual({
+        type: 'invalid',
+        issues: [{ field: 'playerClass', reason: 'unknownClass' }],
+      })
+  })
+
+  it('REQ-35: problemas na ordem name, characterName, playerClass, members', () => {
+    const result = Party.create(
+      input({
+        name: '',
+        characterName: 42,
+        playerClass: 'nope',
+        classDefinition: null,
+        config: { ...GAME_CONFIG_DEFAULTS, minPlayers: 2 },
+      }),
+      sequentialIds()
+    )
+
+    expect(result.isLeft()).toBe(true)
+    if (result.isLeft())
+      expect(result.value).toEqual({
+        type: 'invalid',
+        issues: [
+          { field: 'name', reason: 'blank' },
+          { field: 'characterName', reason: 'notString' },
+          { field: 'playerClass', reason: 'unknownClass' },
+          { field: 'members', reason: 'belowMinPlayers' },
+        ],
+      })
+  })
+
+  it('REQ-35: pedido inválido vem antes da dimensão inválida', () => {
+    const result = Party.create(
+      input({ name: '', dimension: null }),
+      sequentialIds()
+    )
+
+    expect(result.isLeft()).toBe(true)
+    if (result.isLeft()) expect(result.value.type).toBe('invalid')
+  })
+
+  it('REQ-36: sem Carta de Dimensão publicada → dimensionInvalid com dimensionCardId null', () => {
+    const result = Party.create(
+      input({ dimension: null, zones: [] }),
+      sequentialIds()
+    )
+
+    expect(result.isLeft()).toBe(true)
+    if (result.isLeft())
+      expect(result.value).toEqual({
+        type: 'dimensionInvalid',
+        dimensionCardId: null,
+        problems: [
+          'A coleção precisa de 1 Carta de Dimensão publicada.',
+          'A coleção precisa de pelo menos 1 zona Urbana publicada.',
+        ],
+      })
+  })
+
+  it('REQ-36: composição com problemas → dimensionInvalid com os textos de checkDimensionComposition', () => {
+    const result = Party.create(
+      input({ zones: zones.filter((z) => z.zoneType !== 'urban') }),
+      sequentialIds()
+    )
+
+    expect(result.isLeft()).toBe(true)
+    if (result.isLeft())
+      expect(result.value).toEqual({
+        type: 'dimensionInvalid',
+        dimensionCardId: 'fixture.test-dimension',
+        problems: ['A coleção precisa de pelo menos 1 zona Urbana publicada.'],
+      })
+  })
+
+  it('REQ-36: gerador acima de mapMaxAttempts → dimensionInvalid com o texto do limite; não consome ids', () => {
+    // Cidade de 1 seta, duas zonas de 1 seta e uma de 3: a composição passa
+    // (6 setas ≥ 2 × 3), mas só monta se a de 3 sair primeiro. Procura a
+    // primeira semente em que 1 tentativa não basta.
+    const city = { ...zones[0], connectionArrows: 1, arrowLayout: null }
+    const others = [1, 1, 3].map((arrows, n) => ({
+      ...zones[3],
+      id: `fixture.z-${n}`,
+      title: `Z ${n}`,
+      connectionArrows: arrows,
+      arrowLayout: null,
+    }))
+    const blocked = [city, ...others]
+    const seed = Array.from({ length: 100 }, (_, i) => i + 1).find((s) =>
+      assembleMap({
+        zones: blocked,
+        arrivalZoneTitle: 'Porto Cinzento',
+        rng: SeededRng.fromSeed(s),
+        maxAttempts: 1,
+      }).isLeft()
+    )
+    if (seed === undefined) throw new Error('nenhuma semente falhou')
+    const ids = sequentialIds('p')
+
+    const result = Party.create(
+      input({
+        zones: blocked,
+        rngState: SeededRng.fromSeed(seed).state(),
+        config: { ...GAME_CONFIG_DEFAULTS, mapMaxAttempts: 1 },
+      }),
+      ids
+    )
+
+    expect(result.isLeft()).toBe(true)
+    if (result.isLeft())
+      expect(result.value).toEqual({
+        type: 'dimensionInvalid',
+        dimensionCardId: 'fixture.test-dimension',
+        problems: [
+          'O gerador não montou o mapa dentro do limite de tentativas (mapMaxAttempts = 1).',
+        ],
+      })
+    expect(ids.next().toString()).toBe('p-1')
   })
 
   it('REQ-20: startSession em idle → inSession, savedAt e SessionStarted', () => {

@@ -5,8 +5,17 @@ import type { SeedGenerator } from '@/core/ports/seed-generator'
 import { SeededRng } from '@/core/rng/seeded-rng'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import { Party } from '@/domain/campaign/enterprise/entities/party'
+import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
+import type {
+  TAttributeCard,
+  TCard,
+  TClassDefinition,
+  TDimensionCard,
+  TZoneCard,
+} from '@/domain/catalog/enterprise/value-objects/card'
 import type { GetGameConfigUseCase } from '@/domain/lab/application/use-cases/get-game-config'
 
+import { DimensionInvalidError } from '../_errors/dimension-invalid-error'
 import { PartyInvalidError } from '../_errors/party-invalid-error'
 
 export interface TCreatePartyUseCaseRequest {
@@ -15,15 +24,20 @@ export interface TCreatePartyUseCaseRequest {
 }
 
 export type TCreatePartyUseCaseResponse = Either<
-  PartyInvalidError,
+  PartyInvalidError | DimensionInvalidError,
   { party: Party }
 >
 
-/** Criar grupo de 1 (REQ-16, REQ-17, REQ-23); grava ao terminar com sucesso (REQ-25). */
+/**
+ * Criar grupo de 1 já preparado (REQ-16, REQ-17, REQ-23, REQ-31 a REQ-36);
+ * grava ao terminar com sucesso (REQ-25). Só o conteúdo publicado entra
+ * (`CardCatalog`, REQ-41).
+ */
 export class CreatePartyUseCase {
   constructor(
     private readonly partiesRepository: PartiesRepository,
     private readonly getGameConfig: GetGameConfigUseCase,
+    private readonly cardCatalog: CardCatalog,
     private readonly clock: Clock,
     private readonly ids: IdGenerator,
     private readonly seeds: SeedGenerator
@@ -41,10 +55,21 @@ export class CreatePartyUseCase {
     const configResult = await this.getGameConfig.execute()
     const { config } = configResult.value
 
+    const classDefinition =
+      typeof body.playerClass === 'string'
+        ? await this.cardCatalog.findClass(body.playerClass)
+        : null
+    const { dimension, zones } = await this.findFirstDimension()
+
     const result = Party.create(
       {
         name: body.name,
         characterName: body.characterName,
+        playerClass: body.playerClass,
+        classDefinition,
+        attributeCards: await this.findStarterCards(classDefinition),
+        dimension,
+        zones,
         config: config.values,
         rngState: SeededRng.fromSeed(this.seeds.next()).state(),
         now: this.clock.now(),
@@ -52,12 +77,60 @@ export class CreatePartyUseCase {
       this.ids
     )
     if (result.isLeft()) {
-      return left(new PartyInvalidError(result.value))
+      const failure = result.value
+      switch (failure.type) {
+        case 'invalid':
+          return left(new PartyInvalidError(failure.issues))
+        case 'dimensionInvalid':
+          return left(
+            new DimensionInvalidError(failure.dimensionCardId, failure.problems)
+          )
+        default: {
+          const _exhaustive: never = failure
+          return _exhaustive
+        }
+      }
     }
 
     await this.partiesRepository.create(result.value)
 
     return right({ party: result.value })
+  }
+
+  /** A dimensão de menor `releaseOrder` (README 28.1) e as zonas da sua coleção (README 27). */
+  private async findFirstDimension(): Promise<{
+    dimension: TDimensionCard | null
+    zones: TZoneCard[]
+  }> {
+    let first: { dimension: TDimensionCard; cards: TCard[] } | null = null
+    for (const collection of await this.cardCatalog.listCollections()) {
+      const cards = await this.cardCatalog.listCards(collection.id)
+      for (const card of cards) {
+        if (card.type !== 'dimension') continue
+        if (!first || card.releaseOrder < first.dimension.releaseOrder) {
+          first = { dimension: card, cards }
+        }
+      }
+    }
+    if (!first) return { dimension: null, zones: [] }
+
+    return {
+      dimension: first.dimension,
+      zones: first.cards.filter(
+        (card): card is TZoneCard => card.type === 'zone'
+      ),
+    }
+  }
+
+  private async findStarterCards(
+    classDefinition: TClassDefinition | null
+  ): Promise<TAttributeCard[]> {
+    const cards: TAttributeCard[] = []
+    for (const { cardId } of classDefinition?.starterDeck ?? []) {
+      const card = await this.cardCatalog.findCard(cardId)
+      if (card?.type === 'attribute') cards.push(card)
+    }
+    return cards
   }
 }
 

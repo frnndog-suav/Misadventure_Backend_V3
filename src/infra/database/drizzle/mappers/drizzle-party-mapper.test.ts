@@ -17,7 +17,7 @@ function usedRngParty() {
 }
 
 describe('DrizzlePartyMapper', () => {
-  it('D-31: separa colunas consultáveis e o state com schemaVersion 1', () => {
+  it('D-31/D-43: separa colunas consultáveis e o state com schemaVersion 2', () => {
     const party = usedRngParty()
 
     const row = DrizzlePartyMapper.toDrizzle(party)
@@ -29,11 +29,20 @@ describe('DrizzlePartyMapper', () => {
       createdAt: party.createdAt,
       savedAt: party.savedAt,
       state: {
-        schemaVersion: 1,
-        members: [{ id: 'member-1', characterName: 'Lia', kind: 'human' }],
+        schemaVersion: 2,
+        members: [
+          {
+            id: 'member-1',
+            characterName: 'Lia',
+            kind: 'human',
+            player: party.members[0].player,
+          },
+        ],
         hostMemberId: 'member-1',
         config: { ...GAME_CONFIG_DEFAULTS, initialGold: 40 },
         rngState: [...party.rngState],
+        dimension: party.dimension,
+        turnOrder: ['member-1'],
       },
     })
   })
@@ -60,6 +69,9 @@ describe('DrizzlePartyMapper', () => {
       true
     )
     expect(restored.config).toEqual(party.config)
+    expect(restored.dimension).toEqual(party.dimension)
+    expect(restored.turnOrder).toEqual(party.turnOrder)
+    expect(restored.members[0].player).toEqual(party.members[0].player)
     expect(restored.rngState).toEqual(party.rngState)
     expect(restored.createdAt).toEqual(party.createdAt)
     expect(restored.savedAt).toEqual(party.savedAt)

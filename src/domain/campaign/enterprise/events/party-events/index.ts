@@ -1,9 +1,31 @@
+import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
 
 // Eventos do agregado `Party` (D-27), união discriminada por `type`.
 
 export interface PartyCreatedEvent extends DomainEvent {
   readonly type: 'PartyCreated'
+}
+
+/** Preparação (README 10.1; REQ-31): mapa montado. */
+export interface MapAssembledEvent extends DomainEvent {
+  readonly type: 'MapAssembled'
+}
+
+/** Preparação: deck pré-pronto entregue a um membro (um por membro). */
+export interface StarterDeckGivenEvent extends DomainEvent {
+  readonly type: 'StarterDeckGiven'
+  readonly memberId: UniqueEntityID
+}
+
+/** Preparação: ordem dos jogadores decidida (README 11.2). */
+export interface TurnOrderDecidedEvent extends DomainEvent {
+  readonly type: 'TurnOrderDecided'
+}
+
+/** Preparação: todos chegaram à cidade inicial (README 20.1). */
+export interface PlayersArrivedEvent extends DomainEvent {
+  readonly type: 'PlayersArrived'
 }
 
 export interface SessionStartedEvent extends DomainEvent {
@@ -21,6 +43,10 @@ export interface PartyAbandonedEvent extends DomainEvent {
 
 export type TPartyEvent =
   | PartyCreatedEvent
+  | MapAssembledEvent
+  | StarterDeckGivenEvent
+  | TurnOrderDecidedEvent
+  | PlayersArrivedEvent
   | SessionStartedEvent
   | SessionEndedEvent
   | PartyAbandonedEvent

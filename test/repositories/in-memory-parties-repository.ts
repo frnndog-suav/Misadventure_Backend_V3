@@ -40,6 +40,8 @@ function snapshot(party: Party): Party {
       status: party.status,
       config: party.config,
       rngState: [...party.rngState] as unknown as Party['rngState'],
+      dimension: structuredClone(party.dimension),
+      turnOrder: [...party.turnOrder],
       createdAt: party.createdAt,
       savedAt: party.savedAt,
     },
