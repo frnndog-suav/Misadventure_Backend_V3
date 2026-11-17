@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.34 · **Data:** 2026-11-17
+> **Versão da spec:** 0.35 · **Data:** 2026-11-17
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -396,7 +396,7 @@ Contrato: CONTRATO v0.28, seção FEAT-07 `acordado` (2026-11-17) — `POST /par
 Contrato: CONTRATO v0.32, seção FEAT-08 `acordado` (2026-11-17) — `Party.turn` (`round`, `memberId`, `actionPoints`); `PlayerState.availableActions: string[]`; `PartyAction` ganha `EndTurnAction` (`{ type: "endTurn" }`); `ActionNotAllowedDetails.reason` ganha `noActionPoints`; a nota "Até a FEAT-08" da seção FEAT-07 sai; cenários com a `fixture` (3 movimentos, 4º recusado, encerrar a vez → rodada 2 com 3 pontos).
 
 - [x] **T-24 — Domínio da vez (REQ-54 a REQ-58; REQ-59 em memória).** Alinha REQ-31 (eventos, tarefa T-16 `[x]`) e REQ-51 (custo, T-22 `[x]`). TDD unitário: `PartyTurn` (pontos de `config.actionPointsPerTurn`, REQ-54) na criação e `TurnStarted`; `Party.move` com `noActionPoints` e a ordem de REQ-56; `Party.endTurn` (1 membro: rodada + 1; N membros pela factory: próximo e virada de rodada; com 0 pontos; eventos em ordem; RNG intacto); `parsePartyAction` com `endTurn` e `unknownKey`; `availableActions` (função pura); `TakePartyActionUseCase` com o `switch` exaustivo e ator = `turn.memberId`; repositório em memória e factory. **Verificação:** `npx vitest related --run` verde; `domain-guard --all` limpo.
-- [ ] **T-25 — Save v3 e rota (REQ-54 a REQ-59 de ponta a ponta).** Mapper v3 com leitura e atualização de v2 (D-64; sem migração SQL, `drizzle-kit` sem diferença); `PartyPresenter` com `turn` e `availableActions`; e2e Supertest (um `it` por REQ, inclusive save v2 inserido à mão sendo lido como v3, e REQ-54 com o laboratório em 5 pontos); `client.http`. **Verificação:** `npm run test:e2e` verde; `curl` dos cenários. Ao final: `/contrato` marca FEAT-08 `implementado (BE)` e gera o AVISO DE FRONTEND.
+- [x] **T-25 — Save v3 e rota (REQ-54 a REQ-59 de ponta a ponta).** Mapper v3 com leitura e atualização de v2 (D-64; sem migração SQL, `drizzle-kit` sem diferença); `PartyPresenter` com `turn` e `availableActions`; e2e Supertest (um `it` por REQ, inclusive save v2 inserido à mão sendo lido como v3, e REQ-54 com o laboratório em 5 pontos); `client.http`. **Verificação:** `npm run test:e2e` verde; `curl` dos cenários. Ao final: `/contrato` marca FEAT-08 `implementado (BE)` e gera o AVISO DE FRONTEND.
 
 ## 8. Histórico
 
@@ -436,6 +436,7 @@ Contrato: CONTRATO v0.32, seção FEAT-08 `acordado` (2026-11-17) — `Party.tur
 | 0.32 | 2026-11-17 | T-23 concluída (rota `POST /parties/:partyId/actions`, `moveTargets` no presenter, `ACTION_INVALID`/`ACTION_NOT_ALLOWED` no filtro). O prefixo `/parties/*/actions` do filtro (D-62) exige casar `*` como um segmento de rota; o casamento passou a aceitar `*`. Lado BE da FEAT-07 pronto. |
 | 0.33 | 2026-11-17 | Planejamento da FEAT-08: REQ-54 a REQ-59, D-63 a D-66 (propostas), tarefas T-24 e T-25. `actionPointsPerTurn` já existia (FEAT-03): REQ-54 só liga a vez a ela, sem chave nova. REQ-51 aponta para o custo de REQ-56 (D-61 vale até a T-24). Contrato a propor com `/contrato FEAT-08`. |
 | 0.34 | 2026-11-17 | T-24 concluída: domínio da vez (`PartyTurn`, `Party.endTurn`, custo do `move`, `availableActions`, `endTurn` no parser e no caso de uso). D-63 a D-66 decididas; D-65 registra que `availableActions` não olha o `status`. Mapper do Drizzle com leitura provisória de `turn` (como save v2) até a T-25. |
+| 0.35 | 2026-11-17 | T-25 concluída: save v3 (`turn` no `jsonb`; o v2 é lido e atualizado em memória, D-64; sem migração), `PartyPresenter` com `turn` e `availableActions`, e2e de REQ-54 a REQ-59, `client.http`. O mapper também recusa `turn.memberId` fora de `turnOrder` (save corrompido, D-31). Lado BE da FEAT-08 pronto. |
 
 ## Apêndice A — Conteúdo de teste
 

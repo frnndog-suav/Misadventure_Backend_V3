@@ -242,3 +242,15 @@ POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
 Content-Type: application/json
 
 { "type": "move", "zoneId": "fixture.gray-harbor" }
+
+### FEAT-08 — encerrar a vez (200 Party; turn.round + 1, actionPoints cheios; 0 pontos no move → 409 noActionPoints)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "endTurn" }
+
+### FEAT-08 — endTurn com campo a mais (400 ACTION_INVALID unknownKey)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "endTurn", "now": true }

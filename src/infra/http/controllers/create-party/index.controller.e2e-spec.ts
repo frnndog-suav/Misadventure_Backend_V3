@@ -77,6 +77,7 @@ describe('POST /parties (e2e)', () => {
             zoneId: 'fixture.gray-harbor',
             respawnZoneId: 'fixture.gray-harbor',
             moveTargets: expect.any(Array),
+            availableActions: ['move', 'endTurn'],
           },
         },
       ],
@@ -86,6 +87,7 @@ describe('POST /parties (e2e)', () => {
         map: { zones: expect.any(Array), crossings: expect.any(Array) },
       },
       turnOrder: [memberId],
+      turn: { round: 1, memberId, actionPoints: 3 },
       createdAt: expect.stringMatching(ISO_UTC),
       savedAt: expect.stringMatching(ISO_UTC),
     })

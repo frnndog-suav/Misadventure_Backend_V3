@@ -6,11 +6,10 @@ import type {
   PartyMember,
   TPartyMemberKind,
 } from '@/domain/campaign/enterprise/entities/party-member'
+import { availableActions } from '@/domain/campaign/enterprise/available-actions'
 import { connectedZones } from '@/domain/campaign/enterprise/connected-zones'
-import type {
-  TDirection,
-  TPartyMap,
-} from '@/domain/campaign/enterprise/map-assembly'
+import type { TPartyActionType } from '@/domain/campaign/enterprise/party-action'
+import type { TDirection } from '@/domain/campaign/enterprise/map-assembly'
 import type {
   TModifier,
   TPlayerClass,
@@ -32,6 +31,15 @@ export interface TPlayerStateHttp {
   zoneId: string
   respawnZoneId: string
   moveTargets: string[]
+  /** FEAT-08 (REQ-58, D-65). */
+  availableActions: TPartyActionType[]
+}
+
+/** CONTRATO FEAT-08, tipo `PartyTurn`. */
+export interface TPartyTurnHttp {
+  round: number
+  memberId: string
+  actionPoints: number
 }
 
 /** CONTRATO FEAT-05/FEAT-06, tipo `PartyMember`. */
@@ -61,12 +69,14 @@ export interface TPartyHttp {
   members: TPartyMemberHttp[]
   dimension: TPartyDimensionHttp
   turnOrder: string[]
+  turn: TPartyTurnHttp
   createdAt: string
   savedAt: string
 }
 
-function playerToHTTP(member: PartyMember, map: TPartyMap): TPlayerStateHttp {
+function playerToHTTP(party: Party, member: PartyMember): TPlayerStateHttp {
   const player = member.player
+  const { map } = party.dimension
   return {
     playerClasses: player.playerClasses.map(({ playerClass, deckLockMet }) => ({
       playerClass,
@@ -85,6 +95,7 @@ function playerToHTTP(member: PartyMember, map: TPartyMap): TPlayerStateHttp {
     zoneId: player.zoneId,
     respawnZoneId: player.respawnZoneId,
     moveTargets: connectedZones(map, player.zoneId),
+    availableActions: availableActions(party, member.id),
   }
 }
 
@@ -100,7 +111,7 @@ export class PartyPresenter {
         characterName: member.characterName,
         kind: member.kind,
         isHost: party.isHost(member),
-        player: playerToHTTP(member, map),
+        player: playerToHTTP(party, member),
       })),
       dimension: {
         dimensionCardId,
@@ -118,6 +129,11 @@ export class PartyPresenter {
         },
       },
       turnOrder: party.turnOrder.map((id) => id.toString()),
+      turn: {
+        round: party.turn.round,
+        memberId: party.turn.memberId.toString(),
+        actionPoints: party.turn.actionPoints,
+      },
       createdAt: party.createdAt.toISOString(),
       savedAt: party.savedAt.toISOString(),
     }

@@ -17,7 +17,7 @@ function usedRngParty() {
 }
 
 describe('DrizzlePartyMapper', () => {
-  it('D-31/D-43: separa colunas consultáveis e o state com schemaVersion 2', () => {
+  it('D-31/D-64: separa colunas consultáveis e o state com schemaVersion 3', () => {
     const party = usedRngParty()
 
     const row = DrizzlePartyMapper.toDrizzle(party)
@@ -29,7 +29,7 @@ describe('DrizzlePartyMapper', () => {
       createdAt: party.createdAt,
       savedAt: party.savedAt,
       state: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         members: [
           {
             id: 'member-1',
@@ -43,6 +43,7 @@ describe('DrizzlePartyMapper', () => {
         rngState: [...party.rngState],
         dimension: party.dimension,
         turnOrder: ['member-1'],
+        turn: { round: 1, memberId: 'member-1', actionPoints: 3 },
       },
     })
   })
@@ -71,6 +72,7 @@ describe('DrizzlePartyMapper', () => {
     expect(restored.config).toEqual(party.config)
     expect(restored.dimension).toEqual(party.dimension)
     expect(restored.turnOrder).toEqual(party.turnOrder)
+    expect(restored.turn).toEqual(party.turn)
     expect(restored.members[0].player).toEqual(party.members[0].player)
     expect(restored.rngState).toEqual(party.rngState)
     expect(restored.createdAt).toEqual(party.createdAt)
@@ -79,6 +81,60 @@ describe('DrizzlePartyMapper', () => {
       SeededRng.fromState(party.rngState).nextUint32()
     )
     expect(restored.pullDomainEvents()).toEqual([])
+  })
+
+  it('REQ-59: ida e volta preserva a vez no meio de uma rodada', () => {
+    const party = makeParty({
+      turn: {
+        round: 4,
+        memberId: new UniqueEntityID('member-1'),
+        actionPoints: 1,
+      },
+    })
+    const row = JSON.parse(
+      JSON.stringify(DrizzlePartyMapper.toDrizzle(party))
+    ) as TPartyRow
+
+    const restored = DrizzlePartyMapper.toDomain({
+      ...row,
+      createdAt: party.createdAt,
+      savedAt: party.savedAt,
+    })
+
+    expect(restored.turn).toEqual(party.turn)
+  })
+
+  it('REQ-59/D-64: save v2 é lido como v3 (rodada 1, 1º de turnOrder, pontos do config) e regravado como v3', () => {
+    const party = usedRngParty()
+    const v3 = JSON.parse(
+      JSON.stringify(DrizzlePartyMapper.toDrizzle(party))
+    ) as TPartyRow & { state: Record<string, unknown> }
+    const rest = { ...v3.state }
+    delete rest.turn
+    const v2: TPartyRow = {
+      ...v3,
+      state: {
+        ...rest,
+        schemaVersion: 2,
+        config: { ...GAME_CONFIG_DEFAULTS, actionPointsPerTurn: 5 },
+      },
+      createdAt: party.createdAt,
+      savedAt: party.savedAt,
+    }
+
+    const restored = DrizzlePartyMapper.toDomain(v2)
+
+    expect(restored.turn.round).toBe(1)
+    expect(restored.turn.memberId.toString()).toBe('member-1')
+    expect(restored.turn.actionPoints).toBe(5)
+    expect(restored.pullDomainEvents()).toEqual([])
+    const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
+    expect(rewritten.schemaVersion).toBe(3)
+    expect(rewritten.turn).toEqual({
+      round: 1,
+      memberId: 'member-1',
+      actionPoints: 5,
+    })
   })
 
   const validRow = () =>
@@ -109,6 +165,17 @@ describe('DrizzlePartyMapper', () => {
     [
       'host fora dos membros',
       (r: ReturnType<typeof validRow>) => (r.state.hostMemberId = 'x'),
+    ],
+    ['v3 sem turn', (r: ReturnType<typeof validRow>) => delete r.state.turn],
+    [
+      'turn com membro fora de turnOrder',
+      (r: ReturnType<typeof validRow>) =>
+        (r.state.turn = { round: 1, memberId: 'x', actionPoints: 3 }),
+    ],
+    [
+      'turn com pontos negativos',
+      (r: ReturnType<typeof validRow>) =>
+        (r.state.turn = { round: 1, memberId: 'member-1', actionPoints: -1 }),
     ],
     [
       'status desconhecido',

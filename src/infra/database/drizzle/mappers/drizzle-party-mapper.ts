@@ -15,8 +15,9 @@ import {
   type TGameConfigValues,
 } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
-// D-43: save v2 (FEAT-06). Os saves v1 são apagados pela migração 0002 (T-17).
-const SCHEMA_VERSION = 2
+// D-64: save v3 (FEAT-08). O v2 (D-43, FEAT-06) é lido e atualizado em memória;
+// os saves v1 são apagados pela migração 0002 (T-17).
+const SCHEMA_VERSION = 3
 
 const uint32 = z
   .number()
@@ -81,33 +82,56 @@ const dimensionSchema = z.strictObject({
   }),
 })
 
+const turnSchema = z.strictObject({
+  round: z.number().int().min(1),
+  memberId: id,
+  actionPoints: z.number().int().min(0),
+})
+
+const stateV2Fields = {
+  members: z
+    .array(
+      z.strictObject({
+        id,
+        characterName: z.string().min(1),
+        kind: z.literal('human'),
+        player: playerSchema,
+      })
+    )
+    .min(1),
+  hostMemberId: id,
+  config: configSchema,
+  rngState: z.tuple([uint32, uint32, uint32, uint32]),
+  dimension: dimensionSchema,
+  turnOrder: z.array(id),
+}
+
 // D-31: o banco não valida o jsonb; o mapper valida antes de `SeededRng.fromState` (D-32).
 const stateSchema = z
-  .strictObject({
-    schemaVersion: z.literal(SCHEMA_VERSION),
-    members: z
-      .array(
-        z.strictObject({
-          id,
-          characterName: z.string().min(1),
-          kind: z.literal('human'),
-          player: playerSchema,
-        })
-      )
-      .min(1),
-    hostMemberId: id,
-    config: configSchema,
-    rngState: z.tuple([uint32, uint32, uint32, uint32]),
-    dimension: dimensionSchema,
-    turnOrder: z.array(id),
-  })
+  .discriminatedUnion('schemaVersion', [
+    z.strictObject({ schemaVersion: z.literal(2), ...stateV2Fields }),
+    z.strictObject({
+      schemaVersion: z.literal(SCHEMA_VERSION),
+      ...stateV2Fields,
+      turn: turnSchema,
+    }),
+  ])
   .refine((state) => state.members.some((m) => m.id === state.hostMemberId), {
     message: 'hostMemberId fora dos membros',
   })
+  .refine(
+    (state) =>
+      state.schemaVersion === 2 ||
+      state.turnOrder.includes(state.turn.memberId),
+    { message: 'turn.memberId fora de turnOrder' }
+  )
 
 const statusSchema = z.enum(['idle', 'inSession'])
 
-type TPartyState = z.infer<typeof stateSchema>
+type TPartyState = Extract<
+  z.infer<typeof stateSchema>,
+  { schemaVersion: typeof SCHEMA_VERSION }
+>
 
 export interface TPartyRow {
   id: string
@@ -140,12 +164,19 @@ export class DrizzlePartyMapper {
         rngState: state.rngState satisfies RngState,
         dimension: state.dimension,
         turnOrder,
-        // Provisório até a T-25 (save v3, D-64): lê como o save v2, sem gravar `turn`.
-        turn: {
-          round: 1,
-          memberId: turnOrder[0],
-          actionPoints: state.config.actionPointsPerTurn,
-        },
+        // D-64: o save v2 ganha a vez na rodada 1, com o 1º de `turnOrder` e pontos cheios.
+        turn:
+          state.schemaVersion === 2
+            ? {
+                round: 1,
+                memberId: turnOrder[0],
+                actionPoints: state.config.actionPointsPerTurn,
+              }
+            : {
+                round: state.turn.round,
+                memberId: new UniqueEntityID(state.turn.memberId),
+                actionPoints: state.turn.actionPoints,
+              },
         createdAt: row.createdAt,
         savedAt: row.savedAt,
       },
@@ -192,6 +223,11 @@ export class DrizzlePartyMapper {
           },
         },
         turnOrder: party.turnOrder.map((m) => m.toString()),
+        turn: {
+          round: party.turn.round,
+          memberId: party.turn.memberId.toString(),
+          actionPoints: party.turn.actionPoints,
+        },
       },
     }
   }
