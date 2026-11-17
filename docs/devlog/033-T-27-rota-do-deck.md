@@ -36,3 +36,8 @@ AVISO DE FRONTEND — FEAT-09: levar `docs/CONTRATO.md` v0.37 e `docs/ROADMAP.md
 
 ## Commit sugerido
 `feat/feat-09 deck route`
+
+## Fechamento 2026-11-17 — FEAT-09 `validado`
+- O FE validou os 10 cenários (15 conferências) contra o backend real e a tela do grupo com o MSW desligado. As cópias CONTRATO v0.38 e ROADMAP v0.44 vieram do FE e foram aplicadas aqui.
+- O backend rodava com o conteúdo `base` (build do guerreiro com 9 cartas somando 60): `S` 29/31 virou Força − 1/+ 1 e o `notOwned` de carta a mais virou Resistência + 1. As invariantes dos cenários são as mesmas.
+- `CONTRACT_VERSION` foi para `'0.38'`, para o `/health` acompanhar o contrato.
