@@ -56,6 +56,71 @@ describe('Conteúdo em uso no editor (e2e)', () => {
     ).toBe(204)
   })
 
+  it('REQ-39: com um grupo, substituir a coleção no import (replace=true) → 409 CONTENT_IN_USE, nada muda', async () => {
+    const server = ctx.app.getHttpServer()
+    await postParty(ctx.app)
+    const exported = (
+      await request(server).get('/lab/content/collections/fixture/export')
+    ).body
+
+    const response = await request(server)
+      .post('/lab/content/import?replace=true')
+      .send({ ...exported, cards: [] })
+
+    expect(response.status).toBe(409)
+    expect(response.body).toEqual(CONTENT_IN_USE)
+    expect(
+      (await request(server).get('/lab/content/collections/fixture/export'))
+        .body
+    ).toEqual(exported)
+  })
+
+  it('REQ-40: renomear (PUT com outro slug) carta usada no deck de uma classe → 409 CONTENT_REFERENCED, nada muda', async () => {
+    const server = ctx.app.getHttpServer()
+    const card = {
+      slug: 'arcana-draft',
+      type: 'attribute',
+      name: 'Arcana',
+      flavorText: null,
+      rarity: 'common',
+      attributeKind: 'basic',
+      attributes: ['intelligence'],
+      effects: [],
+    }
+    await request(server)
+      .post('/lab/content/collections/fixture/cards')
+      .send(card)
+      .expect(201)
+    await request(server)
+      .post('/lab/content/collections/fixture/classes')
+      .send({
+        playerClass: 'mage',
+        name: 'Mago',
+        essentialAttributes: ['intelligence'],
+        baseModifiers: {
+          attack: 5,
+          defense: 3,
+          accuracy: 50,
+          evasion: 20,
+          celerity: 10,
+          piercing: 0,
+          reflection: 0,
+        },
+        starterDeck: [{ cardId: 'fixture.arcana-draft', copies: 60 }],
+      })
+      .expect(201)
+
+    const response = await request(server)
+      .put('/lab/content/cards/fixture.arcana-draft')
+      .send({ ...card, slug: 'arcana-nova' })
+
+    expect(response.status).toBe(409)
+    expect(response.body).toEqual(CONTENT_REFERENCED)
+    await request(server)
+      .get('/lab/content/cards/fixture.arcana-draft')
+      .expect(200)
+  })
+
   it('REQ-40: sem grupos, excluir carta do deck pré-pronto de uma classe → 409 CONTENT_REFERENCED', async () => {
     const response = await request(ctx.app.getHttpServer()).delete(
       '/lab/content/cards/fixture.dexterity-basic'
