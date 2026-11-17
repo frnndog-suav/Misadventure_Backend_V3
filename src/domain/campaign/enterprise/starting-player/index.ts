@@ -19,7 +19,8 @@ export type TStartingPlayerInput = Readonly<{
   rng: SeededRng
 }>
 
-function defaultModifiers(
+/** Modificadores quando a trava da classe não é cumprida (README 8.2, 8.7). */
+export function defaultModifiers(
   config: TGameConfigValues
 ): Record<TModifier, number> {
   return {
@@ -45,12 +46,14 @@ export function createStartingPlayer({
   startingCityZoneId,
   rng,
 }: TStartingPlayerInput): TPlayerState {
-  const build = classDefinition.starterDeck.map(({ cardId, copies }) => ({
+  // O sorteio expande na ordem do `starterDeck`; a build guardada vai em ordem de `cardId` (REQ-62).
+  const starter = classDefinition.starterDeck.map(({ cardId, copies }) => ({
     cardId,
     copies,
   }))
+  const build = sortedByCardId(starter)
   const deckLockMet = isClassActive({
-    build: build.flatMap(({ cardId, copies }) => {
+    build: starter.flatMap(({ cardId, copies }) => {
       const card = attributeCards.find((c) => c.id === cardId)
       return card ? [{ card, copies }] : []
     }),
@@ -60,7 +63,7 @@ export function createStartingPlayer({
   })
 
   const shuffled = shuffle(
-    build.flatMap(({ cardId, copies }) =>
+    starter.flatMap(({ cardId, copies }) =>
       Array.from({ length: copies }, () => cardId)
     ),
     rng
@@ -74,6 +77,7 @@ export function createStartingPlayer({
   return {
     playerClasses: [{ playerClass: classDefinition.playerClass, deckLockMet }],
     build,
+    tcgFolder: [],
     deck,
     hand,
     discard: [],
@@ -88,4 +92,13 @@ export function createStartingPlayer({
     zoneId: startingCityZoneId,
     respawnZoneId: startingCityZoneId,
   }
+}
+
+/** Ordem de `cardId` por comparação de código (determinística, sem locale). */
+export function sortedByCardId<T extends { cardId: string }>(
+  entries: readonly T[]
+): T[] {
+  return [...entries].sort((a, b) =>
+    a.cardId < b.cardId ? -1 : a.cardId > b.cardId ? 1 : 0
+  )
 }

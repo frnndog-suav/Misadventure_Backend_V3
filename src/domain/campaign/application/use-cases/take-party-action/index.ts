@@ -3,6 +3,11 @@ import type { Clock } from '@/core/ports/clock'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
 import { parsePartyAction } from '@/domain/campaign/enterprise/party-action'
+import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
+import type {
+  TAttributeCard,
+  TClassDefinition,
+} from '@/domain/catalog/enterprise/value-objects/card'
 
 import { ActionInvalidError } from '../_errors/action-invalid-error'
 import { ActionNotAllowedError } from '../_errors/action-not-allowed-error'
@@ -24,14 +29,15 @@ export type TTakePartyActionUseCaseResponse = Either<
 >
 
 /**
- * Uma intenção de jogo (D-62; REQ-51 a REQ-53, REQ-56, REQ-57). Ordem: grupo →
+ * Uma intenção de jogo (D-62; REQ-51 a REQ-53, REQ-56, REQ-57, REQ-63 a REQ-66). Ordem: grupo →
  * corpo → sessão → regra. Grava só no sucesso (REQ-25). Quem age é o membro da
  * vez (D-63).
  */
 export class TakePartyActionUseCase {
   constructor(
     private readonly partiesRepository: PartiesRepository,
-    private readonly clock: Clock
+    private readonly clock: Clock,
+    private readonly cardCatalog: CardCatalog
   ) {}
 
   async execute({
@@ -75,6 +81,51 @@ export class TakePartyActionUseCase {
         }
         break
       }
+      case 'recover': {
+        const recovered = party.recover(action.option, this.clock.now())
+        if (recovered.isLeft()) {
+          const reason = recovered.value
+          switch (reason) {
+            case 'sessionNotActive':
+              return left(new PartySessionNotActiveError())
+            case 'noActionPoints':
+              return left(new ActionNotAllowedError('noActionPoints'))
+            default: {
+              const _exhaustive: never = reason
+              return _exhaustive
+            }
+          }
+        }
+        break
+      }
+      case 'adjustDeck': {
+        const adjusted = party.adjustDeck(
+          action.build,
+          await this.findDeckCatalog(party),
+          this.clock.now()
+        )
+        if (adjusted.isLeft()) {
+          const refusal = adjusted.value
+          if (typeof refusal === 'object') {
+            return left(
+              new ActionNotAllowedError(refusal.reason, refusal.cardId)
+            )
+          }
+          switch (refusal) {
+            case 'sessionNotActive':
+              return left(new PartySessionNotActiveError())
+            case 'noActionPoints':
+            case 'buildBelowMinimum':
+            case 'tcgFolderFull':
+              return left(new ActionNotAllowedError(refusal))
+            default: {
+              const _exhaustive: never = refusal
+              return _exhaustive
+            }
+          }
+        }
+        break
+      }
       case 'endTurn': {
         const ended = party.endTurn(this.clock.now())
         if (ended.isLeft()) {
@@ -99,5 +150,35 @@ export class TakePartyActionUseCase {
     await this.partiesRepository.save(party)
 
     return right({ party })
+  }
+
+  /**
+   * O que o Ajustar deck precisa do catálogo (D-71): as cartas de atributo
+   * que o jogador tem (build e pasta) e as classes dele. Carta ou classe que
+   * o catálogo não tem fica de fora (o agregado trata como sem limite e
+   * mantém a trava).
+   */
+  private async findDeckCatalog(
+    party: Party
+  ): Promise<{ cards: TAttributeCard[]; classes: TClassDefinition[] }> {
+    const actor = party.members.find((member) =>
+      member.id.equals(party.turn.memberId)
+    )
+    const cardIds = new Set(
+      [...(actor?.player.build ?? []), ...(actor?.player.tcgFolder ?? [])].map(
+        (entry) => entry.cardId
+      )
+    )
+    const cards: TAttributeCard[] = []
+    for (const cardId of cardIds) {
+      const card = await this.cardCatalog.findCard(cardId)
+      if (card?.type === 'attribute') cards.push(card)
+    }
+    const classes: TClassDefinition[] = []
+    for (const { playerClass } of actor?.player.playerClasses ?? []) {
+      const definition = await this.cardCatalog.findClass(playerClass)
+      if (definition) classes.push(definition)
+    }
+    return { cards, classes }
   }
 }

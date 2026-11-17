@@ -21,6 +21,11 @@ export interface TGameConfigValues {
   defaultCelerity: number // README 8.7
   defaultPiercing: number // README 8.7
   defaultReflection: number // README 8.7
+  maxCopiesPerCard: number // README 4.3 (D-67)
+  tcgFolderCapacity: number // README 6.3
+  recoverHealthPercent: number // README 12.5
+  recoverVigorPercent: number // README 7.3 item 6
+  recoverHandSize: number // README 12.5
 }
 
 export type TGameConfigKey = keyof TGameConfigValues
@@ -50,6 +55,11 @@ export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
   defaultCelerity: 10,
   defaultPiercing: 0,
   defaultReflection: 0,
+  maxCopiesPerCard: 4,
+  tcgFolderCapacity: 30,
+  recoverHealthPercent: 15,
+  recoverVigorPercent: 5,
+  recoverHandSize: 7,
 })
 
 /** Inteiros, inclusivos. Além deles, `minPlayers ≤ maxPlayers`. */
@@ -75,4 +85,9 @@ export const GAME_CONFIG_LIMITS: Readonly<
   defaultCelerity: { min: 0, max: 1000 },
   defaultPiercing: { min: 0, max: 1000 },
   defaultReflection: { min: 0, max: 1000 },
+  maxCopiesPerCard: { min: 1, max: 200 },
+  tcgFolderCapacity: { min: 0, max: 1000 },
+  recoverHealthPercent: { min: 0, max: 100 },
+  recoverVigorPercent: { min: 0, max: 100 },
+  recoverHandSize: { min: 0, max: 200 },
 })

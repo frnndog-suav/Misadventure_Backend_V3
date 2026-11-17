@@ -22,6 +22,7 @@ export function makePlayerState(
       { cardId: 'fixture.endurance-basic', copies: 30 },
       { cardId: 'fixture.strength-basic', copies: 30 },
     ],
+    tcgFolder: [],
     deck: [
       ...Array.from({ length: 27 }, () => 'fixture.endurance-basic'),
       ...Array.from({ length: 26 }, () => 'fixture.strength-basic'),

@@ -3,11 +3,13 @@ import { type Either, left, right } from '@/core/error/either'
 import { AggregateRoot } from '@/core/pattern/aggregate-root'
 import type { IdGenerator } from '@/core/ports/id-generator'
 import { type RngState, SeededRng } from '@/core/rng/seeded-rng'
+import { isClassActive } from '@/domain/catalog/enterprise/class-lock'
 import { checkDimensionComposition } from '@/domain/catalog/enterprise/dimension-composition'
 import type {
   TAttributeCard,
   TClassDefinition,
   TDimensionCard,
+  TStarterDeckEntry,
   TZoneCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
@@ -15,10 +17,16 @@ import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/ga
 import { connectedZones } from '../../connected-zones'
 import type { TPartyEvent } from '../../events/party-events'
 import { assembleMap, type TPartyMap } from '../../map-assembly'
+import type { TRecoverOption } from '../../party-action'
 import type { TPartyTurn } from '../../party-turn'
-import { createStartingPlayer } from '../../starting-player'
+import { shuffle } from '../../shuffle'
+import {
+  createStartingPlayer,
+  defaultModifiers,
+  sortedByCardId,
+} from '../../starting-player'
 import { rollTurnOrder } from '../../turn-order'
-import { PartyMember } from '../party-member'
+import { maxHealthOf, PartyMember, type TPlayerState } from '../party-member'
 
 /** Limites de CONTRATO FEAT-05 (`CreatePartyRequest`, D-30). */
 export const PARTY_NAME_MAX_LENGTH = 40
@@ -45,6 +53,14 @@ export type TCreatePartyFailure =
       dimensionCardId: string | null
       problems: string[]
     }
+
+/** Por que o Ajustar deck foi recusado (REQ-66; D-71). */
+export type TAdjustDeckRefusal =
+  | 'sessionNotActive'
+  | 'noActionPoints'
+  | { reason: 'notOwned' | 'copyLimitExceeded'; cardId: string }
+  | 'buildBelowMinimum'
+  | 'tcgFolderFull'
 
 /** Dimensão do grupo (D-42; CONTRATO `PartyDimension`). */
 export type TPartyDimension = Readonly<{
@@ -451,6 +467,280 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     })
     this.addDomainEvent({ type: 'TurnStarted', memberId, round, ...base })
     return right(undefined)
+  }
+
+  /**
+   * Recuperar (README 12.2, 12.5, 7.3 item 6; REQ-63). Quem age é o membro da
+   * vez (D-63); gasta 1 ponto. Vida e Vigor sobem a porcentagem da config (no
+   * mínimo 1) sem passar de `maxHealth` e do Pico. `shuffleHand` e
+   * `shuffleDiscard` juntam as cartas ao deck (o deck primeiro) e o embaralham
+   * com o RNG; `drawToHand` não usa o RNG. Aceito mesmo sem efeito.
+   */
+  recover(
+    option: TRecoverOption,
+    at: Date
+  ): Either<'sessionNotActive' | 'noActionPoints', void> {
+    switch (this.props.status) {
+      case 'idle':
+        return left('sessionNotActive')
+      case 'inSession':
+        break
+      default: {
+        const _exhaustive: never = this.props.status
+        return _exhaustive
+      }
+    }
+
+    if (this.props.turn.actionPoints < 1) {
+      return left('noActionPoints')
+    }
+
+    const { config } = this.props
+    const index = this.actorIndex()
+    const actor = this.props.members[index]
+    const { player } = actor
+
+    const maxHealth = maxHealthOf(player)
+    const health = Math.min(
+      maxHealth,
+      player.health +
+        Math.max(1, Math.floor((maxHealth * config.recoverHealthPercent) / 100))
+    )
+    const vigor = Math.min(
+      player.peak,
+      player.vigor +
+        Math.max(
+          1,
+          Math.floor((player.peak * config.recoverVigorPercent) / 100)
+        )
+    )
+
+    let { deck, hand, discard } = player
+    let cardsDrawn = 0
+    switch (option) {
+      case 'drawToHand': {
+        cardsDrawn = Math.min(
+          Math.max(0, config.recoverHandSize - hand.length),
+          deck.length
+        )
+        hand = [...hand, ...deck.slice(0, cardsDrawn)]
+        deck = deck.slice(cardsDrawn)
+        break
+      }
+      case 'shuffleHand': {
+        const rng = SeededRng.fromState(this.props.rngState)
+        deck = shuffle([...deck, ...hand], rng)
+        hand = []
+        this.props.rngState = rng.state()
+        break
+      }
+      case 'shuffleDiscard': {
+        const rng = SeededRng.fromState(this.props.rngState)
+        deck = shuffle([...deck, ...discard], rng)
+        discard = []
+        this.props.rngState = rng.state()
+        break
+      }
+      default: {
+        const _exhaustive: never = option
+        return _exhaustive
+      }
+    }
+
+    this.spendActionPoint()
+    this.replaceActor(index, { ...player, health, vigor, deck, hand, discard })
+    this.props.savedAt = at
+    this.addDomainEvent({
+      type: 'PlayerRecovered',
+      memberId: actor.id,
+      option,
+      healthRestored: health - player.health,
+      vigorRestored: vigor - player.vigor,
+      cardsDrawn,
+      occurredAt: at,
+      aggregateId: this.id,
+    })
+    return right(undefined)
+  }
+
+  /**
+   * Ajustar deck (README 4.4 passos 1 a 4, 6.3, 8.2, 12.2; REQ-65, REQ-66).
+   * `build` é a build nova inteira (D-68). Ordem das recusas: fora de sessão,
+   * sem pontos, `notOwned`, `copyLimitExceeded`, `buildBelowMinimum`,
+   * `tcgFolderFull`. `catalog` traz as cartas de atributo e as classes do
+   * jogador (D-71). O deck novo é embaralhado com o RNG e o jogador compra de
+   * volta a mesma quantidade de cartas que tinha na mão. Recusado, nada muda.
+   */
+  adjustDeck(
+    build: readonly TStarterDeckEntry[],
+    catalog: {
+      cards: readonly TAttributeCard[]
+      classes: readonly TClassDefinition[]
+    },
+    at: Date
+  ): Either<TAdjustDeckRefusal, void> {
+    switch (this.props.status) {
+      case 'idle':
+        return left('sessionNotActive')
+      case 'inSession':
+        break
+      default: {
+        const _exhaustive: never = this.props.status
+        return _exhaustive
+      }
+    }
+
+    if (this.props.turn.actionPoints < 1) {
+      return left('noActionPoints')
+    }
+
+    const { config } = this.props
+    const index = this.actorIndex()
+    const actor = this.props.members[index]
+    const { player } = actor
+
+    const pool = new Map<string, number>()
+    for (const { cardId, copies } of [...player.build, ...player.tcgFolder]) {
+      pool.set(cardId, (pool.get(cardId) ?? 0) + copies)
+    }
+
+    for (const { cardId, copies } of build) {
+      if (copies > (pool.get(cardId) ?? 0)) {
+        return left({ reason: 'notOwned', cardId })
+      }
+    }
+    for (const { cardId, copies } of build) {
+      const card = catalog.cards.find((c) => c.id === cardId)
+      if (
+        card &&
+        card.attributeKind !== 'basic' &&
+        copies > config.maxCopiesPerCard
+      ) {
+        return left({ reason: 'copyLimitExceeded', cardId })
+      }
+    }
+
+    const buildSize = build.reduce((sum, { copies }) => sum + copies, 0)
+    if (buildSize < config.minDeckSize) {
+      return left('buildBelowMinimum')
+    }
+
+    const inBuild = new Map(build.map(({ cardId, copies }) => [cardId, copies]))
+    const tcgFolder = sortedByCardId(
+      [...pool].map(([cardId, owned]) => ({
+        cardId,
+        copies: owned - (inBuild.get(cardId) ?? 0),
+      }))
+    ).filter(({ copies }) => copies > 0)
+    const folderSize = tcgFolder.reduce((sum, { copies }) => sum + copies, 0)
+    if (folderSize > config.tcgFolderCapacity) {
+      return left('tcgFolderFull')
+    }
+
+    const newBuild = sortedByCardId(
+      build.map(({ cardId, copies }) => ({ cardId, copies }))
+    )
+    const rng = SeededRng.fromState(this.props.rngState)
+    const shuffled = shuffle(
+      newBuild.flatMap(({ cardId, copies }) =>
+        Array.from({ length: copies }, () => cardId)
+      ),
+      rng
+    )
+    const hand = shuffled.slice(0, player.hand.length)
+    const deck = shuffled.slice(hand.length)
+
+    const lockEntries = newBuild.flatMap(({ cardId, copies }) => {
+      const card = catalog.cards.find((c) => c.id === cardId)
+      return card ? [{ card, copies }] : []
+    })
+    const playerClasses = player.playerClasses.map((entry) => {
+      const definition = catalog.classes.find(
+        (c) => c.playerClass === entry.playerClass
+      )
+      if (!definition) return entry
+      return {
+        playerClass: entry.playerClass,
+        deckLockMet: isClassActive({
+          build: lockEntries,
+          essentialAttributes: definition.essentialAttributes,
+          lockOneEssential: config.lockOneEssential,
+          lockTwoEssentials: config.lockTwoEssentials,
+        }),
+      }
+    })
+    // Os modificadores seguem a 1ª classe, como na preparação (REQ-34).
+    const firstDefinition = catalog.classes.find(
+      (c) => c.playerClass === player.playerClasses[0]?.playerClass
+    )
+    const modifiers = firstDefinition
+      ? playerClasses[0].deckLockMet
+        ? { ...firstDefinition.baseModifiers }
+        : defaultModifiers(config)
+      : player.modifiers
+
+    this.props.rngState = rng.state()
+    this.spendActionPoint()
+    this.replaceActor(index, {
+      ...player,
+      playerClasses,
+      build: newBuild,
+      tcgFolder,
+      deck,
+      hand,
+      discard: [],
+      modifiers,
+    })
+    this.props.savedAt = at
+    const base = { occurredAt: at, aggregateId: this.id }
+    this.addDomainEvent({
+      type: 'DeckAdjusted',
+      memberId: actor.id,
+      buildSize,
+      handSize: hand.length,
+      ...base,
+    })
+    playerClasses.forEach((entry, i) => {
+      if (entry.deckLockMet !== player.playerClasses[i].deckLockMet) {
+        this.addDomainEvent({
+          type: 'DeckLockChanged',
+          memberId: actor.id,
+          playerClass: entry.playerClass,
+          deckLockMet: entry.deckLockMet,
+          ...base,
+        })
+      }
+    })
+    return right(undefined)
+  }
+
+  /** Posição do membro da vez (D-63). */
+  private actorIndex(): number {
+    return this.props.members.findIndex((member) =>
+      member.id.equals(this.props.turn.memberId)
+    )
+  }
+
+  private spendActionPoint(): void {
+    this.props.turn = {
+      ...this.props.turn,
+      actionPoints: this.props.turn.actionPoints - 1,
+    }
+  }
+
+  private replaceActor(index: number, player: TPlayerState): void {
+    this.props.members = this.props.members.map((member, i) =>
+      i === index
+        ? PartyMember.create(
+            {
+              characterName: member.characterName,
+              kind: member.kind,
+              player,
+            },
+            member.id
+          )
+        : member
+    )
   }
 
   /** Abandonar (REQ-24): vale em qualquer status; o save é apagado pelo repositório. */

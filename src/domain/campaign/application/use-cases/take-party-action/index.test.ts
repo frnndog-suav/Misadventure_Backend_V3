@@ -4,6 +4,8 @@ import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { PartyMember } from '../../../enterprise/entities/party-member'
 import { makeParty } from '../../../../../../test/factories/make-party'
 import { fixedClock } from '../../../../../../test/fakes/fixed-clock'
+import { makeFixtureContent } from '../../../../../../test/factories/make-card'
+import { InMemoryCardCatalog } from '../../../../../../test/fakes/in-memory-card-catalog'
 import { InMemoryPartiesRepository } from '../../../../../../test/repositories/in-memory-parties-repository'
 
 import { ActionInvalidError } from '../_errors/action-invalid-error'
@@ -46,7 +48,12 @@ async function seed(status: 'idle' | 'inSession' = 'inSession') {
 describe('TakePartyActionUseCase', () => {
   beforeEach(() => {
     repository = new InMemoryPartiesRepository()
-    sut = new TakePartyActionUseCase(repository, fixedClock(NOW))
+    const content = makeFixtureContent()
+    const catalog = new InMemoryCardCatalog()
+    catalog.collections = content.collections
+    catalog.cards = content.cards
+    catalog.classes = content.classes
+    sut = new TakePartyActionUseCase(repository, fixedClock(NOW), catalog)
   })
 
   it('REQ-51: move aceito → zoneId novo, gravado com savedAt do Clock e PlayerMoved do host', async () => {
@@ -339,4 +346,277 @@ describe('TakePartyActionUseCase', () => {
       expect(stored?.savedAt.toISOString()).toBe(BEFORE)
     }
   )
+
+  describe('recover e adjustDeck (REQ-63 a REQ-66)', () => {
+    const S = 'fixture.strength-basic'
+    const E = 'fixture.endurance-basic'
+    const D = 'fixture.dexterity-basic'
+    const warriorBuild = [
+      { cardId: E, copies: 30 },
+      { cardId: S, copies: 30 },
+    ]
+
+    it('REQ-63: recover aceito → gasta 1 ponto, grava com savedAt do Clock e PlayerRecovered', async () => {
+      const partyId = await seed()
+      const save = vi.spyOn(repository, 'save')
+
+      const result = await sut.execute({
+        partyId,
+        body: { type: 'recover', option: 'shuffleHand' },
+      })
+
+      expect(result.isRight()).toBe(true)
+      if (!result.isRight()) return
+      expect(result.value.party.pullDomainEvents().map((e) => e.type)).toEqual([
+        'PlayerRecovered',
+      ])
+      expect(save).toHaveBeenCalledTimes(1)
+      const stored = await repository.findById(partyId)
+      expect(stored?.turn.actionPoints).toBe(2)
+      expect(stored?.members[0].player.hand).toEqual([])
+      expect(stored?.savedAt.toISOString()).toBe(NOW)
+    })
+
+    it('REQ-64: option desconhecida → ACTION_INVALID unknownOption; nada gravado', async () => {
+      const partyId = await seed()
+      const save = vi.spyOn(repository, 'save')
+
+      const result = await sut.execute({
+        partyId,
+        body: { type: 'recover', option: 'nap' },
+      })
+
+      expect(result.isLeft() && result.value).toBeInstanceOf(ActionInvalidError)
+      expect(result.isLeft() && result.value.details).toEqual({
+        fields: [{ field: 'option', reason: 'unknownOption' }],
+      })
+      expect(save).not.toHaveBeenCalled()
+    })
+
+    it('REQ-64: recover em grupo idle → PARTY_SESSION_NOT_ACTIVE', async () => {
+      const partyId = await seed('idle')
+
+      const result = await sut.execute({
+        partyId,
+        body: { type: 'recover', option: 'drawToHand' },
+      })
+
+      expect(result.isLeft() && result.value).toBeInstanceOf(
+        PartySessionNotActiveError
+      )
+    })
+
+    it('REQ-64: recover sem pontos → ACTION_NOT_ALLOWED noActionPoints; nada gravado', async () => {
+      const partyId = await seed()
+      for (let i = 0; i < 3; i++) {
+        await sut.execute({
+          partyId,
+          body: { type: 'recover', option: 'drawToHand' },
+        })
+      }
+      const save = vi.spyOn(repository, 'save')
+
+      const result = await sut.execute({
+        partyId,
+        body: { type: 'recover', option: 'drawToHand' },
+      })
+
+      expect(result.isLeft() && result.value).toBeInstanceOf(
+        ActionNotAllowedError
+      )
+      expect(result.isLeft() && result.value.details).toEqual({
+        reason: 'noActionPoints',
+      })
+      expect(save).not.toHaveBeenCalled()
+    })
+
+    it('REQ-65: adjustDeck sem mudar nada → aceito, gasta 1 ponto, DeckAdjusted', async () => {
+      const partyId = await seed()
+
+      const result = await sut.execute({
+        partyId,
+        body: { type: 'adjustDeck', build: warriorBuild },
+      })
+
+      expect(result.isRight()).toBe(true)
+      if (!result.isRight()) return
+      expect(result.value.party.pullDomainEvents().map((e) => e.type)).toEqual([
+        'DeckAdjusted',
+      ])
+      const stored = await repository.findById(partyId)
+      expect(stored?.turn.actionPoints).toBe(2)
+      expect(stored?.members[0].player.hand).toHaveLength(7)
+      expect(stored?.members[0].player.deck).toHaveLength(53)
+      expect(stored?.savedAt.toISOString()).toBe(NOW)
+    })
+
+    it('REQ-65: o caso de uso lê cartas e classes do catálogo (trava recalculada)', async () => {
+      const host = makeParty().members[0]
+      const party = makeParty({
+        status: 'inSession',
+        dimension,
+        members: [
+          PartyMember.create(
+            {
+              characterName: host.characterName,
+              kind: host.kind,
+              player: {
+                ...host.player,
+                tcgFolder: [{ cardId: D, copies: 25 }],
+              },
+            },
+            host.id
+          ),
+        ],
+      })
+      await repository.create(party)
+
+      const result = await sut.execute({
+        partyId: party.id.toString(),
+        body: {
+          type: 'adjustDeck',
+          build: [
+            { cardId: D, copies: 25 },
+            { cardId: E, copies: 30 },
+            { cardId: S, copies: 5 },
+          ],
+        },
+      })
+
+      expect(result.isRight()).toBe(true)
+      const stored = await repository.findById(party.id.toString())
+      expect(stored?.members[0].player.playerClasses).toEqual([
+        { playerClass: 'warrior', deckLockMet: false },
+      ])
+      expect(stored?.members[0].player.tcgFolder).toEqual([
+        { cardId: S, copies: 25 },
+      ])
+    })
+
+    it('REQ-68: no repositório em memória, build, pasta, trava, modificadores, deck e RNG são gravados e lidos iguais', async () => {
+      const host = makeParty().members[0]
+      const party = makeParty({
+        status: 'inSession',
+        dimension,
+        members: [
+          PartyMember.create(
+            {
+              characterName: host.characterName,
+              kind: host.kind,
+              player: {
+                ...host.player,
+                tcgFolder: [{ cardId: D, copies: 25 }],
+              },
+            },
+            host.id
+          ),
+        ],
+      })
+      await repository.create(party)
+
+      const result = await sut.execute({
+        partyId: party.id.toString(),
+        body: {
+          type: 'adjustDeck',
+          build: [
+            { cardId: D, copies: 25 },
+            { cardId: E, copies: 30 },
+            { cardId: S, copies: 5 },
+          ],
+        },
+      })
+      if (!result.isRight()) throw new Error('esperava sucesso')
+
+      const stored = await repository.findById(party.id.toString())
+      expect(stored?.members[0].player).toEqual(
+        result.value.party.members[0].player
+      )
+      expect(stored?.rngState).toEqual(result.value.party.rngState)
+      expect(stored?.config).toEqual(result.value.party.config)
+    })
+
+    it('REQ-66: forma inválida → ACTION_INVALID com os motivos; nada gravado', async () => {
+      const partyId = await seed()
+      const save = vi.spyOn(repository, 'save')
+
+      const result = await sut.execute({
+        partyId,
+        body: {
+          type: 'adjustDeck',
+          build: [
+            { cardId: S, copies: 0 },
+            { cardId: S, copies: 1 },
+          ],
+        },
+      })
+
+      expect(result.isLeft() && result.value.details).toEqual({
+        fields: [
+          { field: 'build.0.copies', reason: 'notPositiveInteger' },
+          { field: 'build.1.cardId', reason: 'duplicateCard' },
+        ],
+      })
+      expect(save).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      [
+        'buildBelowMinimum',
+        [
+          { cardId: E, copies: 30 },
+          { cardId: S, copies: 29 },
+        ],
+        { reason: 'buildBelowMinimum' },
+      ],
+      [
+        'notOwned',
+        [
+          { cardId: E, copies: 30 },
+          { cardId: S, copies: 31 },
+        ],
+        { reason: 'notOwned', cardId: S },
+      ],
+      [
+        'notOwned (carta que não tem)',
+        [
+          { cardId: E, copies: 30 },
+          { cardId: S, copies: 30 },
+          { cardId: D, copies: 1 },
+        ],
+        { reason: 'notOwned', cardId: D },
+      ],
+    ])(
+      'REQ-66: %s → ACTION_NOT_ALLOWED com details; nada gravado',
+      async (_name, build, details) => {
+        const partyId = await seed()
+        const save = vi.spyOn(repository, 'save')
+
+        const result = await sut.execute({
+          partyId,
+          body: { type: 'adjustDeck', build },
+        })
+
+        expect(result.isLeft() && result.value).toBeInstanceOf(
+          ActionNotAllowedError
+        )
+        expect(result.isLeft() && result.value.details).toEqual(details)
+        expect(save).not.toHaveBeenCalled()
+        const stored = await repository.findById(partyId)
+        expect(stored?.savedAt.toISOString()).toBe(BEFORE)
+      }
+    )
+
+    it('REQ-66: adjustDeck em grupo idle → PARTY_SESSION_NOT_ACTIVE', async () => {
+      const partyId = await seed('idle')
+
+      const result = await sut.execute({
+        partyId,
+        body: { type: 'adjustDeck', build: [{ cardId: S, copies: 1 }] },
+      })
+
+      expect(result.isLeft() && result.value).toBeInstanceOf(
+        PartySessionNotActiveError
+      )
+    })
+  })
 })

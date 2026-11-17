@@ -758,6 +758,94 @@ describe('checkCatalogIntegrity', () => {
       }
     })
 
+    describe('REQ-61: limite de cópias no deck pré-pronto (4.3)', () => {
+      const synergy = makeAttributeCard({
+        id: 'fixture.warrior-synergy',
+        name: 'Sinergia',
+        attributeKind: 'synergy',
+        attributes: ['strength', 'dexterity'],
+      })
+      const enhanced = makeAttributeCard({
+        id: 'fixture.strength-enhanced',
+        name: 'Força Aprimorada',
+        attributeKind: 'enhanced',
+        attributes: ['strength'],
+        effects: [{ text: 'Efeito' }],
+      })
+      const cards = [...deckCards, synergy, enhanced]
+      const deck = (extra: { cardId: string; copies: number }) => [
+        { cardId: 'fixture.strength-basic', copies: 18 },
+        { cardId: 'fixture.dexterity-basic', copies: 42 - extra.copies },
+        extra,
+      ]
+
+      it('synergy com 5 cópias (padrão 4) → starterDeckCopyLimit em starterDeck[i].copies', () => {
+        expect(
+          checkClasses(
+            [
+              makeClassDefinition({
+                starterDeck: deck({ cardId: synergy.id, copies: 5 }),
+              }),
+            ],
+            cards
+          )
+        ).toEqual([classIssue('starterDeck[2].copies', 'starterDeckCopyLimit')])
+      })
+
+      it('enhanced com 5 cópias → starterDeckCopyLimit', () => {
+        expect(
+          checkClasses(
+            [
+              makeClassDefinition({
+                starterDeck: deck({ cardId: enhanced.id, copies: 5 }),
+              }),
+            ],
+            cards
+          )
+        ).toEqual([classIssue('starterDeck[2].copies', 'starterDeckCopyLimit')])
+      })
+
+      it('até 4 cópias de synergy/enhanced é aceito; basic não tem limite', () => {
+        expect(
+          checkClasses(
+            [
+              makeClassDefinition({
+                starterDeck: deck({ cardId: synergy.id, copies: 4 }),
+              }),
+            ],
+            cards
+          )
+        ).toEqual([])
+        expect(
+          checkClasses([
+            makeClassDefinition({
+              starterDeck: [
+                { cardId: 'fixture.strength-basic', copies: 18 },
+                { cardId: 'fixture.dexterity-basic', copies: 42 },
+              ],
+            }),
+          ])
+        ).toEqual([])
+      })
+
+      it('rascunho não confere o limite (D-57b)', () => {
+        expect(
+          checkCatalogIntegrity({
+            collections: [makeCollection()],
+            cards,
+            classes: [
+              {
+                ...makeClassDefinition({
+                  starterDeck: deck({ cardId: synergy.id, copies: 9 }),
+                }),
+                status: 'draft',
+              },
+            ],
+          })
+        ).toEqual([])
+      })
+    })
+
     it('REQ-26: total de cópias diferente do minDeckSize padrão (60)', () => {
       expect(
         checkClasses([

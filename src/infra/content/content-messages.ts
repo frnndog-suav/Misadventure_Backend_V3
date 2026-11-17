@@ -1,3 +1,4 @@
+import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import type { TCatalogIssueReason } from '@/domain/catalog/enterprise/catalog-integrity'
 import type {
   TContentIssue,
@@ -43,6 +44,7 @@ const CATALOG_MESSAGES: Record<TCatalogIssueReason, string> = {
     'O deck pré-pronto precisa ter o tamanho mínimo do deck (padrão).',
   starterDeckLockNotMet:
     'O deck pré-pronto precisa cumprir a trava da classe (padrão).',
+  starterDeckCopyLimit: `Carta sinérgica ou aprimorada pode ter no máximo ${GAME_CONFIG_DEFAULTS.maxCopiesPerCard} cópias no deck pré-pronto.`,
 }
 
 /** Relatório de REQ-11 (o arquivo e a carta já localizam o problema). */
@@ -130,6 +132,7 @@ export function contentIssueMessage(issue: TContentIssue): string {
     case 'notAnAttributeCard':
     case 'starterDeckSize':
     case 'starterDeckLockNotMet':
+    case 'starterDeckCopyLimit':
       return CATALOG_MESSAGES[reason]
     default: {
       const _exhaustive: never = reason

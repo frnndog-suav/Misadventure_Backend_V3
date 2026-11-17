@@ -111,4 +111,151 @@ describe('parsePartyAction', () => {
 
     expect(result.isRight()).toBe(true)
   })
+
+  describe('recover (REQ-64)', () => {
+    it.each(['drawToHand', 'shuffleHand', 'shuffleDiscard'])(
+      'REQ-64: option %s → a ação',
+      (option) => {
+        const result = parsePartyAction({ type: 'recover', option })
+
+        expect(result.isRight() && result.value).toEqual({
+          type: 'recover',
+          option,
+        })
+      }
+    )
+
+    it('REQ-64: option ausente → required', () => {
+      const result = parsePartyAction({ type: 'recover' })
+
+      expect(result.isLeft() && result.value).toEqual([
+        { field: 'option', reason: 'required' },
+      ])
+    })
+
+    it('REQ-64: option que não é texto → notString', () => {
+      const result = parsePartyAction({ type: 'recover', option: 1 })
+
+      expect(result.isLeft() && result.value).toEqual([
+        { field: 'option', reason: 'notString' },
+      ])
+    })
+
+    it('REQ-64: option fora das três → unknownOption', () => {
+      const result = parsePartyAction({ type: 'recover', option: 'nap' })
+
+      expect(result.isLeft() && result.value).toEqual([
+        { field: 'option', reason: 'unknownOption' },
+      ])
+    })
+
+    it('REQ-64: option, depois campos a mais na ordem do pedido', () => {
+      const result = parsePartyAction({
+        b: 1,
+        type: 'recover',
+        a: 2,
+        option: 'nap',
+      })
+
+      expect(result.isLeft() && result.value).toEqual([
+        { field: 'option', reason: 'unknownOption' },
+        { field: 'b', reason: 'unknownKey' },
+        { field: 'a', reason: 'unknownKey' },
+      ])
+    })
+  })
+
+  describe('adjustDeck (REQ-66 item 1)', () => {
+    const S = 'fixture.strength-basic'
+    const E = 'fixture.endurance-basic'
+
+    it('REQ-66: build válida → a ação, com os itens como enviados', () => {
+      const build = [
+        { cardId: S, copies: 29 },
+        { cardId: E, copies: 31 },
+      ]
+      const result = parsePartyAction({ type: 'adjustDeck', build })
+
+      expect(result.isRight() && result.value).toEqual({
+        type: 'adjustDeck',
+        build,
+      })
+    })
+
+    it('REQ-66: build vazia é bem formada (a recusa vem depois, por tamanho)', () => {
+      const result = parsePartyAction({ type: 'adjustDeck', build: [] })
+
+      expect(result.isRight()).toBe(true)
+    })
+
+    it('REQ-66: build ausente → required; não lista → notArray', () => {
+      const missing = parsePartyAction({ type: 'adjustDeck' })
+      const wrong = parsePartyAction({ type: 'adjustDeck', build: {} })
+
+      expect(missing.isLeft() && missing.value).toEqual([
+        { field: 'build', reason: 'required' },
+      ])
+      expect(wrong.isLeft() && wrong.value).toEqual([
+        { field: 'build', reason: 'notArray' },
+      ])
+    })
+
+    it('REQ-66: item que não é objeto → invalidItem em build.i', () => {
+      const result = parsePartyAction({
+        type: 'adjustDeck',
+        build: [{ cardId: S, copies: 1 }, 'x', null, [1]],
+      })
+
+      expect(result.isLeft() && result.value).toEqual([
+        { field: 'build.1', reason: 'invalidItem' },
+        { field: 'build.2', reason: 'invalidItem' },
+        { field: 'build.3', reason: 'invalidItem' },
+      ])
+    })
+
+    it('REQ-66: cardId e copies ausentes ou do tipo errado', () => {
+      const result = parsePartyAction({
+        type: 'adjustDeck',
+        build: [{}, { cardId: 5, copies: 'a' }, { cardId: S, copies: 1.5 }],
+      })
+
+      expect(result.isLeft() && result.value).toEqual([
+        { field: 'build.0.cardId', reason: 'required' },
+        { field: 'build.0.copies', reason: 'required' },
+        { field: 'build.1.cardId', reason: 'notString' },
+        { field: 'build.1.copies', reason: 'notPositiveInteger' },
+        { field: 'build.2.copies', reason: 'notPositiveInteger' },
+      ])
+    })
+
+    it('REQ-66: copies 0 ou negativo → notPositiveInteger; cardId repetido → duplicateCard no segundo', () => {
+      const result = parsePartyAction({
+        type: 'adjustDeck',
+        build: [
+          { cardId: S, copies: 0 },
+          { cardId: S, copies: 1 },
+          { cardId: E, copies: -2 },
+        ],
+      })
+
+      expect(result.isLeft() && result.value).toEqual([
+        { field: 'build.0.copies', reason: 'notPositiveInteger' },
+        { field: 'build.1.cardId', reason: 'duplicateCard' },
+        { field: 'build.2.copies', reason: 'notPositiveInteger' },
+      ])
+    })
+
+    it('REQ-66: campo a mais no item (build.i.campo) e na ação, nesta ordem', () => {
+      const result = parsePartyAction({
+        type: 'adjustDeck',
+        extra: 1,
+        build: [{ cardId: S, copies: 1, foil: true }],
+      })
+
+      expect(result.isLeft() && result.value).toEqual([
+        { field: 'build.0.foil', reason: 'unknownKey' },
+        { field: 'extra', reason: 'unknownKey' },
+      ])
+    })
+  })
 })

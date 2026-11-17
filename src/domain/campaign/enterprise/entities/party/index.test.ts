@@ -17,7 +17,8 @@ import { sequentialIds } from '../../../../../../test/fakes/sequential-ids'
 
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { assembleMap } from '../../map-assembly'
-import { PartyMember } from '../party-member'
+import { PartyMember, type TPlayerState } from '../party-member'
+import { shuffle } from '../../shuffle'
 import { createStartingPlayer } from '../../starting-player'
 import { Party, type TCreatePartyInput } from '.'
 
@@ -788,6 +789,690 @@ describe('Party', () => {
       expect(party.turn.round).toBe(1)
       expect(party.savedAt.toISOString()).toBe(NOW.toISOString())
       expect(party.pullDomainEvents()).toEqual([])
+    })
+  })
+
+  describe('REQ-62: build e pasta no estado do jogador', () => {
+    it('a criação põe a build do deck pré-pronto em ordem de cardId e a pasta vazia; o invariante vale', () => {
+      const rogue = FIXTURE.classes[1]
+      const result = Party.create(
+        input({ playerClass: 'rogue', classDefinition: rogue }),
+        sequentialIds('p')
+      )
+      if (!result.isRight()) throw new Error('esperava sucesso')
+      const { player } = result.value.members[0]
+
+      expect(player.build).toEqual([
+        { cardId: 'fixture.dexterity-basic', copies: 40 },
+        { cardId: 'fixture.strength-basic', copies: 20 },
+      ])
+      expect(player.tcgFolder).toEqual([])
+      expect(
+        player.deck.length + player.hand.length + player.discard.length
+      ).toBe(60)
+    })
+  })
+
+  describe('recover (REQ-63, REQ-64)', () => {
+    const PLAYER = (override: Partial<TPlayerState> = {}) =>
+      makePlayerState(override)
+    const partyOf = (
+      player: Partial<TPlayerState> = {},
+      config: Partial<typeof GAME_CONFIG_DEFAULTS> = {},
+      status: 'idle' | 'inSession' = 'inSession'
+    ) => {
+      const host = PartyMember.create(
+        { characterName: 'Lia', kind: 'human', player: PLAYER(player) },
+        new UniqueEntityID('member-1')
+      )
+      return makeParty({
+        status,
+        members: [host],
+        hostMemberId: host.id,
+        config: { ...GAME_CONFIG_DEFAULTS, ...config },
+        savedAt: NOW,
+      })
+    }
+    const playerOf = (party: Party) => party.members[0].player
+
+    it('REQ-63: gasta 1 ponto, grava savedAt e registra PlayerRecovered com valores efetivos', () => {
+      const party = partyOf({ health: 10, vigor: 5 })
+
+      const result = party.recover('drawToHand', LATER)
+
+      expect(result.isRight()).toBe(true)
+      expect(party.turn.actionPoints).toBe(2)
+      expect(party.savedAt.toISOString()).toBe(LATER.toISOString())
+      const [event] = party.pullDomainEvents()
+      expect(event).toMatchObject({
+        type: 'PlayerRecovered',
+        memberId: new UniqueEntityID('member-1'),
+        option: 'drawToHand',
+        healthRestored: 3,
+        vigorRestored: 1,
+        cardsDrawn: 0,
+        occurredAt: LATER,
+      })
+    })
+
+    it('REQ-63: vida +⌊22×15÷100⌋ = 3 e Vigor +⌊10×5÷100⌋→mínimo 1', () => {
+      const party = partyOf({ health: 10, vigor: 5 })
+
+      party.recover('drawToHand', LATER)
+
+      expect(playerOf(party).health).toBe(13)
+      expect(playerOf(party).vigor).toBe(6)
+    })
+
+    it('REQ-63: não passa de maxHealth nem do Pico; o evento traz o efetivo', () => {
+      const party = partyOf({ health: 21, vigor: 10 })
+
+      party.recover('shuffleDiscard', LATER)
+
+      expect(playerOf(party).health).toBe(22)
+      expect(playerOf(party).vigor).toBe(10)
+      expect(party.pullDomainEvents()[0]).toMatchObject({
+        healthRestored: 1,
+        vigorRestored: 0,
+      })
+    })
+
+    it('REQ-63: percentual que dá 0 ainda restaura o mínimo de 1 (12.5, 7.3)', () => {
+      const party = partyOf(
+        { health: 10, vigor: 5 },
+        { recoverHealthPercent: 1, recoverVigorPercent: 0 }
+      )
+
+      party.recover('drawToHand', LATER)
+
+      expect(playerOf(party).health).toBe(11)
+      expect(playerOf(party).vigor).toBe(6)
+    })
+
+    it('REQ-63: usa os percentuais da config do grupo', () => {
+      const party = partyOf(
+        { health: 1, vigor: 0, peak: 10 },
+        { recoverHealthPercent: 50, recoverVigorPercent: 50 }
+      )
+
+      party.recover('drawToHand', LATER)
+
+      expect(playerOf(party).health).toBe(12)
+      expect(playerOf(party).vigor).toBe(5)
+    })
+
+    it('REQ-63 (a): compra do topo até a mão ter recoverHandSize; o RNG fica intacto', () => {
+      const deck = ['d1', 'd2', 'd3', 'd4', 'd5']
+      const party = partyOf({ hand: ['h1', 'h2', 'h3'], deck })
+      const before = [...party.rngState]
+
+      party.recover('drawToHand', LATER)
+
+      expect(playerOf(party).hand).toEqual([
+        'h1',
+        'h2',
+        'h3',
+        'd1',
+        'd2',
+        'd3',
+        'd4',
+      ])
+      expect(playerOf(party).deck).toEqual(['d5'])
+      expect([...party.rngState]).toEqual(before)
+      expect(party.pullDomainEvents()[0]).toMatchObject({ cardsDrawn: 4 })
+    })
+
+    it('REQ-63 (a): deck que acaba antes compra só o que há (9.2)', () => {
+      const party = partyOf({ hand: ['h1', 'h2', 'h3'], deck: ['d1', 'd2'] })
+
+      const result = party.recover('drawToHand', LATER)
+
+      expect(result.isRight()).toBe(true)
+      expect(playerOf(party).hand).toEqual(['h1', 'h2', 'h3', 'd1', 'd2'])
+      expect(playerOf(party).deck).toEqual([])
+    })
+
+    it('REQ-63 (a): mão com recoverHandSize ou mais não compra; ainda é aceito e gasta o ponto', () => {
+      const party = partyOf({}, {})
+      const hand = [...playerOf(party).hand]
+
+      const result = party.recover('drawToHand', LATER)
+
+      expect(result.isRight()).toBe(true)
+      expect(playerOf(party).hand).toEqual(hand)
+      expect(party.turn.actionPoints).toBe(2)
+      expect(party.pullDomainEvents()[0]).toMatchObject({ cardsDrawn: 0 })
+    })
+
+    it('REQ-63 (a): recoverHandSize da config do grupo (10)', () => {
+      const party = partyOf({}, { recoverHandSize: 10 })
+
+      party.recover('drawToHand', LATER)
+
+      expect(playerOf(party).hand).toHaveLength(10)
+      expect(playerOf(party).deck).toHaveLength(50)
+    })
+
+    it('REQ-63 (b): a mão inteira vai para o deck, que é embaralhado pelo RNG; a mão fica vazia', () => {
+      const party = partyOf()
+      const { deck, hand } = playerOf(party)
+      const rng = SeededRng.fromState(party.rngState)
+      const expected = shuffle([...deck, ...hand], rng)
+
+      party.recover('shuffleHand', LATER)
+
+      expect(playerOf(party).hand).toEqual([])
+      expect(playerOf(party).deck).toEqual(expected)
+      expect(party.rngState).toEqual(rng.state())
+      expect(party.pullDomainEvents()[0]).toMatchObject({
+        option: 'shuffleHand',
+        cardsDrawn: 0,
+      })
+    })
+
+    it('REQ-63 (c): a pilha de descarte inteira vai para o deck, embaralhado; a mão não muda', () => {
+      const party = partyOf({ discard: ['x1', 'x2', 'x3'] })
+      const { deck, hand } = playerOf(party)
+      const rng = SeededRng.fromState(party.rngState)
+      const expected = shuffle([...deck, 'x1', 'x2', 'x3'], rng)
+
+      party.recover('shuffleDiscard', LATER)
+
+      expect(playerOf(party).discard).toEqual([])
+      expect(playerOf(party).deck).toEqual(expected)
+      expect(playerOf(party).hand).toEqual(hand)
+      expect(party.rngState).toEqual(rng.state())
+    })
+
+    it('REQ-63: é repetível enquanto houver pontos', () => {
+      const party = partyOf()
+
+      party.recover('shuffleHand', LATER)
+      party.recover('drawToHand', LATER)
+      party.recover('drawToHand', LATER)
+
+      expect(party.turn.actionPoints).toBe(0)
+      expect(playerOf(party).hand).toHaveLength(7)
+    })
+
+    it('REQ-64: 0 pontos → noActionPoints; nada muda e nenhum evento', () => {
+      const zero = partyOf({ health: 10 }, { actionPointsPerTurn: 1 })
+      zero.recover('drawToHand', NOW)
+      zero.pullDomainEvents()
+      const before = [...zero.rngState]
+
+      const result = zero.recover('shuffleHand', LATER)
+
+      expect(result.isLeft() && result.value).toBe('noActionPoints')
+      expect(playerOf(zero).hand).toHaveLength(7)
+      expect(playerOf(zero).health).toBe(13)
+      expect([...zero.rngState]).toEqual(before)
+      expect(zero.savedAt.toISOString()).toBe(NOW.toISOString())
+      expect(zero.pullDomainEvents()).toEqual([])
+    })
+
+    it('REQ-64: fora de sessão → sessionNotActive; nada muda', () => {
+      const party = partyOf({ health: 10 }, {}, 'idle')
+
+      const result = party.recover('drawToHand', LATER)
+
+      expect(result.isLeft() && result.value).toBe('sessionNotActive')
+      expect(playerOf(party).health).toBe(10)
+      expect(party.turn.actionPoints).toBe(3)
+      expect(party.pullDomainEvents()).toEqual([])
+    })
+  })
+
+  describe('adjustDeck (REQ-65, REQ-66)', () => {
+    const S = 'fixture.strength-basic'
+    const E = 'fixture.endurance-basic'
+    const D = 'fixture.dexterity-basic'
+    const Y = 'fixture.warrior-synergy'
+    const synergy = {
+      ...attributeCards[0],
+      id: Y,
+      name: 'Sinergia',
+      attributeKind: 'synergy' as const,
+      attributes: ['strength', 'endurance'] as TAttributeCard['attributes'],
+    }
+    const catalog = {
+      cards: [...attributeCards, synergy],
+      classes: [warrior],
+    }
+    const DEFAULT_MODIFIERS = {
+      attack: 5,
+      defense: 3,
+      accuracy: 50,
+      evasion: 20,
+      celerity: 10,
+      piercing: 0,
+      reflection: 0,
+    }
+    const copies = (cardId: string, n: number) => ({ cardId, copies: n })
+
+    const partyOf = (
+      player: Partial<TPlayerState> = {},
+      config: Partial<typeof GAME_CONFIG_DEFAULTS> = {},
+      status: 'idle' | 'inSession' = 'inSession'
+    ) => {
+      const host = PartyMember.create(
+        {
+          characterName: 'Lia',
+          kind: 'human',
+          player: makePlayerState(player),
+        },
+        new UniqueEntityID('member-1')
+      )
+      return makeParty({
+        status,
+        members: [host],
+        hostMemberId: host.id,
+        config: { ...GAME_CONFIG_DEFAULTS, ...config },
+        savedAt: NOW,
+      })
+    }
+    const playerOf = (party: Party) => party.members[0].player
+
+    it('REQ-65: sem mudar nada: gasta 1 ponto, deck embaralhado de novo, mesma quantidade na mão', () => {
+      const party = partyOf()
+      const rng = SeededRng.fromState(party.rngState)
+      const expanded = [
+        ...Array.from({ length: 30 }, () => E),
+        ...Array.from({ length: 30 }, () => S),
+      ]
+      const shuffled = shuffle(expanded, rng)
+
+      const result = party.adjustDeck(
+        [copies(E, 30), copies(S, 30)],
+        catalog,
+        LATER
+      )
+
+      expect(result.isRight()).toBe(true)
+      expect(party.turn.actionPoints).toBe(2)
+      expect(party.savedAt.toISOString()).toBe(LATER.toISOString())
+      expect(playerOf(party).build).toEqual([copies(E, 30), copies(S, 30)])
+      expect(playerOf(party).tcgFolder).toEqual([])
+      expect(playerOf(party).hand).toEqual(shuffled.slice(0, 7))
+      expect(playerOf(party).deck).toEqual(shuffled.slice(7))
+      expect(playerOf(party).discard).toEqual([])
+      expect(party.rngState).toEqual(rng.state())
+    })
+
+    it('REQ-65: mão e descarte voltam ao deck; compra H (a mão que tinha)', () => {
+      const party = partyOf({
+        hand: [S, E, S],
+        discard: [E, E, S, S],
+        deck: [
+          ...Array.from({ length: 27 }, () => E),
+          ...Array.from({ length: 26 }, () => S),
+        ],
+      })
+
+      party.adjustDeck([copies(E, 30), copies(S, 30)], catalog, LATER)
+
+      expect(playerOf(party).hand).toHaveLength(3)
+      expect(playerOf(party).discard).toEqual([])
+      expect(playerOf(party).deck).toHaveLength(57)
+    })
+
+    it('REQ-65: mão vazia → continua vazia', () => {
+      const party = partyOf({
+        hand: [],
+        deck: [
+          ...Array.from({ length: 30 }, () => E),
+          ...Array.from({ length: 30 }, () => S),
+        ],
+      })
+
+      party.adjustDeck([copies(E, 30), copies(S, 30)], catalog, LATER)
+
+      expect(playerOf(party).hand).toEqual([])
+      expect(playerOf(party).deck).toHaveLength(60)
+    })
+
+    it('REQ-65: troca com a pasta: build nova em ordem de cardId; a pasta = pool − build nova', () => {
+      const party = partyOf({ tcgFolder: [copies(D, 10)] })
+
+      const result = party.adjustDeck(
+        [copies(S, 20), copies(D, 10), copies(E, 30)],
+        catalog,
+        LATER
+      )
+
+      expect(result.isRight()).toBe(true)
+      expect(playerOf(party).build).toEqual([
+        copies(D, 10),
+        copies(E, 30),
+        copies(S, 20),
+      ])
+      expect(playerOf(party).tcgFolder).toEqual([copies(S, 10)])
+      const all = [
+        ...playerOf(party).deck,
+        ...playerOf(party).hand,
+        ...playerOf(party).discard,
+      ]
+      expect(all.filter((c) => c === D)).toHaveLength(10)
+      expect(all).toHaveLength(60)
+    })
+
+    it('REQ-65: tirar cartas da build para a pasta (cartas com 0 cópias saem da pasta)', () => {
+      const party = partyOf({
+        build: [copies(E, 35), copies(S, 30)],
+        tcgFolder: [copies(D, 2)],
+      })
+
+      party.adjustDeck(
+        [copies(D, 2), copies(E, 30), copies(S, 30)],
+        catalog,
+        LATER
+      )
+
+      expect(playerOf(party).build).toEqual([
+        copies(D, 2),
+        copies(E, 30),
+        copies(S, 30),
+      ])
+      expect(playerOf(party).tcgFolder).toEqual([copies(E, 5)])
+    })
+
+    it('REQ-65: o invariante deck + mão + descarte = soma da build vale depois do ajuste', () => {
+      const party = partyOf({ tcgFolder: [copies(D, 10)] })
+
+      party.adjustDeck(
+        [copies(D, 10), copies(E, 30), copies(S, 20)],
+        catalog,
+        LATER
+      )
+
+      const p = playerOf(party)
+      expect(p.deck.length + p.hand.length + p.discard.length).toBe(60)
+    })
+
+    it('REQ-65: a trava é recalculada: build que não cumpre desliga a classe e volta aos modificadores padrão', () => {
+      const party = partyOf({
+        build: [copies(E, 30), copies(S, 30)],
+        tcgFolder: [copies(D, 25)],
+      })
+
+      const result = party.adjustDeck(
+        [copies(D, 25), copies(E, 30), copies(S, 5)],
+        catalog,
+        LATER
+      )
+
+      expect(result.isRight()).toBe(true)
+      expect(playerOf(party).playerClasses).toEqual([
+        { playerClass: 'warrior', deckLockMet: false },
+      ])
+      expect(playerOf(party).modifiers).toEqual(DEFAULT_MODIFIERS)
+    })
+
+    it('REQ-65: build que volta a cumprir a trava religa a classe e restaura os modificadores da classe', () => {
+      const party = partyOf({
+        build: [copies(D, 25), copies(E, 30), copies(S, 5)],
+        tcgFolder: [copies(S, 25)],
+        playerClasses: [{ playerClass: 'warrior', deckLockMet: false }],
+        modifiers: DEFAULT_MODIFIERS,
+      })
+
+      party.adjustDeck([copies(E, 30), copies(S, 30)], catalog, LATER)
+
+      expect(playerOf(party).playerClasses).toEqual([
+        { playerClass: 'warrior', deckLockMet: true },
+      ])
+      expect(playerOf(party).modifiers).toEqual(warrior.baseModifiers)
+    })
+
+    it('REQ-65: eventos em ordem — DeckAdjusted e, por classe cuja trava mudou, DeckLockChanged', () => {
+      const party = partyOf({
+        build: [copies(E, 30), copies(S, 30)],
+        tcgFolder: [copies(D, 25)],
+      })
+
+      party.adjustDeck(
+        [copies(D, 25), copies(E, 30), copies(S, 5)],
+        catalog,
+        LATER
+      )
+
+      const events = party.pullDomainEvents()
+      expect(events.map((e) => e.type)).toEqual([
+        'DeckAdjusted',
+        'DeckLockChanged',
+      ])
+      expect(events[0]).toMatchObject({
+        memberId: new UniqueEntityID('member-1'),
+        buildSize: 60,
+        handSize: 7,
+        occurredAt: LATER,
+      })
+      expect(events[1]).toMatchObject({
+        memberId: new UniqueEntityID('member-1'),
+        playerClass: 'warrior',
+        deckLockMet: false,
+      })
+    })
+
+    it('REQ-65: trava que não mudou → só DeckAdjusted', () => {
+      const party = partyOf()
+
+      party.adjustDeck([copies(E, 30), copies(S, 30)], catalog, LATER)
+
+      expect(party.pullDomainEvents().map((e) => e.type)).toEqual([
+        'DeckAdjusted',
+      ])
+    })
+
+    describe('recusas, nesta ordem, sem gravar nem emitir evento (REQ-66)', () => {
+      const expectUntouched = (party: Party, before: Party) => {
+        expect(playerOf(party)).toEqual(playerOf(before))
+        expect(party.turn.actionPoints).toBe(before.turn.actionPoints)
+        expect(party.rngState).toEqual(before.rngState)
+        expect(party.savedAt.toISOString()).toBe(NOW.toISOString())
+        expect(party.pullDomainEvents()).toEqual([])
+      }
+
+      it('fora de sessão → sessionNotActive (antes de conferir pontos e cartas)', () => {
+        const party = partyOf({}, { actionPointsPerTurn: 1 }, 'idle')
+        const before = partyOf({}, { actionPointsPerTurn: 1 }, 'idle')
+
+        const result = party.adjustDeck([copies(S, 999)], catalog, LATER)
+
+        expect(result.isLeft() && result.value).toBe('sessionNotActive')
+        expectUntouched(party, before)
+      })
+
+      it('0 pontos → noActionPoints (antes de notOwned)', () => {
+        const party = partyOf({}, { actionPointsPerTurn: 1 })
+        party.recover('drawToHand', NOW)
+        party.pullDomainEvents()
+
+        const result = party.adjustDeck([copies(S, 999)], catalog, LATER)
+
+        expect(result.isLeft() && result.value).toBe('noActionPoints')
+        expect(party.turn.actionPoints).toBe(0)
+      })
+
+      it('mais cópias do que build + pasta → notOwned com a 1ª carta, em ordem de índice', () => {
+        const party = partyOf()
+        const before = partyOf()
+
+        const result = party.adjustDeck(
+          [copies(E, 30), copies(S, 31), copies(D, 1)],
+          catalog,
+          LATER
+        )
+
+        expect(result.isLeft() && result.value).toEqual({
+          reason: 'notOwned',
+          cardId: S,
+        })
+        expectUntouched(party, before)
+      })
+
+      it('carta que o jogador não tem → notOwned', () => {
+        const party = partyOf()
+
+        const result = party.adjustDeck(
+          [copies(E, 30), copies(S, 30), copies(D, 1)],
+          catalog,
+          LATER
+        )
+
+        expect(result.isLeft() && result.value).toEqual({
+          reason: 'notOwned',
+          cardId: D,
+        })
+      })
+
+      it('notOwned vem antes de copyLimitExceeded', () => {
+        const party = partyOf({ tcgFolder: [copies(Y, 5)] })
+
+        const result = party.adjustDeck(
+          [copies(Y, 5), copies(D, 1)],
+          catalog,
+          LATER
+        )
+
+        expect(result.isLeft() && result.value).toEqual({
+          reason: 'notOwned',
+          cardId: D,
+        })
+      })
+
+      it('o pool soma build + pasta: a carta da pasta é "do jogador"', () => {
+        const party = partyOf({ tcgFolder: [copies(D, 1)] })
+
+        const result = party.adjustDeck(
+          [copies(E, 30), copies(S, 30), copies(D, 1)],
+          catalog,
+          LATER
+        )
+
+        expect(result.isRight()).toBe(true)
+      })
+
+      it('synergy acima de maxCopiesPerCard → copyLimitExceeded (antes do tamanho mínimo)', () => {
+        const party = partyOf({ tcgFolder: [copies(Y, 5)] })
+        const before = partyOf({ tcgFolder: [copies(Y, 5)] })
+
+        const result = party.adjustDeck([copies(Y, 5)], catalog, LATER)
+
+        expect(result.isLeft() && result.value).toEqual({
+          reason: 'copyLimitExceeded',
+          cardId: Y,
+        })
+        expectUntouched(party, before)
+      })
+
+      it('o limite vem da config do grupo; basic não tem limite; até o limite é aceito', () => {
+        const ok = partyOf(
+          { tcgFolder: [copies(Y, 5)] },
+          { maxCopiesPerCard: 5 }
+        )
+        const refused = partyOf(
+          { tcgFolder: [copies(Y, 2)] },
+          { maxCopiesPerCard: 1 }
+        )
+
+        expect(
+          ok
+            .adjustDeck(
+              [copies(E, 30), copies(S, 25), copies(Y, 5)],
+              catalog,
+              LATER
+            )
+            .isRight()
+        ).toBe(true)
+        const result = refused.adjustDeck(
+          [copies(E, 30), copies(S, 28), copies(Y, 2)],
+          catalog,
+          LATER
+        )
+        expect(result.isLeft() && result.value).toEqual({
+          reason: 'copyLimitExceeded',
+          cardId: Y,
+        })
+      })
+
+      it('soma abaixo de minDeckSize → buildBelowMinimum (build vazia também)', () => {
+        const party = partyOf()
+        const before = partyOf()
+
+        const result = party.adjustDeck(
+          [copies(E, 30), copies(S, 29)],
+          catalog,
+          LATER
+        )
+        const empty = party.adjustDeck([], catalog, LATER)
+
+        expect(result.isLeft() && result.value).toBe('buildBelowMinimum')
+        expect(empty.isLeft() && empty.value).toBe('buildBelowMinimum')
+        expectUntouched(party, before)
+      })
+
+      it('minDeckSize vem da config do grupo', () => {
+        const party = partyOf({}, { minDeckSize: 50 })
+
+        const result = party.adjustDeck(
+          [copies(E, 30), copies(S, 29)],
+          catalog,
+          LATER
+        )
+
+        expect(result.isRight()).toBe(true)
+        expect(playerOf(party).tcgFolder).toEqual([copies(S, 1)])
+      })
+
+      it('o que vai para a pasta não cabe → tcgFolderFull; cabendo exatamente é aceito', () => {
+        const full = partyOf(
+          { build: [copies(E, 35), copies(S, 30)] },
+          { tcgFolderCapacity: 4 }
+        )
+        const exact = partyOf(
+          { build: [copies(E, 35), copies(S, 30)] },
+          { tcgFolderCapacity: 5 }
+        )
+
+        const refused = full.adjustDeck(
+          [copies(E, 30), copies(S, 30)],
+          catalog,
+          LATER
+        )
+        const accepted = exact.adjustDeck(
+          [copies(E, 30), copies(S, 30)],
+          catalog,
+          LATER
+        )
+
+        expect(refused.isLeft() && refused.value).toBe('tcgFolderFull')
+        expect(accepted.isRight()).toBe(true)
+      })
+
+      it('buildBelowMinimum vem antes de tcgFolderFull', () => {
+        const party = partyOf({}, { tcgFolderCapacity: 0 })
+
+        const result = party.adjustDeck(
+          [copies(E, 30), copies(S, 29)],
+          catalog,
+          LATER
+        )
+
+        expect(result.isLeft() && result.value).toBe('buildBelowMinimum')
+      })
+
+      it('build que não cumpre a trava NÃO é recusada (8.2)', () => {
+        const party = partyOf({ tcgFolder: [copies(D, 30)] })
+
+        const result = party.adjustDeck(
+          [copies(D, 30), copies(E, 30)],
+          catalog,
+          LATER
+        )
+
+        expect(result.isRight()).toBe(true)
+      })
     })
   })
 })

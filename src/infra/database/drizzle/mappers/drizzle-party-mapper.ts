@@ -4,6 +4,7 @@ import type { RngState } from '@/core/rng/seeded-rng'
 import { Party } from '@/domain/campaign/enterprise/entities/party'
 import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
 import { DIRECTIONS } from '@/domain/campaign/enterprise/map-assembly'
+import { sortedByCardId } from '@/domain/campaign/enterprise/starting-player'
 import {
   MODIFIERS,
   PLAYER_CLASSES,
@@ -15,9 +16,9 @@ import {
   type TGameConfigValues,
 } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
-// D-64: save v3 (FEAT-08). O v2 (D-43, FEAT-06) é lido e atualizado em memória;
-// os saves v1 são apagados pela migração 0002 (T-17).
-const SCHEMA_VERSION = 3
+// D-70: save v4 (FEAT-09). Os v3 (D-64) e v2 (D-43) são lidos e atualizados em
+// memória; os saves v1 são apagados pela migração 0002 (T-17).
+const SCHEMA_VERSION = 4
 
 const uint32 = z
   .number()
@@ -25,14 +26,40 @@ const uint32 = z
   .min(0)
   .max(2 ** 32 - 1)
 
+// As chaves que a FEAT-09 acrescentou (REQ-60): saves v2 e v3 não as têm.
+const V4_CONFIG_KEYS = [
+  'maxCopiesPerCard',
+  'tcgFolderCapacity',
+  'recoverHealthPercent',
+  'recoverVigorPercent',
+  'recoverHandSize',
+] as const satisfies readonly TGameConfigKey[]
+type TV4ConfigKey = (typeof V4_CONFIG_KEYS)[number]
+type TLegacyConfigKey = Exclude<TGameConfigKey, TV4ConfigKey>
+
+const isV4ConfigKey = (key: TGameConfigKey): key is TV4ConfigKey =>
+  (V4_CONFIG_KEYS as readonly string[]).includes(key)
+
+const configKeys = Object.keys(GAME_CONFIG_DEFAULTS) as TGameConfigKey[]
+
 const configSchema = z.strictObject(
   Object.fromEntries(
-    (Object.keys(GAME_CONFIG_DEFAULTS) as TGameConfigKey[]).map((key) => [
-      key,
-      z.number().int(),
-    ])
+    configKeys.map((key) => [key, z.number().int()])
   ) as Record<TGameConfigKey, z.ZodNumber>
 )
+
+const legacyConfigSchema = z.strictObject(
+  Object.fromEntries(
+    configKeys
+      .filter((key) => !isV4ConfigKey(key))
+      .map((key) => [key, z.number().int()])
+  ) as Record<TLegacyConfigKey, z.ZodNumber>
+)
+
+/** D-70: o grupo antigo não tinha cópia destas chaves; valem os padrões. */
+const V4_CONFIG_DEFAULTS = Object.fromEntries(
+  V4_CONFIG_KEYS.map((key) => [key, GAME_CONFIG_DEFAULTS[key]])
+) as Record<TV4ConfigKey, number>
 
 const modifiersSchema = z.strictObject(
   Object.fromEntries(MODIFIERS.map((m) => [m, z.number().int()])) as Record<
@@ -43,16 +70,18 @@ const modifiersSchema = z.strictObject(
 
 const id = z.string().min(1)
 
-const playerSchema = z.strictObject({
+const cardCopies = z.array(
+  z.strictObject({ cardId: id, copies: z.number().int().min(1) })
+)
+
+const playerFields = {
   playerClasses: z.array(
     z.strictObject({
       playerClass: z.enum(PLAYER_CLASSES),
       deckLockMet: z.boolean(),
     })
   ),
-  build: z.array(
-    z.strictObject({ cardId: id, copies: z.number().int().min(1) })
-  ),
+  build: cardCopies,
   deck: z.array(id),
   hand: z.array(id),
   discard: z.array(id),
@@ -64,6 +93,12 @@ const playerSchema = z.strictObject({
   modifiers: modifiersSchema,
   zoneId: id,
   respawnZoneId: id,
+}
+
+const legacyPlayerSchema = z.strictObject(playerFields)
+const playerSchema = z.strictObject({
+  ...playerFields,
+  tcgFolder: cardCopies,
 })
 
 const dimensionSchema = z.strictObject({
@@ -88,31 +123,42 @@ const turnSchema = z.strictObject({
   actionPoints: z.number().int().min(0),
 })
 
-const stateV2Fields = {
+const stateFields = <TConfig extends z.ZodType, TPlayer extends z.ZodType>(
+  config: TConfig,
+  player: TPlayer
+) => ({
   members: z
     .array(
       z.strictObject({
         id,
         characterName: z.string().min(1),
         kind: z.literal('human'),
-        player: playerSchema,
+        player,
       })
     )
     .min(1),
   hostMemberId: id,
-  config: configSchema,
+  config,
   rngState: z.tuple([uint32, uint32, uint32, uint32]),
   dimension: dimensionSchema,
   turnOrder: z.array(id),
-}
+})
 
 // D-31: o banco não valida o jsonb; o mapper valida antes de `SeededRng.fromState` (D-32).
 const stateSchema = z
   .discriminatedUnion('schemaVersion', [
-    z.strictObject({ schemaVersion: z.literal(2), ...stateV2Fields }),
+    z.strictObject({
+      schemaVersion: z.literal(2),
+      ...stateFields(legacyConfigSchema, legacyPlayerSchema),
+    }),
+    z.strictObject({
+      schemaVersion: z.literal(3),
+      ...stateFields(legacyConfigSchema, legacyPlayerSchema),
+      turn: turnSchema,
+    }),
     z.strictObject({
       schemaVersion: z.literal(SCHEMA_VERSION),
-      ...stateV2Fields,
+      ...stateFields(configSchema, playerSchema),
       turn: turnSchema,
     }),
   ])
@@ -154,13 +200,28 @@ export class DrizzlePartyMapper {
         name: row.name,
         members: state.members.map((m) =>
           PartyMember.create(
-            { characterName: m.characterName, kind: m.kind, player: m.player },
+            {
+              characterName: m.characterName,
+              kind: m.kind,
+              // D-70: antes da FEAT-09 não havia pasta; a build vai em ordem de cardId (REQ-62).
+              player:
+                'tcgFolder' in m.player
+                  ? m.player
+                  : {
+                      ...m.player,
+                      build: sortedByCardId(m.player.build),
+                      tcgFolder: [],
+                    },
+            },
             new UniqueEntityID(m.id)
           )
         ),
         hostMemberId: new UniqueEntityID(state.hostMemberId),
         status,
-        config: state.config satisfies TGameConfigValues,
+        config:
+          state.schemaVersion === SCHEMA_VERSION
+            ? (state.config satisfies TGameConfigValues)
+            : { ...state.config, ...V4_CONFIG_DEFAULTS },
         rngState: state.rngState satisfies RngState,
         dimension: state.dimension,
         turnOrder,
@@ -203,6 +264,7 @@ export class DrizzlePartyMapper {
             ...m.player,
             playerClasses: m.player.playerClasses.map((c) => ({ ...c })),
             build: m.player.build.map((e) => ({ ...e })),
+            tcgFolder: m.player.tcgFolder.map((e) => ({ ...e })),
             deck: [...m.player.deck],
             hand: [...m.player.hand],
             discard: [...m.player.discard],

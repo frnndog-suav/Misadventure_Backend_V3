@@ -16,8 +16,10 @@ export type TPlayerState = Readonly<{
     playerClass: TPlayerClass
     deckLockMet: boolean
   }>[]
-  /** Cartas de atributo e cópias (README 4.4). */
+  /** Cartas de atributo e cópias, em ordem de `cardId` (README 4.4; REQ-62). */
   build: readonly TStarterDeckEntry[]
+  /** Pasta de TCG (README 6.3; D-69): só atributo, em ordem de `cardId`; começa vazia. */
+  tcgFolder: readonly TStarterDeckEntry[]
   /** Ids em ordem; o topo é o índice 0. */
   deck: readonly string[]
   /** Na ordem em que foram compradas. */

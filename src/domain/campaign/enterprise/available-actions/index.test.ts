@@ -15,11 +15,16 @@ describe('availableActions', () => {
   const inSession = () => makeParty({ status: 'inSession' })
   const memberId = new UniqueEntityID('member-1')
 
-  it('REQ-58: membro da vez com pontos e destinos → move, endTurn (nesta ordem)', () => {
-    expect(availableActions(inSession(), memberId)).toEqual(['move', 'endTurn'])
+  it('REQ-58/REQ-67: membro da vez com pontos e destinos → move, recover, adjustDeck, endTurn (nesta ordem)', () => {
+    expect(availableActions(inSession(), memberId)).toEqual([
+      'move',
+      'recover',
+      'adjustDeck',
+      'endTurn',
+    ])
   })
 
-  it('REQ-58: com 0 pontos → só endTurn', () => {
+  it('REQ-58/REQ-67: com 0 pontos → só endTurn (recover e adjustDeck também custam 1)', () => {
     const party = inSession()
     party.move(MINE, party.savedAt)
     party.move(HARBOR, party.savedAt)
@@ -28,7 +33,7 @@ describe('availableActions', () => {
     expect(availableActions(party, memberId)).toEqual(['endTurn'])
   })
 
-  it('REQ-58: sem moveTargets (zona sem travessia) → só endTurn', () => {
+  it('REQ-58/REQ-67: sem moveTargets (zona sem travessia) → recover, adjustDeck, endTurn', () => {
     const lonely = makePlayerState({ zoneId: 'fixture.island' })
     const host = PartyMember.create(
       { characterName: 'Lia', kind: 'human', player: lonely },
@@ -51,7 +56,11 @@ describe('availableActions', () => {
       },
     })
 
-    expect(availableActions(party, memberId)).toEqual(['endTurn'])
+    expect(availableActions(party, memberId)).toEqual([
+      'recover',
+      'adjustDeck',
+      'endTurn',
+    ])
   })
 
   it('REQ-58 (11.4): quem não é da vez → []', () => {
@@ -69,6 +78,8 @@ describe('availableActions', () => {
     expect(availableActions(party, other.id)).toEqual([])
     expect(availableActions(party, base.members[0].id)).toEqual([
       'move',
+      'recover',
+      'adjustDeck',
       'endTurn',
     ])
   })

@@ -99,9 +99,12 @@ import { TakePartyActionController } from './controllers/take-party-action/index
     },
     {
       provide: TakePartyActionUseCase,
-      inject: [PartiesRepository, Clock],
-      useFactory: (parties: PartiesRepository, clock: Clock) =>
-        new TakePartyActionUseCase(parties, clock),
+      inject: [PartiesRepository, Clock, CardCatalog],
+      useFactory: (
+        parties: PartiesRepository,
+        clock: Clock,
+        catalog: CardCatalog
+      ) => new TakePartyActionUseCase(parties, clock, catalog),
     },
     {
       provide: AbandonPartyUseCase,

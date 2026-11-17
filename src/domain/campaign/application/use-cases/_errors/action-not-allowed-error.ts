@@ -1,15 +1,25 @@
 import { DomainError } from '@/core/error/domain-error'
 
-/** CONTRATO §4 `ACTION_NOT_ALLOWED`; `details` = `ActionNotAllowedDetails` (FEAT-09+ acrescentam motivos). */
-export type TActionNotAllowedReason = 'notConnected' | 'noActionPoints'
+/** CONTRATO §4 `ACTION_NOT_ALLOWED`; `details` = `ActionNotAllowedDetails` (FEATs seguintes acrescentam motivos). */
+export type TActionNotAllowedReason =
+  | 'notConnected'
+  | 'noActionPoints'
+  | 'notOwned'
+  | 'copyLimitExceeded'
+  | 'buildBelowMinimum'
+  | 'tcgFolderFull'
 
 export class ActionNotAllowedError extends DomainError {
   readonly code = 'ACTION_NOT_ALLOWED'
   readonly message = 'Esta ação não é permitida agora.'
-  override readonly details: { reason: TActionNotAllowedReason }
+  override readonly details: {
+    reason: TActionNotAllowedReason
+    cardId?: string
+  }
 
-  constructor(reason: TActionNotAllowedReason) {
+  /** `cardId` só em `notOwned` e `copyLimitExceeded` (CONTRATO FEAT-09). */
+  constructor(reason: TActionNotAllowedReason, cardId?: string) {
     super()
-    this.details = { reason }
+    this.details = cardId === undefined ? { reason } : { reason, cardId }
   }
 }

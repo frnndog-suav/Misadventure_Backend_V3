@@ -25,6 +25,11 @@ describe('GameConfig', () => {
       defaultCelerity: 10,
       defaultPiercing: 0,
       defaultReflection: 0,
+      maxCopiesPerCard: 4,
+      tcgFolderCapacity: 30,
+      recoverHealthPercent: 15,
+      recoverVigorPercent: 5,
+      recoverHandSize: 7,
     })
     expect(GameConfig.withDefaults().values).toEqual(GAME_CONFIG_DEFAULTS)
   })
@@ -52,6 +57,33 @@ describe('GameConfig', () => {
     const bad = GameConfig.withDefaults().applyPatch({ mapMaxAttempts: 0 })
     expect(bad.isLeft() && bad.value).toEqual([
       { field: 'mapMaxAttempts', reason: 'outOfRange' },
+    ])
+  })
+
+  it('REQ-60: chaves do deck com padrões e limites (D-67)', () => {
+    expect(GAME_CONFIG_DEFAULTS).toMatchObject({
+      maxCopiesPerCard: 4,
+      tcgFolderCapacity: 30,
+      recoverHealthPercent: 15,
+      recoverVigorPercent: 5,
+      recoverHandSize: 7,
+    })
+    expect(GAME_CONFIG_LIMITS).toMatchObject({
+      maxCopiesPerCard: { min: 1, max: 200 },
+      tcgFolderCapacity: { min: 0, max: 1000 },
+      recoverHealthPercent: { min: 0, max: 100 },
+      recoverVigorPercent: { min: 0, max: 100 },
+      recoverHandSize: { min: 0, max: 200 },
+    })
+  })
+
+  it('REQ-60: as chaves do deck aceitam ajuste e respeitam o limite (REQ-05, REQ-06)', () => {
+    const ok = GameConfig.withDefaults().applyPatch({ recoverHandSize: 10 })
+    expect(ok.isRight() && ok.value.values.recoverHandSize).toBe(10)
+
+    const bad = GameConfig.withDefaults().applyPatch({ maxCopiesPerCard: 0 })
+    expect(bad.isLeft() && bad.value).toEqual([
+      { field: 'maxCopiesPerCard', reason: 'outOfRange' },
     ])
   })
 

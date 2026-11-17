@@ -46,6 +46,8 @@ export type TCatalogIssueReason =
   | 'notAnAttributeCard'
   | 'starterDeckSize'
   | 'starterDeckLockNotMet'
+  // REQ-61
+  | 'starterDeckCopyLimit'
 
 export type TCatalogIssue = {
   collectionId: string
@@ -259,6 +261,7 @@ function checkStarterDeck(
   )
 
   const build: TBuildEntry[] = []
+  const overLimit: string[] = []
   let valid = true
   deck.forEach((entry, index) => {
     const path = `starterDeck[${index}]`
@@ -271,6 +274,12 @@ function checkStarterDeck(
       valid = false
     } else {
       build.push({ card, copies: entry.copies })
+      if (
+        card.attributeKind !== 'basic' &&
+        entry.copies > GAME_CONFIG_DEFAULTS.maxCopiesPerCard
+      ) {
+        overLimit.push(path)
+      }
     }
     if (!isIntegerBetween(entry.copies, 1, Infinity)) {
       report(`${path}.copies`, 'outOfRange')
@@ -281,6 +290,9 @@ function checkStarterDeck(
   // Tamanho e trava só fazem sentido com todas as entradas válidas e só valem
   // para a classe publicada (D-57b).
   if (!valid || !published) return
+
+  // README 4.3 (REQ-61): o limite de cópias de sinérgica e aprimorada.
+  for (const path of overLimit) report(path + '.copies', 'starterDeckCopyLimit')
 
   const total = deck.reduce((sum, entry) => sum + entry.copies, 0)
   if (total !== GAME_CONFIG_DEFAULTS.minDeckSize) {
