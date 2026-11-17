@@ -15,6 +15,7 @@ import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/ga
 import { connectedZones } from '../../connected-zones'
 import type { TPartyEvent } from '../../events/party-events'
 import { assembleMap, type TPartyMap } from '../../map-assembly'
+import type { TPartyTurn } from '../../party-turn'
 import { createStartingPlayer } from '../../starting-player'
 import { rollTurnOrder } from '../../turn-order'
 import { PartyMember } from '../party-member'
@@ -63,6 +64,8 @@ export interface TPartyProps {
   dimension: TPartyDimension
   /** Ids de membro, do 1º ao último (REQ-33). */
   turnOrder: UniqueEntityID[]
+  /** De quem é a vez (D-63, REQ-55). */
+  turn: TPartyTurn
   createdAt: Date
   savedAt: Date
 }
@@ -121,6 +124,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 
   get turnOrder(): readonly UniqueEntityID[] {
     return [...this.props.turnOrder]
+  }
+
+  get turn(): TPartyTurn {
+    return { ...this.props.turn }
   }
 
   get createdAt(): Date {
@@ -245,6 +252,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         rngState: rng.state(),
         dimension: { dimensionCardId: dimension.id, startingCityZoneId, map },
         turnOrder,
+        turn: {
+          round: 1,
+          memberId: turnOrder[0],
+          actionPoints: input.config.actionPointsPerTurn,
+        },
         createdAt: input.now,
         savedAt: input.now,
       },
@@ -262,6 +274,12 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     }
     party.addDomainEvent({ type: 'TurnOrderDecided', ...at })
     party.addDomainEvent({ type: 'PlayersArrived', ...at })
+    party.addDomainEvent({
+      type: 'TurnStarted',
+      memberId: turnOrder[0],
+      round: 1,
+      ...at,
+    })
     return right(party)
   }
 
@@ -324,14 +342,18 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   }
 
   /**
-   * Movimentar (README 12.2; REQ-51 a REQ-53). Até a FEAT-08 quem age é o host
-   * (D-61). Ordem das recusas: fora de sessão, zona fora do mapa, zona sem
-   * travessia (inclusive a própria). Recusado, nada muda. O RNG não é usado.
+   * Movimentar (README 12.2; REQ-51 a REQ-53, REQ-56). Quem age é o membro da
+   * vez (D-63) e o gasto é 1 ponto de ação. Ordem das recusas: fora de sessão,
+   * zona fora do mapa, sem pontos, zona sem travessia (inclusive a própria).
+   * Recusado, nada muda. O RNG não é usado.
    */
   move(
     zoneId: string,
     at: Date
-  ): Either<'sessionNotActive' | 'zoneNotInMap' | 'notConnected', void> {
+  ): Either<
+    'sessionNotActive' | 'zoneNotInMap' | 'noActionPoints' | 'notConnected',
+    void
+  > {
     switch (this.props.status) {
       case 'idle':
         return left('sessionNotActive')
@@ -348,15 +370,23 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       return left('zoneNotInMap')
     }
 
+    if (this.props.turn.actionPoints < 1) {
+      return left('noActionPoints')
+    }
+
     const index = this.props.members.findIndex((member) =>
-      member.id.equals(this.props.hostMemberId)
+      member.id.equals(this.props.turn.memberId)
     )
-    const host = this.props.members[index]
-    const fromZoneId = host.player.zoneId
+    const actor = this.props.members[index]
+    const fromZoneId = actor.player.zoneId
     if (!connectedZones(map, fromZoneId).includes(zoneId)) {
       return left('notConnected')
     }
 
+    this.props.turn = {
+      ...this.props.turn,
+      actionPoints: this.props.turn.actionPoints - 1,
+    }
     this.props.members = this.props.members.map((member, i) =>
       i === index
         ? PartyMember.create(
@@ -372,12 +402,54 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     this.props.savedAt = at
     this.addDomainEvent({
       type: 'PlayerMoved',
-      memberId: host.id,
+      memberId: actor.id,
       fromZoneId,
       toZoneId: zoneId,
       occurredAt: at,
       aggregateId: this.id,
     })
+    return right(undefined)
+  }
+
+  /**
+   * Encerrar a vez (README 11.1, 2.1; REQ-57). Passa ao membro seguinte de
+   * `turnOrder` com os pontos cheios; do último para o primeiro a rodada sobe.
+   * Aceito com qualquer quantidade de pontos (K2). O RNG não é usado.
+   */
+  endTurn(at: Date): Either<'sessionNotActive', void> {
+    switch (this.props.status) {
+      case 'idle':
+        return left('sessionNotActive')
+      case 'inSession':
+        break
+      default: {
+        const _exhaustive: never = this.props.status
+        return _exhaustive
+      }
+    }
+
+    const ended = this.props.turn
+    const position = this.props.turnOrder.findIndex((id) =>
+      id.equals(ended.memberId)
+    )
+    const nextPosition = (position + 1) % this.props.turnOrder.length
+    const round = nextPosition === 0 ? ended.round + 1 : ended.round
+    const memberId = this.props.turnOrder[nextPosition]
+
+    this.props.turn = {
+      round,
+      memberId,
+      actionPoints: this.props.config.actionPointsPerTurn,
+    }
+    this.props.savedAt = at
+    const base = { occurredAt: at, aggregateId: this.id }
+    this.addDomainEvent({
+      type: 'TurnEnded',
+      memberId: ended.memberId,
+      round: ended.round,
+      ...base,
+    })
+    this.addDomainEvent({ type: 'TurnStarted', memberId, round, ...base })
     return right(undefined)
   }
 

@@ -66,6 +66,8 @@ export function makeParty(
     new UniqueEntityID('member-1')
   )
   const now = fixedClock().now()
+  const config = override.config ?? { ...GAME_CONFIG_DEFAULTS }
+  const turnOrder = override.turnOrder ?? [host.id]
 
   return Party.restore(
     {
@@ -73,7 +75,7 @@ export function makeParty(
       members: [host],
       hostMemberId: host.id,
       status: 'idle',
-      config: { ...GAME_CONFIG_DEFAULTS },
+      config,
       rngState: SeededRng.fromSeed(42).state(),
       dimension: {
         dimensionCardId: 'fixture.test-dimension',
@@ -91,7 +93,12 @@ export function makeParty(
           crossings: [{ zoneIds: ['fixture.gray-harbor', 'fixture.old-mine'] }],
         },
       },
-      turnOrder: [host.id],
+      turnOrder,
+      turn: {
+        round: 1,
+        memberId: turnOrder[0],
+        actionPoints: config.actionPointsPerTurn,
+      },
       createdAt: now,
       savedAt: now,
       ...override,

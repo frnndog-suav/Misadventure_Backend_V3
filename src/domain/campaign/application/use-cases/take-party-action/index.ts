@@ -24,8 +24,9 @@ export type TTakePartyActionUseCaseResponse = Either<
 >
 
 /**
- * Uma intenção de jogo (D-62; REQ-51 a REQ-53). Ordem: grupo → corpo → sessão
- * → regra. Grava só no sucesso (REQ-25). Até a FEAT-08 quem age é o host (D-61).
+ * Uma intenção de jogo (D-62; REQ-51 a REQ-53, REQ-56, REQ-57). Ordem: grupo →
+ * corpo → sessão → regra. Grava só no sucesso (REQ-25). Quem age é o membro da
+ * vez (D-63).
  */
 export class TakePartyActionUseCase {
   constructor(
@@ -62,6 +63,8 @@ export class TakePartyActionUseCase {
                   { field: 'zoneId', reason: 'zoneNotInMap' },
                 ])
               )
+            case 'noActionPoints':
+              return left(new ActionNotAllowedError('noActionPoints'))
             case 'notConnected':
               return left(new ActionNotAllowedError('notConnected'))
             default: {
@@ -72,8 +75,23 @@ export class TakePartyActionUseCase {
         }
         break
       }
+      case 'endTurn': {
+        const ended = party.endTurn(this.clock.now())
+        if (ended.isLeft()) {
+          const reason = ended.value
+          switch (reason) {
+            case 'sessionNotActive':
+              return left(new PartySessionNotActiveError())
+            default: {
+              const _exhaustive: never = reason
+              return _exhaustive
+            }
+          }
+        }
+        break
+      }
       default: {
-        const _exhaustive: never = action.type
+        const _exhaustive: never = action
         return _exhaustive
       }
     }

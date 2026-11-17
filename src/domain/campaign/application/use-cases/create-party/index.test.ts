@@ -112,6 +112,7 @@ describe('CreatePartyUseCase', () => {
       'StarterDeckGiven',
       'TurnOrderDecided',
       'PlayersArrived',
+      'TurnStarted',
     ])
   })
 

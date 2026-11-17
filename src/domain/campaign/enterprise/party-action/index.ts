@@ -1,7 +1,11 @@
 import { type Either, left, right } from '@/core/error/either'
 
 /** Intenção de jogo (CONTRATO §1.6). União por `type`; as FEATs 08+ acrescentam variantes. */
-export type TPartyAction = { type: 'move'; zoneId: string }
+export type TPartyAction =
+  { type: 'move'; zoneId: string } | { type: 'endTurn' }
+
+/** Os `type` possíveis, para `availableActions` (REQ-58). */
+export type TPartyActionType = TPartyAction['type']
 
 /** Motivos de CONTRATO FEAT-07 (`ActionInvalidDetails`). `zoneNotInMap` vem de `Party.move`. */
 export type TActionIssue =
@@ -33,9 +37,21 @@ export function parsePartyAction(
   switch (body.type) {
     case 'move':
       return parseMove(body)
+    case 'endTurn':
+      return parseEndTurn(body)
     default:
       return left([{ field: 'type', reason: 'unknownAction' }])
   }
+}
+
+function parseEndTurn(
+  body: Record<string, unknown>
+): Either<TActionIssue[], TPartyAction> {
+  const issues: TActionIssue[] = Object.keys(body)
+    .filter((key) => key !== 'type')
+    .map((key) => ({ field: key, reason: 'unknownKey' }))
+  if (issues.length > 0) return left(issues)
+  return right({ type: 'endTurn' })
 }
 
 function parseMove(

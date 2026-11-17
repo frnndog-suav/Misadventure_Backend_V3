@@ -8,7 +8,10 @@ import type {
 } from '@/domain/catalog/enterprise/value-objects/card'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import { makeFixtureContent } from '../../../../../../test/factories/make-card'
-import { makeParty } from '../../../../../../test/factories/make-party'
+import {
+  makeParty,
+  makePlayerState,
+} from '../../../../../../test/factories/make-party'
 import { fixedClock } from '../../../../../../test/fakes/fixed-clock'
 import { sequentialIds } from '../../../../../../test/fakes/sequential-ids'
 
@@ -76,10 +79,15 @@ describe('Party', () => {
       'StarterDeckGiven',
       'TurnOrderDecided',
       'PlayersArrived',
+      'TurnStarted',
     ])
     const given = events[2]
     if (given.type !== 'StarterDeckGiven') throw new Error('evento errado')
     expect(given.memberId.toString()).toBe('p-2')
+    const started = events[5]
+    if (started.type !== 'TurnStarted') throw new Error('evento errado')
+    expect(started.memberId.toString()).toBe('p-2')
+    expect(started.round).toBe(1)
     expect(events[0].aggregateId.equals(result.value.id)).toBe(true)
     expect(events[0].occurredAt.toISOString()).toBe(NOW.toISOString())
   })
@@ -197,6 +205,30 @@ describe('Party', () => {
     expect(player.zoneId).toBe('fixture.gray-harbor')
     expect(player.respawnZoneId).toBe('fixture.gray-harbor')
     expect(party.members[0].maxHealth).toBe(22)
+  })
+
+  it('REQ-55: a primeira vez é do 1º da ordem, na rodada 1, com os pontos da config (3 no padrão)', () => {
+    const result = Party.create(input(), sequentialIds('p'))
+    if (!result.isRight()) throw new Error('esperava sucesso')
+
+    const { turn } = result.value
+    expect(turn.round).toBe(1)
+    expect(turn.memberId.equals(result.value.turnOrder[0])).toBe(true)
+    expect(turn.actionPoints).toBe(3)
+  })
+
+  it('REQ-54: os pontos por vez vêm da config do grupo, mesmo que a config de origem mude depois', () => {
+    const config = { ...GAME_CONFIG_DEFAULTS, actionPointsPerTurn: 5 }
+    const result = Party.create(input({ config }), sequentialIds('p'))
+    if (!result.isRight()) throw new Error('esperava sucesso')
+    const party = result.value
+
+    config.actionPointsPerTurn = 2
+    expect(party.turn.actionPoints).toBe(5)
+    party.startSession(LATER)
+    party.endTurn(LATER)
+
+    expect(party.turn.actionPoints).toBe(5)
   })
 
   it('REQ-31: sorteios na ordem mapa → deck → ordem; o save guarda o RNG depois deles', () => {
@@ -509,7 +541,7 @@ describe('Party', () => {
       ])
     })
 
-    it('REQ-51: quem move é o host, mesmo que não seja o 1º membro (D-61)', () => {
+    it('REQ-51 (D-63): quem move é o membro da vez, não o host', () => {
       const base = inSession()
       const host = base.members[0]
       const other = PartyMember.create(
@@ -519,14 +551,71 @@ describe('Party', () => {
       const party = makeParty({
         status: 'inSession',
         dimension,
-        members: [other, host],
+        members: [host, other],
         hostMemberId: host.id,
+        turnOrder: [other.id, host.id],
       })
 
       party.move(MINE, LATER)
 
       expect(party.members[0].player.zoneId).toBe(HARBOR)
       expect(party.members[1].player.zoneId).toBe(MINE)
+      const moved = party.pullDomainEvents()[0]
+      if (moved.type !== 'PlayerMoved') throw new Error('evento errado')
+      expect(moved.memberId.equals(other.id)).toBe(true)
+    })
+
+    it('REQ-56: cada move gasta 1 ponto (3 → 2 → 1 → 0)', () => {
+      const party = inSession()
+
+      party.move(MINE, LATER)
+      expect(party.turn.actionPoints).toBe(2)
+      party.move(HARBOR, LATER)
+      expect(party.turn.actionPoints).toBe(1)
+      party.move(MINE, LATER)
+      expect(party.turn.actionPoints).toBe(0)
+    })
+
+    it('REQ-56: o 4º move (mesmo para zona conectada) → noActionPoints; nada muda, nenhum evento', () => {
+      const party = inSession()
+      party.move(MINE, LATER)
+      party.move(HARBOR, LATER)
+      party.move(MINE, LATER)
+      party.pullDomainEvents()
+      const savedAt = party.savedAt
+
+      const result = party.move(
+        HARBOR,
+        fixedClock('2026-11-14T18:00:00.000Z').now()
+      )
+
+      expect(result.isLeft()).toBe(true)
+      if (result.isLeft()) expect(result.value).toBe('noActionPoints')
+      expect(party.members[0].player.zoneId).toBe(MINE)
+      expect(party.turn.actionPoints).toBe(0)
+      expect(party.savedAt.toISOString()).toBe(savedAt.toISOString())
+      expect(party.pullDomainEvents()).toEqual([])
+    })
+
+    it('REQ-56: ordem zoneNotInMap → noActionPoints → notConnected', () => {
+      const party = inSession()
+      party.move(MINE, LATER)
+      party.move(HARBOR, LATER)
+      party.move(MINE, LATER)
+
+      const outside = party.move('fixture.nowhere', LATER)
+      const notConnected = party.move('fixture.island', LATER)
+
+      expect(outside.isLeft() && outside.value).toBe('zoneNotInMap')
+      expect(notConnected.isLeft() && notConnected.value).toBe('noActionPoints')
+    })
+
+    it('REQ-56: recusado por notConnected, o ponto não é gasto', () => {
+      const party = inSession()
+
+      party.move('fixture.island', LATER)
+
+      expect(party.turn.actionPoints).toBe(3)
     })
 
     it('REQ-51: o RNG não é consumido', () => {
@@ -579,6 +668,124 @@ describe('Party', () => {
 
       expect(result.isLeft()).toBe(true)
       if (result.isLeft()) expect(result.value).toBe('sessionNotActive')
+      expect(party.savedAt.toISOString()).toBe(NOW.toISOString())
+      expect(party.pullDomainEvents()).toEqual([])
+    })
+  })
+
+  describe('endTurn (REQ-57)', () => {
+    const member = (id: string) =>
+      PartyMember.create(
+        { characterName: id, kind: 'human', player: makePlayerState() },
+        new UniqueEntityID(id)
+      )
+    const trio = () => {
+      const [a, b, c] = [member('m-a'), member('m-b'), member('m-c')]
+      return makeParty({
+        status: 'inSession',
+        members: [a, b, c],
+        hostMemberId: a.id,
+        turnOrder: [b.id, c.id, a.id],
+        savedAt: NOW,
+      })
+    }
+
+    it('REQ-57: 1 membro → mesmo membro, rodada + 1, pontos cheios; os que sobraram se perdem', () => {
+      const party = makeParty({ status: 'inSession', savedAt: NOW })
+      party.move('fixture.old-mine', LATER)
+
+      const result = party.endTurn(LATER)
+
+      expect(result.isRight()).toBe(true)
+      expect(party.turn.round).toBe(2)
+      expect(party.turn.memberId.toString()).toBe('member-1')
+      expect(party.turn.actionPoints).toBe(3)
+      expect(party.savedAt.toISOString()).toBe(LATER.toISOString())
+    })
+
+    it('REQ-57: vários membros → o seguinte em turnOrder, mesma rodada, pontos cheios', () => {
+      const party = trio()
+
+      party.endTurn(LATER)
+
+      expect(party.turn.memberId.toString()).toBe('m-c')
+      expect(party.turn.round).toBe(1)
+      expect(party.turn.actionPoints).toBe(3)
+    })
+
+    it('REQ-57: do último para o primeiro, a rodada sobe 1', () => {
+      const party = trio()
+
+      party.endTurn(LATER)
+      party.endTurn(LATER)
+      expect(party.turn.memberId.toString()).toBe('m-a')
+      expect(party.turn.round).toBe(1)
+      party.endTurn(LATER)
+
+      expect(party.turn.memberId.toString()).toBe('m-b')
+      expect(party.turn.round).toBe(2)
+    })
+
+    it('REQ-57 (K2): aceito com 0 pontos', () => {
+      const party = makeParty({ status: 'inSession', savedAt: NOW })
+      party.move('fixture.old-mine', LATER)
+      party.move('fixture.gray-harbor', LATER)
+      party.move('fixture.old-mine', LATER)
+      expect(party.turn.actionPoints).toBe(0)
+
+      const result = party.endTurn(LATER)
+
+      expect(result.isRight()).toBe(true)
+      expect(party.turn.actionPoints).toBe(3)
+    })
+
+    it('REQ-57: TurnEnded (vez que acabou) e TurnStarted (nova), nesta ordem', () => {
+      const party = trio()
+
+      party.endTurn(LATER)
+
+      const events = party.pullDomainEvents()
+      expect(events.map((e) => e.type)).toEqual(['TurnEnded', 'TurnStarted'])
+      const [ended, started] = events
+      if (ended.type !== 'TurnEnded' || started.type !== 'TurnStarted')
+        throw new Error('evento errado')
+      expect(ended.memberId.toString()).toBe('m-b')
+      expect(ended.round).toBe(1)
+      expect(started.memberId.toString()).toBe('m-c')
+      expect(started.round).toBe(1)
+      expect(ended.occurredAt.toISOString()).toBe(LATER.toISOString())
+      expect(started.aggregateId.equals(party.id)).toBe(true)
+    })
+
+    it('REQ-57: na virada, TurnStarted traz a rodada nova e TurnEnded a antiga', () => {
+      const party = makeParty({ status: 'inSession', savedAt: NOW })
+
+      party.endTurn(LATER)
+
+      const [ended, started] = party.pullDomainEvents()
+      if (ended.type !== 'TurnEnded' || started.type !== 'TurnStarted')
+        throw new Error('evento errado')
+      expect(ended.round).toBe(1)
+      expect(started.round).toBe(2)
+    })
+
+    it('REQ-57: o RNG não é consumido', () => {
+      const party = trio()
+      const before = [...party.rngState]
+
+      party.endTurn(LATER)
+
+      expect([...party.rngState]).toEqual(before)
+    })
+
+    it('REQ-57: fora de sessão → sessionNotActive; nada muda', () => {
+      const party = makeParty({ status: 'idle', savedAt: NOW })
+
+      const result = party.endTurn(LATER)
+
+      expect(result.isLeft()).toBe(true)
+      if (result.isLeft()) expect(result.value).toBe('sessionNotActive')
+      expect(party.turn.round).toBe(1)
       expect(party.savedAt.toISOString()).toBe(NOW.toISOString())
       expect(party.pullDomainEvents()).toEqual([])
     })

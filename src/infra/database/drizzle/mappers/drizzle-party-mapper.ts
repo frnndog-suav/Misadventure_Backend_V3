@@ -123,6 +123,7 @@ export class DrizzlePartyMapper {
   static toDomain(row: TPartyRow): Party {
     const status = statusSchema.parse(row.status)
     const state = stateSchema.parse(row.state)
+    const turnOrder = state.turnOrder.map((m) => new UniqueEntityID(m))
 
     return Party.restore(
       {
@@ -138,7 +139,13 @@ export class DrizzlePartyMapper {
         config: state.config satisfies TGameConfigValues,
         rngState: state.rngState satisfies RngState,
         dimension: state.dimension,
-        turnOrder: state.turnOrder.map((m) => new UniqueEntityID(m)),
+        turnOrder,
+        // Provisório até a T-25 (save v3, D-64): lê como o save v2, sem gravar `turn`.
+        turn: {
+          round: 1,
+          memberId: turnOrder[0],
+          actionPoints: state.config.actionPointsPerTurn,
+        },
         createdAt: row.createdAt,
         savedAt: row.savedAt,
       },

@@ -44,6 +44,20 @@ export interface PlayerMovedEvent extends DomainEvent {
   readonly toZoneId: string
 }
 
+/** Uma vez começou (REQ-55 na criação, REQ-57 ao encerrar a anterior). */
+export interface TurnStartedEvent extends DomainEvent {
+  readonly type: 'TurnStarted'
+  readonly memberId: UniqueEntityID
+  readonly round: number
+}
+
+/** A vez de `memberId` na `round` acabou (REQ-57). */
+export interface TurnEndedEvent extends DomainEvent {
+  readonly type: 'TurnEnded'
+  readonly memberId: UniqueEntityID
+  readonly round: number
+}
+
 /** Registrado antes de apagar o save, para o despacho. */
 export interface PartyAbandonedEvent extends DomainEvent {
   readonly type: 'PartyAbandoned'
@@ -58,4 +72,6 @@ export type TPartyEvent =
   | SessionStartedEvent
   | SessionEndedEvent
   | PlayerMovedEvent
+  | TurnStartedEvent
+  | TurnEndedEvent
   | PartyAbandonedEvent

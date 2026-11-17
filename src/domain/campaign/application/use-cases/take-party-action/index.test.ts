@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { UniqueEntityID } from '@/core/entities/unique-entity-id'
+import { PartyMember } from '../../../enterprise/entities/party-member'
 import { makeParty } from '../../../../../../test/factories/make-party'
 import { fixedClock } from '../../../../../../test/fakes/fixed-clock'
 import { InMemoryPartiesRepository } from '../../../../../../test/repositories/in-memory-parties-repository'
@@ -162,6 +164,152 @@ describe('TakePartyActionUseCase', () => {
     expect(save).not.toHaveBeenCalled()
     const stored = await repository.findById(partyId)
     expect(stored?.savedAt.toISOString()).toBe(BEFORE)
+  })
+
+  it('REQ-56: três moves gastam 3 pontos; o 4º → ACTION_NOT_ALLOWED noActionPoints, nada gravado', async () => {
+    const partyId = await seed()
+    for (const zoneId of [MINE, HARBOR, MINE]) {
+      const moved = await sut.execute({
+        partyId,
+        body: { type: 'move', zoneId },
+      })
+      expect(moved.isRight()).toBe(true)
+    }
+    const save = vi.spyOn(repository, 'save')
+
+    const result = await sut.execute({
+      partyId,
+      body: { type: 'move', zoneId: HARBOR },
+    })
+
+    expect(result.isLeft()).toBe(true)
+    if (result.isLeft()) {
+      expect(result.value).toBeInstanceOf(ActionNotAllowedError)
+      expect(result.value.code).toBe('ACTION_NOT_ALLOWED')
+      expect(result.value.details).toEqual({ reason: 'noActionPoints' })
+    }
+    expect(save).not.toHaveBeenCalled()
+    const stored = await repository.findById(partyId)
+    expect(stored?.turn.actionPoints).toBe(0)
+    expect(stored?.members[0].player.zoneId).toBe(MINE)
+  })
+
+  it('REQ-56: o ponto gasto fica gravado', async () => {
+    const partyId = await seed()
+
+    await sut.execute({ partyId, body: { type: 'move', zoneId: MINE } })
+
+    const stored = await repository.findById(partyId)
+    expect(stored?.turn.actionPoints).toBe(2)
+  })
+
+  it('REQ-57: endTurn aceito → próxima vez, gravado com savedAt do Clock, TurnEnded e TurnStarted', async () => {
+    const partyId = await seed()
+    await sut.execute({ partyId, body: { type: 'move', zoneId: MINE } })
+    const save = vi.spyOn(repository, 'save')
+
+    const result = await sut.execute({ partyId, body: { type: 'endTurn' } })
+
+    expect(result.isRight()).toBe(true)
+    if (!result.isRight()) return
+    const { party } = result.value
+    expect(party.turn.round).toBe(2)
+    expect(party.turn.actionPoints).toBe(3)
+    expect(party.savedAt.toISOString()).toBe(NOW)
+    expect(save).toHaveBeenCalledTimes(1)
+    const stored = await repository.findById(partyId)
+    expect(stored?.turn.round).toBe(2)
+    expect(stored?.savedAt.toISOString()).toBe(NOW)
+    expect(party.pullDomainEvents().map((e) => e.type)).toEqual([
+      'TurnEnded',
+      'TurnStarted',
+    ])
+  })
+
+  it('REQ-59: turn gravado e lido igual; encerrar e continuar a sessão não muda turn', async () => {
+    const partyId = await seed()
+    await sut.execute({ partyId, body: { type: 'endTurn' } })
+    await sut.execute({ partyId, body: { type: 'move', zoneId: MINE } })
+
+    const stored = await repository.findById(partyId)
+    if (!stored) throw new Error('esperava save')
+    const turn = stored.turn
+    expect(turn.round).toBe(2)
+    expect(turn.actionPoints).toBe(2)
+    stored.endSession(fixedClock(NOW).now())
+    stored.startSession(fixedClock(NOW).now())
+    await repository.save(stored)
+
+    const again = await repository.findById(partyId)
+    expect(again?.turn).toEqual(turn)
+  })
+
+  it('REQ-57 (K2): endTurn é aceito com 0 pontos', async () => {
+    const partyId = await seed()
+    for (const zoneId of [MINE, HARBOR, MINE]) {
+      await sut.execute({ partyId, body: { type: 'move', zoneId } })
+    }
+
+    const result = await sut.execute({ partyId, body: { type: 'endTurn' } })
+
+    expect(result.isRight()).toBe(true)
+  })
+
+  it('REQ-57: endTurn com campo a mais → ACTION_INVALID unknownKey; nada gravado', async () => {
+    const partyId = await seed()
+    const save = vi.spyOn(repository, 'save')
+
+    const result = await sut.execute({
+      partyId,
+      body: { type: 'endTurn', zoneId: MINE },
+    })
+
+    expect(result.isLeft()).toBe(true)
+    if (result.isLeft()) {
+      expect(result.value).toBeInstanceOf(ActionInvalidError)
+      expect(result.value.details).toEqual({
+        fields: [{ field: 'zoneId', reason: 'unknownKey' }],
+      })
+    }
+    expect(save).not.toHaveBeenCalled()
+  })
+
+  it('REQ-57: endTurn em grupo idle → PARTY_SESSION_NOT_ACTIVE; nada gravado', async () => {
+    const partyId = await seed('idle')
+    const save = vi.spyOn(repository, 'save')
+
+    const result = await sut.execute({ partyId, body: { type: 'endTurn' } })
+
+    expect(result.isLeft()).toBe(true)
+    if (result.isLeft())
+      expect(result.value).toBeInstanceOf(PartySessionNotActiveError)
+    expect(save).not.toHaveBeenCalled()
+  })
+
+  it('REQ-56 (D-63): o ator é o membro da vez, não o host', async () => {
+    const base = makeParty()
+    const host = base.members[0]
+    const other = PartyMember.create(
+      { characterName: 'Bo', kind: 'human', player: host.player },
+      new UniqueEntityID('member-2')
+    )
+    const party = makeParty({
+      status: 'inSession',
+      dimension,
+      members: [host, other],
+      hostMemberId: host.id,
+      turnOrder: [other.id, host.id],
+    })
+    await repository.create(party)
+
+    await sut.execute({
+      partyId: party.id.toString(),
+      body: { type: 'move', zoneId: MINE },
+    })
+
+    const stored = await repository.findById(party.id.toString())
+    expect(stored?.members[0].player.zoneId).toBe(HARBOR)
+    expect(stored?.members[1].player.zoneId).toBe(MINE)
   })
 
   it.each([

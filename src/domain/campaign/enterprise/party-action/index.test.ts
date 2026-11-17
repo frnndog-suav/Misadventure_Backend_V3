@@ -14,6 +14,24 @@ describe('parsePartyAction', () => {
       expect(result.value).toEqual({ type: 'move', zoneId: 'fixture.old-mine' })
   })
 
+  it('REQ-57: endTurn válido → a ação', () => {
+    const result = parsePartyAction({ type: 'endTurn' })
+
+    expect(result.isRight()).toBe(true)
+    if (result.isRight()) expect(result.value).toEqual({ type: 'endTurn' })
+  })
+
+  it('REQ-57: endTurn com campo a mais → unknownKey, na ordem do pedido', () => {
+    const result = parsePartyAction({ type: 'endTurn', zoneId: 'a', b: 1 })
+
+    expect(result.isLeft()).toBe(true)
+    if (result.isLeft())
+      expect(result.value).toEqual([
+        { field: 'zoneId', reason: 'unknownKey' },
+        { field: 'b', reason: 'unknownKey' },
+      ])
+  })
+
   it.each([
     ['array', [1]],
     ['texto', 'move'],
