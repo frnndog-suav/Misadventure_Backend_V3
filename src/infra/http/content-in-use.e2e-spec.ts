@@ -65,7 +65,7 @@ describe('Conteúdo em uso no editor (e2e)', () => {
 
     const response = await request(server)
       .post('/lab/content/import?replace=true')
-      .send({ ...exported, cards: [] })
+      .send(exported)
 
     expect(response.status).toBe(409)
     expect(response.body).toEqual(CONTENT_IN_USE)
