@@ -9,13 +9,17 @@ import { createApp } from './lab-app'
  * temporária própria; a fixture nunca muda. Um por arquivo de teste
  * (`CONTENT_DIR` é lido quando o `app.module` é importado).
  */
-export async function createContentApp(): Promise<{
+export async function createContentApp(
+  prepare?: (root: string) => Promise<void>
+): Promise<{
   app: INestApplication
   root: string
   close: () => Promise<void>
 }> {
   const root = await mkdtemp(join(tmpdir(), 'content-e2e-'))
   await cp('test/fixtures/content', root, { recursive: true })
+  // Muda a cópia antes de o app ler o conteúdo no boot (ex.: sem dimensão).
+  await prepare?.(root)
   process.env.CONTENT_DIR = root
   const app = await createApp(true)
   return {

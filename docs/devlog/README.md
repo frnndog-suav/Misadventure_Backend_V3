@@ -41,7 +41,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 021 | FEAT-31-validada | Validação pelo frontend: CONTRATO v0.24 e ROADMAP v0.28 com a FEAT-31 `validado` | concluída |
 | 022 | T-14 | Domínio do catálogo e config (FEAT-06): `arrowLayout`, Dimensão, classes, trava, REQ-26 | concluída |
 | 023 | T-15 | Conteúdo, leitor e `GET /catalog/classes` (FEAT-06): `class.json`, fixture e base | concluída |
-| 024 | T-16 | Domínio da preparação (FEAT-06): gerador do mapa, ordem D20, jogador inicial, `CreateParty` | aguardando revisão |
+| 024 | T-16 | Domínio da preparação (FEAT-06): gerador do mapa, ordem D20, jogador inicial, `CreateParty` | concluída |
+| 025 | T-17 | Save v2 e rotas da preparação (FEAT-06): migração `0002`, presenter, `DIMENSION_INVALID`, e2e | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

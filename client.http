@@ -51,18 +51,37 @@ GET {{baseUrl}}/catalog/classes
 ### FEAT-06 — Carta de Dimensão de uma coleção (200 Card[])
 GET {{baseUrl}}/catalog/collections/base/cards?type=dimension
 
-### FEAT-05 — criar grupo de 1 (201 Party)
+### FEAT-06 — criar grupo de 1 já preparado (201 Party com dimension, turnOrder e player)
 # @name createParty
 POST {{baseUrl}}/parties
 Content-Type: application/json
 
-{ "name": "Os Teimosos", "characterName": "Lia" }
+{ "name": "Os Teimosos", "characterName": "Lia", "playerClass": "warrior" }
 
 ### FEAT-05 — criação inválida (400 PARTY_INVALID: blank + tooLong)
 POST {{baseUrl}}/parties
 Content-Type: application/json
 
-{ "name": "   ", "characterName": "Um nome com mais de vinte e quatro letras" }
+{ "name": "   ", "characterName": "Um nome com mais de vinte e quatro letras", "playerClass": "warrior" }
+
+### FEAT-06 — classe ausente (400 PARTY_INVALID: playerClass required)
+POST {{baseUrl}}/parties
+Content-Type: application/json
+
+{ "name": "Os Teimosos", "characterName": "Lia" }
+
+### FEAT-06 — classe sem publicação no catálogo (400 PARTY_INVALID: playerClass unknownClass)
+POST {{baseUrl}}/parties
+Content-Type: application/json
+
+{ "name": "Os Teimosos", "characterName": "Lia", "playerClass": "banana" }
+
+### FEAT-06 — sem Carta de Dimensão publicada ou composição inválida (409 DIMENSION_INVALID)
+# Reproduza apagando `dimension.json` da coleção no CONTENT_DIR e reiniciando o backend.
+POST {{baseUrl}}/parties
+Content-Type: application/json
+
+{ "name": "Os Teimosos", "characterName": "Lia", "playerClass": "warrior" }
 
 ### FEAT-05 — saves (200 PartySummary[], savedAt mais recente primeiro)
 GET {{baseUrl}}/parties

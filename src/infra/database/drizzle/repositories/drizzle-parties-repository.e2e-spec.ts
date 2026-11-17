@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { Test } from '@nestjs/testing'
 import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
@@ -111,7 +112,43 @@ describe('DrizzlePartiesRepository (e2e)', () => {
     )
 
     expect(rows.rows).toEqual([
-      { id: ID_1, name: 'Os Teimosos', status: 'idle', v: '1' },
+      { id: ID_1, name: 'Os Teimosos', status: 'idle', v: '2' },
     ])
+  })
+
+  it('REQ-37: mapa, ordem, estado do jogador (com a ordem do deck) e RNG voltam iguais', async () => {
+    const original = makeParty(
+      { rngState: SeededRng.fromSeed(9).state() },
+      new UniqueEntityID(ID_1)
+    )
+    await repository.create(original)
+
+    const read = await repository.findById(ID_1)
+
+    expect(read?.dimension).toEqual(original.dimension)
+    expect(read?.turnOrder.map((id) => id.toString())).toEqual(
+      original.turnOrder.map((id) => id.toString())
+    )
+    expect(read?.members[0]?.player).toEqual(original.members[0]?.player)
+    expect(read?.members[0]?.player.deck).toEqual(
+      original.members[0]?.player.deck
+    )
+    expect(read?.rngState).toEqual(original.rngState)
+  })
+
+  it('D-43: a migração 0002 apaga os saves v1', async () => {
+    await db.execute(
+      sql`insert into parties (id, name, status, state, created_at, saved_at)
+          values (${ID_2}, 'Antigo', 'idle', '{"schemaVersion":1}'::jsonb, now(), now())`
+    )
+    const migration = await readFile(
+      './src/infra/database/drizzle/migrations/0002_parties_v2.sql',
+      'utf-8'
+    )
+    for (const statement of migration.split('--> statement-breakpoint')) {
+      if (statement.trim()) await db.execute(sql.raw(statement))
+    }
+
+    expect(await repository.findAll()).toEqual([])
   })
 })

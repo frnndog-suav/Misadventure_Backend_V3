@@ -2,28 +2,89 @@ import type {
   Party,
   TPartyStatus,
 } from '@/domain/campaign/enterprise/entities/party'
-import type { TPartyMemberKind } from '@/domain/campaign/enterprise/entities/party-member'
+import type {
+  PartyMember,
+  TPartyMemberKind,
+} from '@/domain/campaign/enterprise/entities/party-member'
+import type { TDirection } from '@/domain/campaign/enterprise/map-assembly'
+import type {
+  TModifier,
+  TPlayerClass,
+} from '@/domain/catalog/enterprise/value-objects/card'
 
-/** CONTRATO FEAT-05, tipo `PartyMember`. */
+/** CONTRATO FEAT-06, tipo `PlayerState`. A ordem do deck e a build não trafegam (D-42). */
+export interface TPlayerStateHttp {
+  playerClasses: { playerClass: TPlayerClass; deckLockMet: boolean }[]
+  gold: number
+  baseHealth: number
+  maxHealth: number
+  health: number
+  peak: number
+  vigor: number
+  modifiers: Record<TModifier, number>
+  hand: string[]
+  attributeDeckCount: number
+  attributeDiscardPileCount: number
+  zoneId: string
+  respawnZoneId: string
+}
+
+/** CONTRATO FEAT-05/FEAT-06, tipo `PartyMember`. */
 export interface TPartyMemberHttp {
   id: string
   characterName: string
   kind: TPartyMemberKind
   isHost: boolean
+  player: TPlayerStateHttp
 }
 
-/** CONTRATO FEAT-05, tipo `Party`. */
+/** CONTRATO FEAT-06, tipo `PartyDimension`. */
+export interface TPartyDimensionHttp {
+  dimensionCardId: string
+  startingCityZoneId: string
+  map: {
+    zones: { zoneId: string; x: number; y: number; arrows: TDirection[] }[]
+    crossings: { zoneIds: [string, string] }[]
+  }
+}
+
+/** CONTRATO FEAT-05/FEAT-06, tipo `Party`. */
 export interface TPartyHttp {
   id: string
   name: string
   status: TPartyStatus
   members: TPartyMemberHttp[]
+  dimension: TPartyDimensionHttp
+  turnOrder: string[]
   createdAt: string
   savedAt: string
 }
 
+function playerToHTTP(member: PartyMember): TPlayerStateHttp {
+  const player = member.player
+  return {
+    playerClasses: player.playerClasses.map(({ playerClass, deckLockMet }) => ({
+      playerClass,
+      deckLockMet,
+    })),
+    gold: player.gold,
+    baseHealth: player.baseHealth,
+    maxHealth: member.maxHealth,
+    health: player.health,
+    peak: player.peak,
+    vigor: player.vigor,
+    modifiers: { ...player.modifiers },
+    hand: [...player.hand],
+    attributeDeckCount: player.deck.length,
+    attributeDiscardPileCount: player.discard.length,
+    zoneId: player.zoneId,
+    respawnZoneId: player.respawnZoneId,
+  }
+}
+
 export class PartyPresenter {
   static toHTTP(party: Party): TPartyHttp {
+    const { dimensionCardId, startingCityZoneId, map } = party.dimension
     return {
       id: party.id.toString(),
       name: party.name,
@@ -33,7 +94,24 @@ export class PartyPresenter {
         characterName: member.characterName,
         kind: member.kind,
         isHost: party.isHost(member),
+        player: playerToHTTP(member),
       })),
+      dimension: {
+        dimensionCardId,
+        startingCityZoneId,
+        map: {
+          zones: map.zones.map(({ zoneId, x, y, arrows }) => ({
+            zoneId,
+            x,
+            y,
+            arrows: [...arrows],
+          })),
+          crossings: map.crossings.map(({ zoneIds: [first, second] }) => ({
+            zoneIds: [first, second],
+          })),
+        },
+      },
+      turnOrder: party.turnOrder.map((id) => id.toString()),
       createdAt: party.createdAt.toISOString(),
       savedAt: party.savedAt.toISOString(),
     }

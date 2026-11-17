@@ -17,7 +17,11 @@ export async function resetCampaign(app: INestApplication): Promise<void> {
 
 export async function postParty(
   app: INestApplication,
-  body: object = { name: 'Os Teimosos', characterName: 'Lia' }
+  body: object = {
+    name: 'Os Teimosos',
+    characterName: 'Lia',
+    playerClass: 'warrior',
+  }
 ): Promise<{ id: string; savedAt: string } & Record<string, unknown>> {
   const response = await request(app.getHttpServer())
     .post('/parties')
@@ -26,6 +30,17 @@ export async function postParty(
     throw new Error(`POST /parties respondeu ${response.status}`)
   }
   return response.body
+}
+
+export const WARRIOR_BODY = {
+  name: 'Os Teimosos',
+  characterName: 'Lia',
+  playerClass: 'warrior',
+}
+
+export const DIMENSION_INVALID = {
+  code: 'DIMENSION_INVALID',
+  message: 'Não foi possível preparar a dimensão. Avise o designer da coleção.',
 }
 
 export const PARTY_NOT_FOUND = {

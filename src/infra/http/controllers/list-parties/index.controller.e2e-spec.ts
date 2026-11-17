@@ -32,7 +32,11 @@ describe('GET /parties (e2e)', () => {
 
   it('REQ-18: resumo de cada save, do savedAt mais recente para o mais antigo', async () => {
     const first = await postParty(app)
-    const second = await postParty(app, { name: 'Outro', characterName: 'Bo' })
+    const second = await postParty(app, {
+      name: 'Outro',
+      characterName: 'Bo',
+      playerClass: 'rogue',
+    })
     // Continuar o primeiro atualiza o savedAt: ele passa para o topo.
     // A espera garante um instante diferente do relógio real.
     await new Promise((resolve) => setTimeout(resolve, 5))

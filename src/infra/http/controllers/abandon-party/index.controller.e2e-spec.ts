@@ -25,7 +25,11 @@ describe('DELETE /parties/:partyId (e2e)', () => {
 
   it('REQ-24: apaga o save (idle ou inSession) → 204 sem corpo; depois 404', async () => {
     const idle = await postParty(app)
-    const inSession = await postParty(app, { name: 'B', characterName: 'Bo' })
+    const inSession = await postParty(app, {
+      name: 'B',
+      characterName: 'Bo',
+      playerClass: 'warrior',
+    })
     await request(app.getHttpServer())
       .post(`/parties/${inSession.id}/session`)
       .expect(200)

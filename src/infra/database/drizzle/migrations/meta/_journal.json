@@ -15,6 +15,13 @@
       "when": 1794783116693,
       "tag": "0001_parties",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794921509764,
+      "tag": "0002_parties_v2",
+      "breakpoints": true
     }
   ]
 }
