@@ -43,6 +43,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 023 | T-15 | Conteúdo, leitor e `GET /catalog/classes` (FEAT-06): `class.json`, fixture e base | concluída |
 | 024 | T-16 | Domínio da preparação (FEAT-06): gerador do mapa, ordem D20, jogador inicial, `CreateParty` | concluída |
 | 026 | T-18 | Editor da FEAT-06: classes, Carta de Dimensão, conteúdo em uso; CONTRATO v0.25 `implementado (BE)` | concluída |
+| 027 | FEAT-06-validada | Validação pelo frontend: CONTRATO v0.26 e ROADMAP v0.31 com a FEAT-06 `validado` | concluída |
 | 025 | T-17 | Save v2 e rotas da preparação (FEAT-06): migração `0002`, presenter, `DIMENSION_INVALID`, e2e | concluída |
 
 ## Como replicar
