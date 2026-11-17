@@ -23,6 +23,11 @@ const DEFAULTS = {
   defaultCelerity: 10,
   defaultPiercing: 0,
   defaultReflection: 0,
+  maxCopiesPerCard: 4,
+  tcgFolderCapacity: 30,
+  recoverHealthPercent: 15,
+  recoverVigorPercent: 5,
+  recoverHandSize: 7,
 }
 
 const LIMITS = {
@@ -45,6 +50,11 @@ const LIMITS = {
   defaultCelerity: { min: 0, max: 1000 },
   defaultPiercing: { min: 0, max: 1000 },
   defaultReflection: { min: 0, max: 1000 },
+  maxCopiesPerCard: { min: 1, max: 200 },
+  tcgFolderCapacity: { min: 0, max: 1000 },
+  recoverHealthPercent: { min: 0, max: 100 },
+  recoverVigorPercent: { min: 0, max: 100 },
+  recoverHandSize: { min: 0, max: 200 },
 }
 
 describe('GET /lab/config (e2e)', () => {
@@ -58,7 +68,7 @@ describe('GET /lab/config (e2e)', () => {
     await app.close()
   })
 
-  it('REQ-04, REQ-29: sem ajuste salvo, responde 200 com padrões e limites do contrato', async () => {
+  it('REQ-04, REQ-29, REQ-60: sem ajuste salvo, responde 200 com padrões e limites do contrato', async () => {
     const response = await request(app.getHttpServer()).get('/lab/config')
 
     expect(response.status).toBe(200)

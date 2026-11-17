@@ -32,6 +32,15 @@ type TParty = {
 
 const CITY = 'fixture.gray-harbor'
 
+// Chaves da FEAT-09 (REQ-60): um save v2 não as tem.
+const V4_KEYS = [
+  'maxCopiesPerCard',
+  'tcgFolderCapacity',
+  'recoverHealthPercent',
+  'recoverVigorPercent',
+  'recoverHandSize',
+]
+
 function neighbours(party: TParty, zoneId: string): string[] {
   const found = new Set<string>()
   for (const [a, b] of party.dimension.map.crossings.map((c) => c.zoneIds)) {
@@ -193,12 +202,14 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
     expect(response.body).toEqual(PARTY_NOT_FOUND)
   })
 
-  it('REQ-55/REQ-58: criação traz turn na rodada 1 e availableActions [move, endTurn]', async () => {
+  it('REQ-55/REQ-58/REQ-67: criação traz turn na rodada 1 e availableActions [move, recover, adjustDeck, endTurn]', async () => {
     const created = (await postParty(app)) as unknown as TParty
     const memberId = created.members[0].id
     expect(created.turn).toEqual({ round: 1, memberId, actionPoints: 3 })
     expect(created.members[0].player.availableActions).toEqual([
       'move',
+      'recover',
+      'adjustDeck',
       'endTurn',
     ])
   })
@@ -263,6 +274,8 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
     expect(ended.body.members[0].player.zoneId).toBe(a)
     expect(ended.body.members[0].player.availableActions).toEqual([
       'move',
+      'recover',
+      'adjustDeck',
       'endTurn',
     ])
     expect(Date.parse(ended.body.savedAt)).toBeGreaterThanOrEqual(
@@ -323,7 +336,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
     expect(ended.body.turn.actionPoints).toBe(3)
   })
 
-  it('REQ-59/D-64: save v2 inserido à mão é lido como v3 e regravado como v3', async () => {
+  it('REQ-59/D-64/D-70: save v2 inserido à mão é lido com turn na rodada 1 e regravado como v4', async () => {
     const party = await startedParty()
     const db = app.get<Database>(DRIZZLE)
     const [row] = await db
@@ -332,14 +345,22 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
       .where(eq(parties.id, party.id))
     const rest = { ...(row.state as Record<string, unknown>) }
     delete rest.turn
+    const members = (rest.members as { player: Record<string, unknown> }[]).map(
+      (m) => {
+        const player = { ...m.player }
+        delete player.tcgFolder
+        return { ...m, player }
+      }
+    )
+    const legacyConfig: Record<string, number> = {
+      ...GAME_CONFIG_DEFAULTS,
+      actionPointsPerTurn: 4,
+    }
+    for (const key of V4_KEYS) delete legacyConfig[key]
     await db
       .update(parties)
       .set({
-        state: {
-          ...rest,
-          schemaVersion: 2,
-          config: { ...GAME_CONFIG_DEFAULTS, actionPointsPerTurn: 4 },
-        },
+        state: { ...rest, members, schemaVersion: 2, config: legacyConfig },
       })
       .where(eq(parties.id, party.id))
 
@@ -356,7 +377,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
       .from(parties)
       .where(eq(parties.id, party.id))
     expect(saved.state).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: 4,
       turn: { round: 2, memberId: party.members[0].id, actionPoints: 4 },
     })
   })

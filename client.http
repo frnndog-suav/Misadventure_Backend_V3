@@ -254,3 +254,39 @@ POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
 Content-Type: application/json
 
 { "type": "endTurn", "now": true }
+
+### FEAT-09 — Recuperar comprando até 7 (200 Party; actionPoints − 1; vida/Vigor sobem até o teto)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "recover", "option": "drawToHand" }
+
+### FEAT-09 — Recuperar embaralhando a mão (200; hand [], attributeDeckCount 60)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "recover", "option": "shuffleHand" }
+
+### FEAT-09 — Recuperar com opção desconhecida (400 ACTION_INVALID unknownOption)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "recover", "option": "nap" }
+
+### FEAT-09 — Ajustar deck sem mudanças (200; mesma build, tcgFolder [], mão com a mesma quantidade)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "adjustDeck", "build": [{ "cardId": "fixture.endurance-basic", "copies": 30 }, { "cardId": "fixture.strength-basic", "copies": 30 }] }
+
+### FEAT-09 — Ajustar deck abaixo do mínimo (409 ACTION_NOT_ALLOWED buildBelowMinimum)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "adjustDeck", "build": [{ "cardId": "fixture.endurance-basic", "copies": 30 }, { "cardId": "fixture.strength-basic", "copies": 29 }] }
+
+### FEAT-09 — Ajustar deck com carta que o jogador não tem (409 notOwned, cardId)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "adjustDeck", "build": [{ "cardId": "fixture.endurance-basic", "copies": 30 }, { "cardId": "fixture.strength-basic", "copies": 30 }, { "cardId": "fixture.dexterity-basic", "copies": 1 }] }

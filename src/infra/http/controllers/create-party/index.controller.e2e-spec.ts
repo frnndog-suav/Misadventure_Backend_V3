@@ -77,7 +77,14 @@ describe('POST /parties (e2e)', () => {
             zoneId: 'fixture.gray-harbor',
             respawnZoneId: 'fixture.gray-harbor',
             moveTargets: expect.any(Array),
-            availableActions: ['move', 'endTurn'],
+            availableActions: ['move', 'recover', 'adjustDeck', 'endTurn'],
+            build: [
+              { cardId: 'fixture.endurance-basic', copies: 30 },
+              { cardId: 'fixture.strength-basic', copies: 30 },
+            ],
+            buildSize: 60,
+            tcgFolder: [],
+            tcgFolderCapacity: 30,
           },
         },
       ],
@@ -101,9 +108,8 @@ describe('POST /parties (e2e)', () => {
         ['fixture.strength-basic', 'fixture.endurance-basic'].includes(card)
       )
     ).toBe(true)
-    // A ordem do deck e a build não trafegam (D-42).
+    // A ordem do deck não trafega (D-42); a build trafega agrupada (D-69).
     expect(player).not.toHaveProperty('deck')
-    expect(player).not.toHaveProperty('build')
 
     const read = await request(app.getHttpServer()).get(
       `/parties/${response.body.id}`

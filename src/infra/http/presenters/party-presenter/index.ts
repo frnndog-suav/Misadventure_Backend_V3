@@ -15,7 +15,13 @@ import type {
   TPlayerClass,
 } from '@/domain/catalog/enterprise/value-objects/card'
 
-/** CONTRATO FEAT-06, tipo `PlayerState`. A ordem do deck e a build não trafegam (D-42). */
+/** CONTRATO FEAT-09, tipo `CardCopies`. */
+export interface TCardCopiesHttp {
+  cardId: string
+  copies: number
+}
+
+/** CONTRATO FEAT-06/FEAT-09, tipo `PlayerState`. A ordem do deck não trafega (D-42). */
 export interface TPlayerStateHttp {
   playerClasses: { playerClass: TPlayerClass; deckLockMet: boolean }[]
   gold: number
@@ -33,7 +39,16 @@ export interface TPlayerStateHttp {
   moveTargets: string[]
   /** FEAT-08 (REQ-58, D-65). */
   availableActions: TPartyActionType[]
+  /** FEAT-09 (REQ-62, D-69). */
+  build: TCardCopiesHttp[]
+  buildSize: number
+  tcgFolder: TCardCopiesHttp[]
+  tcgFolderCapacity: number
 }
+
+const copiesToHTTP = (
+  list: readonly { cardId: string; copies: number }[]
+): TCardCopiesHttp[] => list.map(({ cardId, copies }) => ({ cardId, copies }))
 
 /** CONTRATO FEAT-08, tipo `PartyTurn`. */
 export interface TPartyTurnHttp {
@@ -96,6 +111,10 @@ function playerToHTTP(party: Party, member: PartyMember): TPlayerStateHttp {
     respawnZoneId: player.respawnZoneId,
     moveTargets: connectedZones(map, player.zoneId),
     availableActions: availableActions(party, member.id),
+    build: copiesToHTTP(player.build),
+    buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),
+    tcgFolder: copiesToHTTP(player.tcgFolder),
+    tcgFolderCapacity: party.config.tcgFolderCapacity,
   }
 }
 

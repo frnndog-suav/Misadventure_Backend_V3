@@ -24,6 +24,11 @@ const DEFAULTS = {
   defaultCelerity: 10,
   defaultPiercing: 0,
   defaultReflection: 0,
+  maxCopiesPerCard: 4,
+  tcgFolderCapacity: 30,
+  recoverHealthPercent: 15,
+  recoverVigorPercent: 5,
+  recoverHandSize: 7,
 }
 
 function invalid(fields: { field: string | null; reason: string }[]) {
