@@ -46,7 +46,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 027 | FEAT-06-validada | Validação pelo frontend: CONTRATO v0.26 e ROADMAP v0.31 com a FEAT-06 `validado` | concluída |
 | 025 | T-17 | Save v2 e rotas da preparação (FEAT-06): migração `0002`, presenter, `DIMENSION_INVALID`, e2e | concluída |
 | 028 | T-22 | Domínio do Movimentar (FEAT-07): `connectedZones`, `parsePartyAction`, `Party.move`, `TakePartyActionUseCase` | concluída |
-| 029 | T-23 | Rota de ações (FEAT-07): `POST /parties/:partyId/actions`, `moveTargets`, erros de ação no filtro | aguardando revisão |
+| 029 | T-23 | Rota de ações (FEAT-07): `POST /parties/:partyId/actions`, `moveTargets`, erros de ação no filtro | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

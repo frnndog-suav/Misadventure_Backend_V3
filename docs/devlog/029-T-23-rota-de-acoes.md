@@ -40,3 +40,8 @@ AVISO DE FRONTEND — FEAT-07 emitido (CONTRATO v0.29, ROADMAP v0.33). O FE vali
 ## Revisão 2026-11-17
 - O FE achou o `/health` com `contractVersion "0.26"` e `/actions` com 404. Havia duas causas: `src/infra/http/contract-version.ts` não tinha acompanhado as versões 0.27 a 0.29 (corrigido para `'0.29'`), e um processo antigo (`node dist/infra/main`) ocupava a porta 3333. Esse processo foi encerrado a pedido do autor.
 - Convenção nova do autor: o agente nunca sobe nem para o servidor do backend. Foi registrada em `CLAUDE.md` (Convenções), `.claude/skills/{tarefa,contrato}/SKILL.md` e `.claude/agents/infra-dev.md`. A `/contrato` agora confere `CONTRACT_VERSION` ao subir a versão.
+
+## Fechamento 2026-11-17 — FEAT-07 `validado`
+- O FE validou os 7 cenários contra o backend real e a tela do grupo com o MSW desligado (CONTRATO v0.30, ROADMAP v0.34, cópias do FE aplicadas aqui).
+- O backend rodava com o conteúdo `base`, não com a `fixture`. Por isso a cidade inicial foi `base.harbor-town`; as invariantes dos cenários são as mesmas.
+- `CONTRACT_VERSION` foi para `'0.30'`, para o `/health` acompanhar o contrato.
