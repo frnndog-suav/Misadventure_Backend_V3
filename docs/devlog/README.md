@@ -1,4 +1,4 @@
-# Devlog
+﻿# Devlog
 
 Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto** lendo as entradas em ordem.
 
@@ -48,7 +48,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 028 | T-22 | Domínio do Movimentar (FEAT-07): `connectedZones`, `parsePartyAction`, `Party.move`, `TakePartyActionUseCase` | concluída |
 | 029 | T-23 | Rota de ações (FEAT-07): `POST /parties/:partyId/actions`, `moveTargets`, erros de ação no filtro | concluída |
 | 030 | T-24 | Domínio da vez (FEAT-08): `PartyTurn`, `Party.endTurn`, custo do `move`, `availableActions` | concluída |
-| 031 | T-25 | Save v3 e rota da vez (FEAT-08): mapper v3 com leitura de v2, `turn` e `availableActions` no `Party`, `implementado (BE)` | aguardando revisão |
+| 031 | T-25 | Save v3 e rota da vez (FEAT-08): mapper v3 com leitura de v2, `turn` e `availableActions` no `Party`, `implementado (BE)`; FEAT-08 `validado` | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

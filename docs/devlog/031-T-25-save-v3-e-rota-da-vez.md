@@ -37,3 +37,8 @@ AVISO DE FRONTEND — FEAT-08: levar `docs/CONTRATO.md` v0.33 e `docs/ROADMAP.md
 
 ## Commit sugerido
 `feat/feat-08 save v3 and turn route`
+
+## Fechamento 2026-11-17 — FEAT-08 `validado`
+- O FE validou os 8 cenários contra o backend real e a tela do grupo com o MSW desligado. As cópias CONTRATO v0.34 e ROADMAP v0.39 vieram do FE e foram aplicadas aqui.
+- O backend rodava com o conteúdo `base`: `H` = `base.harbor-town`, `A` = `base.misty-forest`. As invariantes dos cenários são as mesmas.
+- `CONTRACT_VERSION` foi para `'0.34'`, para o `/health` acompanhar o contrato.
