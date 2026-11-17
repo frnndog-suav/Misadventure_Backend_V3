@@ -6,7 +6,11 @@ import type {
   PartyMember,
   TPartyMemberKind,
 } from '@/domain/campaign/enterprise/entities/party-member'
-import type { TDirection } from '@/domain/campaign/enterprise/map-assembly'
+import { connectedZones } from '@/domain/campaign/enterprise/connected-zones'
+import type {
+  TDirection,
+  TPartyMap,
+} from '@/domain/campaign/enterprise/map-assembly'
 import type {
   TModifier,
   TPlayerClass,
@@ -27,6 +31,7 @@ export interface TPlayerStateHttp {
   attributeDiscardPileCount: number
   zoneId: string
   respawnZoneId: string
+  moveTargets: string[]
 }
 
 /** CONTRATO FEAT-05/FEAT-06, tipo `PartyMember`. */
@@ -60,7 +65,7 @@ export interface TPartyHttp {
   savedAt: string
 }
 
-function playerToHTTP(member: PartyMember): TPlayerStateHttp {
+function playerToHTTP(member: PartyMember, map: TPartyMap): TPlayerStateHttp {
   const player = member.player
   return {
     playerClasses: player.playerClasses.map(({ playerClass, deckLockMet }) => ({
@@ -79,6 +84,7 @@ function playerToHTTP(member: PartyMember): TPlayerStateHttp {
     attributeDiscardPileCount: player.discard.length,
     zoneId: player.zoneId,
     respawnZoneId: player.respawnZoneId,
+    moveTargets: connectedZones(map, player.zoneId),
   }
 }
 
@@ -94,7 +100,7 @@ export class PartyPresenter {
         characterName: member.characterName,
         kind: member.kind,
         isHost: party.isHost(member),
-        player: playerToHTTP(member),
+        player: playerToHTTP(member, map),
       })),
       dimension: {
         dimensionCardId,

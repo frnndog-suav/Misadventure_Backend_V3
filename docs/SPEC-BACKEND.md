@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.31 · **Data:** 2026-11-17
+> **Versão da spec:** 0.32 · **Data:** 2026-11-17
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -374,7 +374,7 @@ Contrato: CONTRATO v0.22, seção FEAT-06 `acordado` (2026-11-15). Ordem (D-45):
 Contrato: CONTRATO v0.28, seção FEAT-07 `acordado` (2026-11-17) — `POST /parties/:partyId/actions`; tipos `PartyAction` (união por `type`) com `MoveAction` (`{ type: "move", zoneId }`) e `ActionInvalidDetails`/`ActionNotAllowedDetails`; `PlayerState.moveTargets` (mudança na seção FEAT-06); códigos `ACTION_INVALID` (400) e `ACTION_NOT_ALLOWED` (409) com mensagens pt-BR; descrição de `PARTY_SESSION_NOT_ACTIVE` ampliada para ações; nota de que até a FEAT-08 mover não gasta ponto de ação (D-61); cenários com a `fixture` (invariantes, porque o mapa é sorteado).
 
 - [x] **T-22 — Domínio do Movimentar (REQ-50 a REQ-53).** TDD unitário com `fixedSeed` e um mapa montado à mão pela factory: `connectedZones` (travessia nos dois sentidos, vizinha sem travessia fora, ordem por id), `parsePartyAction` (um teste por problema de REQ-53, ordem dos problemas), `Party.move` (aceito, repetido e de volta; `zoneNotInMap`; `notConnected` inclusive a própria zona; `PlayerMoved` em ordem; RNG intacto), `TakePartyActionUseCase` (ordem 404 → 400 → 409 sessão → REQ-52; grava só no sucesso; ator = host, D-61) e os dois erros. **Verificação:** `npx vitest related --run` verde; `domain-guard --all` limpo.
-- [ ] **T-23 — Rota de ações (REQ-50 a REQ-53 de ponta a ponta).** TDD e2e Supertest primeiro (um `it` por REQ, cenários do contrato com a `fixture`): controller `POST /parties/:partyId/actions` no `CampaignModule`, `moveTargets` no `PartyPresenter`, `ACTION_INVALID` → 400 e `ACTION_NOT_ALLOWED` → 409 no `DOMAIN_ERROR_STATUS`, prefixo `/parties/*/actions` no filtro (D-62), `client.http`. Sem migração (D-61). **Verificação:** `npm run test:e2e` verde; `curl` dos cenários. Ao final: `/contrato` marca FEAT-07 `implementado (BE)` e gera o AVISO DE FRONTEND.
+- [x] **T-23 — Rota de ações (REQ-50 a REQ-53 de ponta a ponta).** TDD e2e Supertest primeiro (um `it` por REQ, cenários do contrato com a `fixture`): controller `POST /parties/:partyId/actions` no `CampaignModule`, `moveTargets` no `PartyPresenter`, `ACTION_INVALID` → 400 e `ACTION_NOT_ALLOWED` → 409 no `DOMAIN_ERROR_STATUS`, prefixo `/parties/*/actions` no filtro (D-62), `client.http`. Sem migração (D-61). **Verificação:** `npm run test:e2e` verde; `curl` dos cenários. Ao final: `/contrato` marca FEAT-07 `implementado (BE)` e gera o AVISO DE FRONTEND.
 
 ## 8. Histórico
 
@@ -411,6 +411,7 @@ Contrato: CONTRATO v0.28, seção FEAT-07 `acordado` (2026-11-17) — `POST /par
 | 0.29 | 2026-11-17 | T-18 concluída (editor: Carta de Dimensão e `arrowLayout`, rotas de classes, export/import com classes, `CONTENT_IN_USE`, `CONTENT_REFERENCED`, `CLASS_NOT_FOUND`): D-60; D-57(b) resolvida. Lado BE da FEAT-06 pronto. |
 | 0.30 | 2026-11-17 | Planejamento da FEAT-07: REQ-50 a REQ-53, D-61 (sem custo em pontos de ação até a FEAT-08, decisão do autor) e D-62 (rota única `POST /parties/:partyId/actions`, decisão do autor; modelo proposto), tarefas T-22 e T-23. Contrato a propor com `/contrato FEAT-07`. |
 | 0.31 | 2026-11-17 | T-22 concluída: D-62 com a assinatura implementada `Party.move(zoneId, at)` (host, D-61; `sessionNotActive` no agregado); REQ-53 explicita que problema em `type` vem sozinho (como o contrato já mostrava). Sem mudança de contrato. |
+| 0.32 | 2026-11-17 | T-23 concluída (rota `POST /parties/:partyId/actions`, `moveTargets` no presenter, `ACTION_INVALID`/`ACTION_NOT_ALLOWED` no filtro). O prefixo `/parties/*/actions` do filtro (D-62) exige casar `*` como um segmento de rota; o casamento passou a aceitar `*`. Lado BE da FEAT-07 pronto. |
 
 ## Apêndice A — Conteúdo de teste
 

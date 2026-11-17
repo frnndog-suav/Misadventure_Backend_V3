@@ -76,6 +76,7 @@ describe('POST /parties (e2e)', () => {
             attributeDiscardPileCount: 0,
             zoneId: 'fixture.gray-harbor',
             respawnZoneId: 'fixture.gray-harbor',
+            moveTargets: expect.any(Array),
           },
         },
       ],

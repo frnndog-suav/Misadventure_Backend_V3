@@ -224,3 +224,21 @@ DELETE {{baseUrl}}/lab/content/classes/mage
 
 ### FEAT-06 — carta do deck pré-pronto (409 CONTENT_REFERENCED, sem grupos)
 DELETE {{baseUrl}}/lab/content/cards/fixture.dexterity-basic
+
+### FEAT-07 — movimentar (200 Party; troque zoneId por um item de members[0].player.moveTargets)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "move", "zoneId": "fixture.old-mine" }
+
+### FEAT-07 — zona fora do mapa (400 ACTION_INVALID zoneNotInMap)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "move", "zoneId": "fixture.nowhere" }
+
+### FEAT-07 — zona atual, sem travessia (409 ACTION_NOT_ALLOWED notConnected)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "move", "zoneId": "fixture.gray-harbor" }

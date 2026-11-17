@@ -10,6 +10,7 @@ import { EndSessionUseCase } from '@/domain/campaign/application/use-cases/end-s
 import { GetPartyUseCase } from '@/domain/campaign/application/use-cases/get-party'
 import { ListPartiesUseCase } from '@/domain/campaign/application/use-cases/list-parties'
 import { StartSessionUseCase } from '@/domain/campaign/application/use-cases/start-session'
+import { TakePartyActionUseCase } from '@/domain/campaign/application/use-cases/take-party-action'
 import { GameConfigRepository } from '@/domain/lab/application/repositories/game-config-repository'
 import { GetGameConfigUseCase } from '@/domain/lab/application/use-cases/get-game-config'
 import { SystemClock } from '../clock/system-clock'
@@ -21,6 +22,7 @@ import { EndSessionController } from './controllers/end-session/index.controller
 import { GetPartyController } from './controllers/get-party/index.controller'
 import { ListPartiesController } from './controllers/list-parties/index.controller'
 import { StartSessionController } from './controllers/start-session/index.controller'
+import { TakePartyActionController } from './controllers/take-party-action/index.controller'
 
 // Rotas /parties (FEAT-05). Os adaptadores das portas do core vivem aqui
 // enquanto a campanha é o único consumidor (D-34).
@@ -32,6 +34,7 @@ import { StartSessionController } from './controllers/start-session/index.contro
     StartSessionController,
     EndSessionController,
     AbandonPartyController,
+    TakePartyActionController,
   ],
   providers: [
     { provide: Clock, useClass: SystemClock },
@@ -93,6 +96,12 @@ import { StartSessionController } from './controllers/start-session/index.contro
       inject: [PartiesRepository, Clock],
       useFactory: (parties: PartiesRepository, clock: Clock) =>
         new EndSessionUseCase(parties, clock),
+    },
+    {
+      provide: TakePartyActionUseCase,
+      inject: [PartiesRepository, Clock],
+      useFactory: (parties: PartiesRepository, clock: Clock) =>
+        new TakePartyActionUseCase(parties, clock),
     },
     {
       provide: AbandonPartyUseCase,

@@ -68,6 +68,16 @@ const INVALID_BODY_BY_PATH: readonly {
     ),
   },
   {
+    prefix: '/parties/*/actions',
+    body: {
+      error: {
+        code: 'ACTION_INVALID',
+        message: 'Ação inválida.',
+        details: { fields: [{ field: null, reason: 'invalidBody' }] },
+      },
+    },
+  },
+  {
     prefix: '/parties',
     body: invalidBody('PARTY_INVALID', 'Dados do grupo inválidos.'),
   },
@@ -89,11 +99,20 @@ function presentDetails(error: DomainError): unknown {
 
 function invalidBodyFor(url: string): TInvalidBody | null {
   const path = url.split('?')[0] ?? ''
-  const match = INVALID_BODY_BY_PATH.find(({ prefix }) =>
-    prefix.endsWith('/')
+  const match = INVALID_BODY_BY_PATH.find(({ prefix }) => {
+    if (prefix.includes('*')) {
+      // `*` casa um segmento da rota (ex.: `/parties/*/actions`, D-62)
+      const segments = prefix.split('/')
+      const parts = path.split('/')
+      return (
+        parts.length >= segments.length &&
+        segments.every((seg, i) => seg === '*' || seg === parts[i])
+      )
+    }
+    return prefix.endsWith('/')
       ? path.startsWith(prefix)
       : path === prefix || path.startsWith(`${prefix}/`)
-  )
+  })
   return match?.body ?? null
 }
 
