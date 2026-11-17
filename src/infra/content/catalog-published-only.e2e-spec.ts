@@ -68,7 +68,7 @@ describe('Catálogo só com publicadas (e2e)', () => {
     }[]
     expect(bosque?.id).toBe('bosque')
     expect(Object.values(bosque?.cardCounts ?? {})).toEqual(Array(7).fill(0))
-    expect(fixture?.cardCounts.attribute).toBe(1)
+    expect(fixture?.cardCounts.attribute).toBe(3)
   })
 
   it('REQ-41: GET /catalog/collections/:id/cards não lista rascunhos', async () => {
@@ -78,6 +78,8 @@ describe('Catálogo só com publicadas (e2e)', () => {
 
     expect(response.status).toBe(200)
     expect(response.body.map((card: { id: string }) => card.id)).toEqual([
+      'fixture.dexterity-basic',
+      'fixture.endurance-basic',
       'fixture.strength-basic',
     ])
   })

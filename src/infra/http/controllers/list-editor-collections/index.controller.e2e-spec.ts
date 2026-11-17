@@ -24,7 +24,7 @@ describe('GET /lab/content/collections (e2e)', () => {
         id: 'fixture',
         name: 'Coleção de Teste',
         description: '',
-        publishedCount: 6,
+        publishedCount: 12,
         draftCount: 0,
       },
     ])

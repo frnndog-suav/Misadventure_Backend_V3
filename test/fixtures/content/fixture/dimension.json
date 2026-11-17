@@ -1,0 +1,10 @@
+[
+  {
+    "id": "fixture.test-dimension",
+    "name": "Dimensão de Teste",
+    "flavorText": null,
+    "releaseOrder": 1,
+    "arrivalZoneTitle": "Porto Cinzento",
+    "effects": []
+  }
+]

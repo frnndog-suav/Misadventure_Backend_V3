@@ -25,13 +25,13 @@ describe('GET /catalog/collections (e2e)', () => {
         id: 'fixture',
         name: 'Coleção de Teste',
         cardCounts: {
-          zone: 1,
-          attribute: 1,
+          zone: 4,
+          attribute: 3,
           equipment: 1,
           item: 1,
           randomEvent: 1,
           combatEvent: 1,
-          dimension: 0,
+          dimension: 1,
         },
       },
     ])

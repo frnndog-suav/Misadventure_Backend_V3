@@ -1,6 +1,7 @@
 import type {
   TCard,
   TCardType,
+  TClassDefinition,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import type { TCatalogIssueReason } from '@/domain/catalog/enterprise/catalog-integrity'
 
@@ -41,6 +42,12 @@ export type TCardInput = DistributiveOmit<TCard, 'id' | 'collectionId'> & {
 }
 
 export type TEditorCard = Readonly<{ status: TContentStatus; card: TCard }>
+
+/** `EditorClass` (CONTRATO FEAT-06): classe com `status`, como as cartas. */
+export type TEditorClass = Readonly<{
+  status: TContentStatus
+  classDefinition: TClassDefinition
+}>
 
 export type TEditorCardSummary = Readonly<{
   id: string

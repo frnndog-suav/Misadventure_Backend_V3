@@ -169,6 +169,20 @@ export const cardInputSchema = z.discriminatedUnion('type', [
   cardSchemas.combatEvent.omit({ id: true }).extend(inputKeys('combatEvent')),
 ])
 
+/**
+ * Uma classe do `class.json` (D-40): sem `collectionId` (vem do caminho),
+ * `status` opcional como nas cartas (D-47). Faixas, unicidade, deck e trava
+ * ficam em `checkCatalogIntegrity` (REQ-26).
+ */
+export const classFileSchema = z.strictObject({
+  playerClass: z.enum(PLAYER_CLASSES),
+  name: text,
+  essentialAttributes: z.array(z.enum(ATTRIBUTES)),
+  baseModifiers: enemyModifiers,
+  starterDeck: z.array(z.strictObject({ cardId: text, copies: z.number() })),
+  status,
+})
+
 export const collectionFileSchema = z.strictObject({
   name: text,
   description: z.string().optional(),

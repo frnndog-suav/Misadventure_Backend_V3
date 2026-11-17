@@ -11,15 +11,24 @@ import {
 import type {
   TContentCollection,
   TEditorCard,
+  TEditorClass,
 } from '@/domain/catalog/enterprise/value-objects/content'
 
-import { cardFileSchemas, collectionFileSchema } from './card-schemas'
+import {
+  cardFileSchemas,
+  classFileSchema,
+  collectionFileSchema,
+} from './card-schemas'
 import { catalogIssueMessage } from './content-messages'
 
-/** Um item do relatório de REQ-11. `file` usa barras normais. */
+/**
+ * Um item do relatório de REQ-11. `file` usa barras normais. `playerClass`
+ * só em problema de uma classe (`class.json`, D-56).
+ */
 export type TContentProblem = {
   file: string
   cardId: string | null
+  playerClass?: string
   field: string | null
   message: string
 }
@@ -28,6 +37,7 @@ export type TContentProblem = {
 export type TLoadedContent = {
   collections: TContentCollection[]
   cards: TEditorCard[]
+  classes: TEditorClass[]
 }
 
 export type TLoadContentResult =
@@ -35,6 +45,7 @@ export type TLoadContentResult =
   | { ok: false; problems: TContentProblem[] }
 
 const COLLECTION_FILE = 'collection.json'
+const CLASS_FILE = 'class.json'
 
 const zodLocale = z.locales.ptBR().localeError
 
@@ -53,6 +64,7 @@ export async function loadContent(
   const problems: TContentProblem[] = []
   const collections: TContentCollection[] = []
   const cards: TEditorCard[] = []
+  const classes: TEditorClass[] = []
   /** Arquivo de cada carta lida, para localizar os problemas de integridade. */
   const cardFiles: { card: TCard; file: string }[] = []
 
@@ -101,12 +113,30 @@ export async function loadContent(
         cardFiles.push({ card: entry.card, file })
       }
     }
+
+    const classFile = join(dir, CLASS_FILE)
+    if (await exists(classFile)) {
+      classes.push(...(await readClasses(classFile, collectionId, problems)))
+    }
   }
 
   for (const issue of checkCatalogIntegrity({
     collections,
     cards: cards.map(({ card }) => card),
+    classes: classes.map(({ classDefinition }) => classDefinition),
   })) {
+    if (issue.playerClass !== undefined) {
+      problems.push({
+        file: normalize(
+          join(dirOf(collectionDirs, issue.collectionId), CLASS_FILE)
+        ),
+        cardId: null,
+        playerClass: issue.playerClass,
+        field: issue.field,
+        message: catalogIssueMessage(issue.reason),
+      })
+      continue
+    }
     const files =
       issue.cardId === null
         ? [join(dirOf(collectionDirs, issue.collectionId), COLLECTION_FILE)]
@@ -131,19 +161,22 @@ export async function loadContent(
 
   return problems.length > 0
     ? { ok: false, problems }
-    : { ok: true, content: { collections, cards } }
+    : { ok: true, content: { collections, cards, classes } }
 }
 
 /** Texto do relatório de REQ-11 (boot e `validate:content`). */
 export function formatContentReport(problems: TContentProblem[]): string {
-  const lines = problems.map(({ file, cardId, field, message }) => {
-    const where = [
-      file,
-      ...(cardId === null ? [] : [`carta ${cardId}`]),
-      ...(field === null ? [] : [`campo ${field}`]),
-    ].join(' | ')
-    return `- ${where}: ${message}`
-  })
+  const lines = problems.map(
+    ({ file, cardId, playerClass, field, message }) => {
+      const where = [
+        file,
+        ...(cardId === null ? [] : [`carta ${cardId}`]),
+        ...(playerClass === undefined ? [] : [`classe ${playerClass}`]),
+        ...(field === null ? [] : [`campo ${field}`]),
+      ].join(' | ')
+      return `- ${where}: ${message}`
+    }
+  )
   const count = `${problems.length} ${problems.length === 1 ? 'problema' : 'problemas'}`
   return [`Conteúdo inválido (${count}):`, ...lines].join('\n')
 }
@@ -163,12 +196,13 @@ async function readCollection(
   for (const entry of await sortedEntries(dir)) {
     const known =
       entry.name === COLLECTION_FILE ||
+      entry.name === CLASS_FILE ||
       CARD_TYPES.some((type) => entry.name === `${type}.json`)
     if (!entry.isFile() || !known) {
       problems.push(
         problem(
           join(dir, entry.name),
-          `Arquivo desconhecido (esperados ${COLLECTION_FILE} e ${CARD_TYPES.join(', ')} .json).`
+          `Arquivo desconhecido (esperados ${COLLECTION_FILE}, ${CLASS_FILE} e ${CARD_TYPES.join(', ')} .json).`
         )
       )
     }
@@ -232,6 +266,51 @@ async function readCards(
     )
   })
   return cards
+}
+
+async function readClasses(
+  file: string,
+  collectionId: string,
+  problems: TContentProblem[]
+): Promise<TEditorClass[]> {
+  const json = await readJson(file, problems)
+  if (json === undefined) return []
+  if (!Array.isArray(json)) {
+    problems.push(problem(file, 'O arquivo deve ser uma lista de classes.'))
+    return []
+  }
+
+  const classes: TEditorClass[] = []
+  json.forEach((raw: unknown, index) => {
+    const parsed = classFileSchema.safeParse(raw, { error: zodLocale })
+    if (parsed.success) {
+      // `status` ausente = `published` (D-47); `collectionId` vem do caminho.
+      const { status = 'published', ...fields } = parsed.data
+      classes.push({ status, classDefinition: { ...fields, collectionId } })
+      return
+    }
+    const playerClass =
+      typeof raw === 'object' &&
+      raw !== null &&
+      'playerClass' in raw &&
+      typeof raw.playerClass === 'string'
+        ? raw.playerClass
+        : undefined
+    const issues: TContentProblem[] = []
+    pushZodIssues(
+      parsed.error,
+      file,
+      null,
+      playerClass === undefined ? `[${index}]` : '',
+      issues
+    )
+    for (const issue of issues) {
+      problems.push(
+        playerClass === undefined ? issue : { ...issue, playerClass }
+      )
+    }
+  })
+  return classes
 }
 
 function pushZodIssues(

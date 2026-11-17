@@ -39,9 +39,15 @@ describe('GET /catalog/collections/:collectionId/cards (e2e)', () => {
       ])
     ).toEqual([
       ['fixture.blade-of-dusk', 'equipment'],
+      ['fixture.dexterity-basic', 'attribute'],
+      ['fixture.endurance-basic', 'attribute'],
+      ['fixture.gray-harbor', 'zone'],
       ['fixture.healing-potion', 'item'],
       ['fixture.howling-wolves', 'combatEvent'],
+      ['fixture.old-mine', 'zone'],
+      ['fixture.stone-bend', 'zone'],
       ['fixture.strength-basic', 'attribute'],
+      ['fixture.test-dimension', 'dimension'],
       ['fixture.whispering-grove', 'zone'],
       ['fixture.wounded-traveler', 'randomEvent'],
     ])
@@ -53,7 +59,23 @@ describe('GET /catalog/collections/:collectionId/cards (e2e)', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(response.body).toEqual([STRENGTH_BASIC])
+    expect(response.body.map((card: { id: string }) => card.id)).toEqual([
+      'fixture.dexterity-basic',
+      'fixture.endurance-basic',
+      'fixture.strength-basic',
+    ])
+    expect(response.body[2]).toEqual(STRENGTH_BASIC)
+  })
+
+  it('REQ-28: com ?type=dimension, responde 200 com a Carta de Dimensão', async () => {
+    const response = await request(app.getHttpServer()).get(
+      '/catalog/collections/fixture/cards?type=dimension'
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.body.map((card: { id: string }) => card.id)).toEqual([
+      'fixture.test-dimension',
+    ])
   })
 
   it('REQ-13: tipo de filtro desconhecido responde 400 CATALOG_QUERY_INVALID', async () => {

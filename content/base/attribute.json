@@ -1,11 +1,83 @@
 [
   {
+    "id": "base.charisma-basic",
+    "name": "Carisma",
+    "flavorText": null,
+    "rarity": "common",
+    "attributeKind": "basic",
+    "attributes": ["charisma"],
+    "effects": []
+  },
+  {
     "id": "base.dexterity-basic",
     "name": "Destreza",
     "flavorText": null,
     "rarity": "common",
     "attributeKind": "basic",
     "attributes": ["dexterity"],
+    "effects": []
+  },
+  {
+    "id": "base.endurance-basic",
+    "name": "Resistência",
+    "flavorText": null,
+    "rarity": "common",
+    "attributeKind": "basic",
+    "attributes": ["endurance"],
+    "effects": []
+  },
+  {
+    "id": "base.intelligence-basic",
+    "name": "Inteligência",
+    "flavorText": null,
+    "rarity": "common",
+    "attributeKind": "basic",
+    "attributes": ["intelligence"],
+    "effects": []
+  },
+  {
+    "id": "base.luck-basic",
+    "name": "Sorte",
+    "flavorText": null,
+    "rarity": "common",
+    "attributeKind": "basic",
+    "attributes": ["luck"],
+    "effects": []
+  },
+  {
+    "id": "base.sanity-basic",
+    "name": "Sanidade",
+    "flavorText": null,
+    "rarity": "common",
+    "attributeKind": "basic",
+    "attributes": ["sanity"],
+    "effects": []
+  },
+  {
+    "id": "base.spirit-basic",
+    "name": "Espírito",
+    "flavorText": null,
+    "rarity": "common",
+    "attributeKind": "basic",
+    "attributes": ["spirit"],
+    "effects": []
+  },
+  {
+    "id": "base.strength-basic",
+    "name": "Força",
+    "flavorText": null,
+    "rarity": "common",
+    "attributeKind": "basic",
+    "attributes": ["strength"],
+    "effects": []
+  },
+  {
+    "id": "base.wisdom-basic",
+    "name": "Sabedoria",
+    "flavorText": null,
+    "rarity": "common",
+    "attributeKind": "basic",
+    "attributes": ["wisdom"],
     "effects": []
   }
 ]

@@ -45,6 +45,12 @@ GET {{baseUrl}}/catalog/cards/base.dexterity-basic
 ### FEAT-04 — carta inexistente (404 CARD_NOT_FOUND)
 GET {{baseUrl}}/catalog/cards/base.nope
 
+### FEAT-06 — classes publicadas (200 ClassDefinition[], ordem por playerClass)
+GET {{baseUrl}}/catalog/classes
+
+### FEAT-06 — Carta de Dimensão de uma coleção (200 Card[])
+GET {{baseUrl}}/catalog/collections/base/cards?type=dimension
+
 ### FEAT-05 — criar grupo de 1 (201 Party)
 # @name createParty
 POST {{baseUrl}}/parties

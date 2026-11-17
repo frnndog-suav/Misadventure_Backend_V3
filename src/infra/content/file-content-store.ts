@@ -13,6 +13,7 @@ import type {
   TContentCollection,
   TContentStatus,
   TEditorCard,
+  TEditorClass,
 } from '@/domain/catalog/enterprise/value-objects/content'
 
 import { formatContentJson } from './format-content-json'
@@ -36,6 +37,7 @@ export const nodeContentFs: TContentFs = {
 type TState = {
   readonly collections: readonly TContentCollection[]
   readonly cards: readonly TEditorCard[]
+  readonly classes: readonly TEditorClass[]
 }
 
 const COLLECTION_FILE = 'collection.json'
@@ -57,7 +59,11 @@ export class FileContentStore extends ContentStore implements CardCatalog {
     private readonly fs: TContentFs = nodeContentFs
   ) {
     super()
-    this.state = { collections: content.collections, cards: content.cards }
+    this.state = {
+      collections: content.collections,
+      cards: content.cards,
+      classes: content.classes,
+    }
   }
 
   // Leitura (editor e catálogo)
@@ -91,13 +97,17 @@ export class FileContentStore extends ContentStore implements CardCatalog {
     return entry?.status === 'published' ? entry.card : null
   }
 
-  // Ponte da T-14: as classes passam a ser lidas de `class.json` na T-15.
   async listClasses(): Promise<TClassDefinition[]> {
-    return []
+    return this.state.classes
+      .filter((e) => e.status === 'published')
+      .map((e) => e.classDefinition)
   }
 
-  async findClass(): Promise<TClassDefinition | null> {
-    return null
+  async findClass(playerClass: string): Promise<TClassDefinition | null> {
+    const entry = this.state.classes.find(
+      (e) => e.classDefinition.playerClass === playerClass
+    )
+    return entry?.status === 'published' ? entry.classDefinition : null
   }
 
   // Gravação
@@ -128,6 +138,7 @@ export class FileContentStore extends ContentStore implements CardCatalog {
       return {
         collections: state.collections.filter((c) => c.id !== id),
         cards: state.cards.filter((e) => e.card.collectionId !== id),
+        classes: withoutClassesOf(state.classes, id),
       }
     })
   }
@@ -189,6 +200,8 @@ export class FileContentStore extends ContentStore implements CardCatalog {
           ...state.cards.filter((e) => e.card.collectionId !== collection.id),
           ...cards,
         ],
+        // A pasta nova não tem `class.json` (classes no import: T-18).
+        classes: withoutClassesOf(state.classes, collection.id),
       }
     })
   }
@@ -280,6 +293,13 @@ export class FileContentStore extends ContentStore implements CardCatalog {
       throw error
     }
   }
+}
+
+function withoutClassesOf(
+  classes: readonly TEditorClass[],
+  collectionId: string
+): TEditorClass[] {
+  return classes.filter((e) => e.classDefinition.collectionId !== collectionId)
 }
 
 function cardsOf(

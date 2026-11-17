@@ -1,5 +1,23 @@
 [
   {
+    "id": "fixture.dexterity-basic",
+    "name": "Destreza",
+    "flavorText": null,
+    "rarity": "common",
+    "attributeKind": "basic",
+    "attributes": ["dexterity"],
+    "effects": []
+  },
+  {
+    "id": "fixture.endurance-basic",
+    "name": "Resistência",
+    "flavorText": null,
+    "rarity": "common",
+    "attributeKind": "basic",
+    "attributes": ["endurance"],
+    "effects": []
+  },
+  {
     "id": "fixture.strength-basic",
     "name": "Força",
     "flavorText": null,

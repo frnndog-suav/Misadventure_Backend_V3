@@ -1,5 +1,35 @@
 [
   {
+    "id": "fixture.gray-harbor",
+    "title": "Porto Cinzento",
+    "zoneType": "urban",
+    "location": "Costa Cinzenta",
+    "connectionArrows": 4,
+    "arrowLayout": null,
+    "zoneActions": ["startEvent", "useVault", "saveRespawnPoint"],
+    "effects": []
+  },
+  {
+    "id": "fixture.old-mine",
+    "title": "Mina Velha",
+    "zoneType": "forest",
+    "location": "Terras Selvagens",
+    "connectionArrows": 1,
+    "arrowLayout": null,
+    "zoneActions": ["startEvent"],
+    "effects": []
+  },
+  {
+    "id": "fixture.stone-bend",
+    "title": "Curva de Pedra",
+    "zoneType": "forest",
+    "location": "Terras Selvagens",
+    "connectionArrows": 2,
+    "arrowLayout": "corner",
+    "zoneActions": ["startEvent"],
+    "effects": []
+  },
+  {
     "id": "fixture.whispering-grove",
     "title": "Bosque Sussurrante",
     "zoneType": "forest",

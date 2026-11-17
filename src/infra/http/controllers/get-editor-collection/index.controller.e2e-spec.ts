@@ -23,18 +23,18 @@ describe('GET /lab/content/collections/:collectionId (e2e)', () => {
       id: 'fixture',
       name: 'Coleção de Teste',
       description: '',
-      publishedCount: 6,
+      publishedCount: 12,
       draftCount: 0,
       cardCounts: {
-        zone: 1,
-        attribute: 1,
+        zone: 4,
+        attribute: 3,
         equipment: 1,
         item: 1,
         randomEvent: 1,
         combatEvent: 1,
-        dimension: 0,
+        dimension: 1,
       },
-      rarityCounts: { common: 2, uncommon: 0, rare: 1, epic: 0, legendary: 0 },
+      rarityCounts: { common: 4, uncommon: 0, rare: 1, epic: 0, legendary: 0 },
       tags: ['duas mãos', 'espada', 'poção'],
     })
   })

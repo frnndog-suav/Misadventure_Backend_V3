@@ -33,6 +33,39 @@ describe('GET /catalog/cards/:cardId (e2e)', () => {
     })
   })
 
+  it('REQ-28: Carta de Dimensão responde 200 no formato do contrato', async () => {
+    const response = await request(app.getHttpServer()).get(
+      '/catalog/cards/fixture.test-dimension'
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.body).toEqual({
+      type: 'dimension',
+      id: 'fixture.test-dimension',
+      collectionId: 'fixture',
+      name: 'Dimensão de Teste',
+      flavorText: null,
+      releaseOrder: 1,
+      arrivalZoneTitle: 'Porto Cinzento',
+      effects: [],
+    })
+  })
+
+  it('D-37: zona de 2 setas traz arrowLayout; zona urbana traz null', async () => {
+    const server = app.getHttpServer()
+    const bend = await request(server).get('/catalog/cards/fixture.stone-bend')
+    const harbor = await request(server).get(
+      '/catalog/cards/fixture.gray-harbor'
+    )
+
+    expect(bend.status).toBe(200)
+    expect(bend.body).toMatchObject({
+      connectionArrows: 2,
+      arrowLayout: 'corner',
+    })
+    expect(harbor.body).toMatchObject({ arrowLayout: null })
+  })
+
   it('REQ-14: carta inexistente responde 404 CARD_NOT_FOUND', async () => {
     const response = await request(app.getHttpServer()).get(
       '/catalog/cards/fixture.nope'

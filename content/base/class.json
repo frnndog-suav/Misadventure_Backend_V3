@@ -1,0 +1,626 @@
+[
+  {
+    "playerClass": "alchemist",
+    "name": "Alquimista",
+    "essentialAttributes": ["intelligence"],
+    "baseModifiers": {
+      "attack": 4,
+      "defense": 3,
+      "accuracy": 50,
+      "evasion": 20,
+      "celerity": 10,
+      "piercing": 1,
+      "reflection": 0
+    },
+    "starterDeck": [
+      {
+        "cardId": "base.charisma-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.dexterity-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.endurance-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.intelligence-basic",
+        "copies": 18
+      },
+      {
+        "cardId": "base.luck-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.sanity-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.spirit-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.strength-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.wisdom-basic",
+        "copies": 5
+      }
+    ]
+  },
+  {
+    "playerClass": "artificer",
+    "name": "Artífice",
+    "essentialAttributes": ["intelligence", "dexterity"],
+    "baseModifiers": {
+      "attack": 5,
+      "defense": 4,
+      "accuracy": 44,
+      "evasion": 18,
+      "celerity": 9,
+      "piercing": 1,
+      "reflection": 0
+    },
+    "starterDeck": [
+      {
+        "cardId": "base.charisma-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.dexterity-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.endurance-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.intelligence-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.luck-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.sanity-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.spirit-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.strength-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.wisdom-basic",
+        "copies": 6
+      }
+    ]
+  },
+  {
+    "playerClass": "bard",
+    "name": "Bardo",
+    "essentialAttributes": ["charisma"],
+    "baseModifiers": {
+      "attack": 4,
+      "defense": 3,
+      "accuracy": 50,
+      "evasion": 22,
+      "celerity": 11,
+      "piercing": 0,
+      "reflection": 0
+    },
+    "starterDeck": [
+      {
+        "cardId": "base.charisma-basic",
+        "copies": 18
+      },
+      {
+        "cardId": "base.dexterity-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.endurance-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.intelligence-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.luck-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.sanity-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.spirit-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.strength-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.wisdom-basic",
+        "copies": 5
+      }
+    ]
+  },
+  {
+    "playerClass": "cleric",
+    "name": "Clérigo",
+    "essentialAttributes": ["wisdom", "spirit"],
+    "baseModifiers": {
+      "attack": 4,
+      "defense": 4,
+      "accuracy": 50,
+      "evasion": 18,
+      "celerity": 9,
+      "piercing": 0,
+      "reflection": 1
+    },
+    "starterDeck": [
+      {
+        "cardId": "base.charisma-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.dexterity-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.endurance-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.intelligence-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.luck-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.sanity-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.spirit-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.strength-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.wisdom-basic",
+        "copies": 10
+      }
+    ]
+  },
+  {
+    "playerClass": "druid",
+    "name": "Druida",
+    "essentialAttributes": ["wisdom", "endurance"],
+    "baseModifiers": {
+      "attack": 5,
+      "defense": 4,
+      "accuracy": 42,
+      "evasion": 20,
+      "celerity": 10,
+      "piercing": 0,
+      "reflection": 0
+    },
+    "starterDeck": [
+      {
+        "cardId": "base.charisma-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.dexterity-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.endurance-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.intelligence-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.luck-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.sanity-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.spirit-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.strength-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.wisdom-basic",
+        "copies": 10
+      }
+    ]
+  },
+  {
+    "playerClass": "mage",
+    "name": "Mago",
+    "essentialAttributes": ["intelligence", "spirit"],
+    "baseModifiers": {
+      "attack": 4,
+      "defense": 2,
+      "accuracy": 55,
+      "evasion": 20,
+      "celerity": 10,
+      "piercing": 2,
+      "reflection": 0
+    },
+    "starterDeck": [
+      {
+        "cardId": "base.charisma-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.dexterity-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.endurance-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.intelligence-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.luck-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.sanity-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.spirit-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.strength-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.wisdom-basic",
+        "copies": 6
+      }
+    ]
+  },
+  {
+    "playerClass": "monk",
+    "name": "Monge",
+    "essentialAttributes": ["dexterity", "spirit"],
+    "baseModifiers": {
+      "attack": 4,
+      "defense": 2,
+      "accuracy": 46,
+      "evasion": 26,
+      "celerity": 12,
+      "piercing": 0,
+      "reflection": 0
+    },
+    "starterDeck": [
+      {
+        "cardId": "base.charisma-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.dexterity-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.endurance-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.intelligence-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.luck-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.sanity-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.spirit-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.strength-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.wisdom-basic",
+        "copies": 6
+      }
+    ]
+  },
+  {
+    "playerClass": "ranger",
+    "name": "Patrulheiro",
+    "essentialAttributes": ["dexterity", "wisdom"],
+    "baseModifiers": {
+      "attack": 5,
+      "defense": 2,
+      "accuracy": 60,
+      "evasion": 18,
+      "celerity": 10,
+      "piercing": 0,
+      "reflection": 0
+    },
+    "starterDeck": [
+      {
+        "cardId": "base.charisma-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.dexterity-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.endurance-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.intelligence-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.luck-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.sanity-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.spirit-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.strength-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.wisdom-basic",
+        "copies": 10
+      }
+    ]
+  },
+  {
+    "playerClass": "rogue",
+    "name": "Ladino",
+    "essentialAttributes": ["dexterity"],
+    "baseModifiers": {
+      "attack": 5,
+      "defense": 2,
+      "accuracy": 46,
+      "evasion": 22,
+      "celerity": 12,
+      "piercing": 0,
+      "reflection": 0
+    },
+    "starterDeck": [
+      {
+        "cardId": "base.charisma-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.dexterity-basic",
+        "copies": 18
+      },
+      {
+        "cardId": "base.endurance-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.intelligence-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.luck-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.sanity-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.spirit-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.strength-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.wisdom-basic",
+        "copies": 5
+      }
+    ]
+  },
+  {
+    "playerClass": "sorcerer",
+    "name": "Feiticeiro",
+    "essentialAttributes": ["spirit", "charisma"],
+    "baseModifiers": {
+      "attack": 6,
+      "defense": 2,
+      "accuracy": 48,
+      "evasion": 18,
+      "celerity": 10,
+      "piercing": 1,
+      "reflection": 0
+    },
+    "starterDeck": [
+      {
+        "cardId": "base.charisma-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.dexterity-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.endurance-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.intelligence-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.luck-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.sanity-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.spirit-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.strength-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.wisdom-basic",
+        "copies": 6
+      }
+    ]
+  },
+  {
+    "playerClass": "warlock",
+    "name": "Bruxo",
+    "essentialAttributes": ["spirit", "sanity"],
+    "baseModifiers": {
+      "attack": 5,
+      "defense": 2,
+      "accuracy": 50,
+      "evasion": 15,
+      "celerity": 10,
+      "piercing": 1,
+      "reflection": 2
+    },
+    "starterDeck": [
+      {
+        "cardId": "base.charisma-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.dexterity-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.endurance-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.intelligence-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.luck-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.sanity-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.spirit-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.strength-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.wisdom-basic",
+        "copies": 6
+      }
+    ]
+  },
+  {
+    "playerClass": "warrior",
+    "name": "Guerreiro",
+    "essentialAttributes": ["strength", "endurance"],
+    "baseModifiers": {
+      "attack": 6,
+      "defense": 5,
+      "accuracy": 45,
+      "evasion": 15,
+      "celerity": 8,
+      "piercing": 0,
+      "reflection": 0
+    },
+    "starterDeck": [
+      {
+        "cardId": "base.charisma-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.dexterity-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.endurance-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.intelligence-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.luck-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.sanity-basic",
+        "copies": 5
+      },
+      {
+        "cardId": "base.spirit-basic",
+        "copies": 6
+      },
+      {
+        "cardId": "base.strength-basic",
+        "copies": 10
+      },
+      {
+        "cardId": "base.wisdom-basic",
+        "copies": 6
+      }
+    ]
+  }
+]

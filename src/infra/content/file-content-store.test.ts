@@ -1,4 +1,12 @@
-import { cp, mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises'
+import {
+  cp,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -66,6 +74,50 @@ describe('FileContentStore', () => {
     ])
   })
 
+  it('REQ-27/D-40: o catálogo vê só as classes publicadas do class.json', async () => {
+    await writeFile(
+      join(root, 'fixture/class.json'),
+      JSON.stringify([
+        ...((await readJson('fixture/class.json')) as object[]),
+        {
+          playerClass: 'mage',
+          name: 'Mago',
+          essentialAttributes: ['strength'],
+          baseModifiers: {
+            attack: 1,
+            defense: 1,
+            accuracy: 1,
+            evasion: 1,
+            celerity: 1,
+            piercing: 0,
+            reflection: 0,
+          },
+          starterDeck: [{ cardId: 'fixture.strength-basic', copies: 60 }],
+          status: 'draft',
+        },
+      ])
+    )
+    const store = await open()
+
+    expect(
+      (await store.listClasses()).map((c) => [c.playerClass, c.collectionId])
+    ).toEqual([
+      ['rogue', 'fixture'],
+      ['warrior', 'fixture'],
+    ])
+    expect((await store.findClass('warrior'))?.name).toBe('Guerreiro')
+    expect(await store.findClass('mage')).toBeNull()
+    expect(await store.findClass('cleric')).toBeNull()
+    expect(await store.findClass('nada')).toBeNull()
+  })
+
+  it('REQ-49: excluir a coleção tira as classes dela', async () => {
+    const store = await open()
+    await store.deleteCollection('fixture')
+
+    expect(await store.listClasses()).toEqual([])
+  })
+
   it('REQ-49: rascunho gravado no <tipo>.json com status, por id, e relido igual', async () => {
     const store = await open()
     await store.saveCard(draft, 'draft')
@@ -80,6 +132,24 @@ describe('FileContentStore', () => {
         attributes: ['dexterity'],
         effects: [],
         status: 'draft',
+      },
+      {
+        id: 'fixture.dexterity-basic',
+        name: 'Destreza',
+        flavorText: null,
+        rarity: 'common',
+        attributeKind: 'basic',
+        attributes: ['dexterity'],
+        effects: [],
+      },
+      {
+        id: 'fixture.endurance-basic',
+        name: 'Resistência',
+        flavorText: null,
+        rarity: 'common',
+        attributeKind: 'basic',
+        attributes: ['endurance'],
+        effects: [],
       },
       {
         id: 'fixture.strength-basic',
@@ -131,29 +201,34 @@ describe('FileContentStore', () => {
     const ids = (
       (await readJson('fixture/attribute.json')) as { id: string }[]
     ).map((card) => card.id)
-    expect(ids).toEqual(['fixture.agility-pure', 'fixture.strength-basic'])
+    expect(ids).toEqual([
+      'fixture.agility-pure',
+      'fixture.dexterity-basic',
+      'fixture.endurance-basic',
+      'fixture.strength-basic',
+    ])
     expect(await store.findEditorCard(draft.id)).toBeNull()
   })
 
   it('REQ-49: renomear para outro tipo apaga o arquivo de tipo que fica vazio', async () => {
     const store = await open()
-    const item = makeItemCard({ id: 'fixture.strength-basic' })
-    await store.saveCard(item, 'draft', 'fixture.strength-basic')
+    const item = makeItemCard({ id: 'fixture.blade-of-dusk' })
+    await store.saveCard(item, 'draft', 'fixture.blade-of-dusk')
 
-    expect(await exists('fixture/attribute.json')).toBe(false)
+    expect(await exists('fixture/equipment.json')).toBe(false)
     const items = (await readJson('fixture/item.json')) as { id: string }[]
     expect(items.map((card) => card.id)).toEqual([
+      'fixture.blade-of-dusk',
       'fixture.healing-potion',
-      'fixture.strength-basic',
     ])
   })
 
   it('REQ-49: excluir a última carta de um tipo apaga o arquivo', async () => {
     const store = await open()
-    await store.deleteCard('fixture.strength-basic')
+    await store.deleteCard('fixture.blade-of-dusk')
 
-    expect(await exists('fixture/attribute.json')).toBe(false)
-    expect(await store.findEditorCard('fixture.strength-basic')).toBeNull()
+    expect(await exists('fixture/equipment.json')).toBe(false)
+    expect(await store.findEditorCard('fixture.blade-of-dusk')).toBeNull()
   })
 
   it('REQ-49: excluir a coleção apaga a pasta', async () => {
@@ -178,6 +253,9 @@ describe('FileContentStore', () => {
 
     expect(await store.listEditorCards('fixture')).toEqual(cards)
     expect(await exists('fixture/zone.json')).toBe(false)
+    // D-57: o arquivo de import ainda não traz classes (T-18).
+    expect(await exists('fixture/class.json')).toBe(false)
+    expect(await store.listClasses()).toEqual([])
     expect(await readJson('fixture/collection.json')).toEqual({
       name: 'Nova',
       description: 'Trocada.',
@@ -226,7 +304,11 @@ describe('FileContentStore', () => {
     const ids = (
       (await readJson('fixture/attribute.json')) as { id: string }[]
     ).map((card) => card.id)
-    expect(ids).toEqual(['fixture.strength-basic'])
+    expect(ids).toEqual([
+      'fixture.dexterity-basic',
+      'fixture.endurance-basic',
+      'fixture.strength-basic',
+    ])
   })
 
   it('REQ-49: falha ao trocar a pasta no import com replace restaura a antiga', async () => {

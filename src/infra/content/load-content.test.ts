@@ -3,9 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import type { TCard } from '@/domain/catalog/enterprise/value-objects/card'
+import type {
+  TCard,
+  TClassDefinition,
+} from '@/domain/catalog/enterprise/value-objects/card'
 import {
   makeAttributeCard,
+  makeClassDefinition,
   makeCombatEventCard,
   makeEquipmentCard,
   makeItemCard,
@@ -78,6 +82,7 @@ describe('loadContent', () => {
           makeRandomEventCard(),
           makeCombatEventCard(),
         ].map((card) => ({ status: 'published', card })),
+        classes: [],
       },
     })
   })
@@ -110,6 +115,7 @@ describe('loadContent', () => {
           { status: 'draft', card: makeAttributeCard() },
           { status: 'published', card: makeItemCard() },
         ],
+        classes: [],
       },
     })
   })
@@ -166,7 +172,7 @@ describe('loadContent', () => {
     }
   })
 
-  it('REQ-10: a fixture de teste carrega com as 6 cartas do contrato', async () => {
+  it('REQ-10: a fixture de teste carrega com as 12 cartas e as 2 classes do contrato', async () => {
     const result = await loadContent('test/fixtures/content')
 
     expect(result.ok).toBe(true)
@@ -181,11 +187,26 @@ describe('loadContent', () => {
       result.content.cards.map(({ card: { id, type } }) => [id, type]).sort()
     ).toEqual([
       ['fixture.blade-of-dusk', 'equipment'],
+      ['fixture.dexterity-basic', 'attribute'],
+      ['fixture.endurance-basic', 'attribute'],
+      ['fixture.gray-harbor', 'zone'],
       ['fixture.healing-potion', 'item'],
       ['fixture.howling-wolves', 'combatEvent'],
+      ['fixture.old-mine', 'zone'],
+      ['fixture.stone-bend', 'zone'],
       ['fixture.strength-basic', 'attribute'],
+      ['fixture.test-dimension', 'dimension'],
       ['fixture.whispering-grove', 'zone'],
       ['fixture.wounded-traveler', 'randomEvent'],
+    ])
+    expect(
+      result.content.classes.map((e) => [
+        e.status,
+        e.classDefinition.playerClass,
+      ])
+    ).toEqual([
+      ['published', 'rogue'],
+      ['published', 'warrior'],
     ])
     expect(
       result.content.cards.find(
@@ -367,7 +388,7 @@ describe('loadContent', () => {
           cardId: null,
           field: null,
           message:
-            'Arquivo desconhecido (esperados collection.json e zone, attribute, equipment, item, randomEvent, combatEvent, dimension .json).',
+            'Arquivo desconhecido (esperados collection.json, class.json e zone, attribute, equipment, item, randomEvent, combatEvent, dimension .json).',
         },
         {
           file: rel('fixture/collection.json'),
@@ -393,6 +414,128 @@ describe('loadContent', () => {
   })
 })
 
+/** Classe no formato do arquivo: sem `collectionId` (D-40). */
+function fileClass(
+  override: Partial<TClassDefinition> = {}
+): Record<string, unknown> {
+  const rest: Record<string, unknown> = { ...makeClassDefinition(override) }
+  delete rest.collectionId
+  return rest
+}
+
+async function writeClassCollection(classes: unknown): Promise<void> {
+  await writeValidCollection()
+  await write('fixture/attribute.json', [
+    fileCard(makeAttributeCard()),
+    fileCard(
+      makeAttributeCard({
+        id: 'fixture.dexterity-basic',
+        name: 'Destreza',
+        attributes: ['dexterity'],
+      })
+    ),
+  ])
+  await write('fixture/class.json', classes)
+}
+
+describe('loadContent — classes (class.json)', () => {
+  it('REQ-10/D-40: lê as classes com collectionId do caminho e status (ausente = published)', async () => {
+    await writeClassCollection([
+      fileClass(),
+      {
+        ...fileClass({
+          playerClass: 'rogue',
+          name: 'Ladino',
+          essentialAttributes: ['dexterity'],
+          starterDeck: [{ cardId: 'fixture.dexterity-basic', copies: 60 }],
+        }),
+        status: 'draft',
+      },
+    ])
+
+    const result = await loadContent(root)
+
+    expect(result.ok && result.content.classes).toEqual([
+      { status: 'published', classDefinition: makeClassDefinition() },
+      {
+        status: 'draft',
+        classDefinition: makeClassDefinition({
+          playerClass: 'rogue',
+          name: 'Ladino',
+          essentialAttributes: ['dexterity'],
+          starterDeck: [{ cardId: 'fixture.dexterity-basic', copies: 60 }],
+        }),
+      },
+    ])
+  })
+
+  it('REQ-11: class.json fora do schema aponta o arquivo, a classe e o campo', async () => {
+    await writeClassCollection([
+      { ...fileClass(), collectionId: 'fixture' },
+      { name: 'Sem identificador' },
+    ])
+
+    const result = await loadContent(root)
+
+    expect(!result.ok && result.problems).toEqual([
+      {
+        file: rel('fixture/class.json'),
+        cardId: null,
+        playerClass: 'warrior',
+        field: null,
+        message: expect.stringContaining('collectionId'),
+      },
+      ...[
+        'playerClass',
+        'essentialAttributes',
+        'baseModifiers',
+        'starterDeck',
+      ].map((field) => ({
+        file: rel('fixture/class.json'),
+        cardId: null,
+        field: `[1].${field}`,
+        message: expect.any(String),
+      })),
+    ])
+  })
+
+  it('REQ-11/REQ-26: problema de integridade de classe aponta class.json e a classe', async () => {
+    await writeClassCollection([
+      fileClass({
+        starterDeck: [{ cardId: 'fixture.strength-basic', copies: 59 }],
+      }),
+    ])
+
+    const result = await loadContent(root)
+
+    expect(!result.ok && result.problems).toEqual([
+      {
+        file: rel('fixture/class.json'),
+        cardId: null,
+        playerClass: 'warrior',
+        field: 'starterDeck',
+        message:
+          'O deck pré-pronto precisa ter o tamanho mínimo do deck (padrão).',
+      },
+    ])
+  })
+
+  it('REQ-11: class.json que não é lista', async () => {
+    await writeClassCollection(fileClass())
+
+    const result = await loadContent(root)
+
+    expect(!result.ok && result.problems).toEqual([
+      {
+        file: rel('fixture/class.json'),
+        cardId: null,
+        field: null,
+        message: 'O arquivo deve ser uma lista de classes.',
+      },
+    ])
+  })
+})
+
 describe('formatContentReport', () => {
   it('REQ-11: uma linha por problema com arquivo, carta, campo e motivo', () => {
     expect(
@@ -415,6 +558,25 @@ describe('formatContentReport', () => {
         'Conteúdo inválido (2 problemas):',
         '- content/base/zone.json | carta base.city | campo connectionArrows: Zona urbana precisa de exatamente 4 setas de conexão.',
         '- content/base/collection.json: Arquivo obrigatório ausente.',
+      ].join('\n')
+    )
+  })
+
+  it('REQ-11/D-56: problema de classe mostra a classe', () => {
+    expect(
+      formatContentReport([
+        {
+          file: 'content/base/class.json',
+          cardId: null,
+          playerClass: 'warrior',
+          field: 'starterDeck',
+          message: 'Valor fora da faixa permitida.',
+        },
+      ])
+    ).toBe(
+      [
+        'Conteúdo inválido (1 problema):',
+        '- content/base/class.json | classe warrior | campo starterDeck: Valor fora da faixa permitida.',
       ].join('\n')
     )
   })
