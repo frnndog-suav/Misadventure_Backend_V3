@@ -1,10 +1,14 @@
 import { Entity } from '@/core/entities/entity'
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
-import type {
-  TModifier,
-  TPlayerClass,
-  TStarterDeckEntry,
+import {
+  EQUIPMENT_SLOTS,
+  type TEquipmentSlot,
+  type TModifier,
+  type TPlayerClass,
+  type TStarterDeckEntry,
 } from '@/domain/catalog/enterprise/value-objects/card'
+
+import type { TInventorySlot } from '../../inventory'
 
 /** Na FEAT-20 entra o ajudante de IA. */
 export type TPartyMemberKind = 'human'
@@ -20,6 +24,10 @@ export type TPlayerState = Readonly<{
   build: readonly TStarterDeckEntry[]
   /** Pasta de TCG (README 6.3; D-69): só atributo, em ordem de `cardId`; começa vazia. */
   tcgFolder: readonly TStarterDeckEntry[]
+  /** Inventário (README 6.2; REQ-70, D-75): slots na ordem de chegada. */
+  inventory: readonly TInventorySlot[]
+  /** Equipamento em uso por categoria (README 5.1; REQ-70). */
+  equipment: Readonly<Record<TEquipmentSlot, string | null>>
   /** Ids em ordem; o topo é o índice 0. */
   deck: readonly string[]
   /** Na ordem em que foram compradas. */
@@ -39,6 +47,13 @@ export interface TPartyMemberProps {
   characterName: string
   kind: TPartyMemberKind
   player: TPlayerState
+}
+
+/** As 8 categorias sem nada em uso (README 9.1; REQ-70). */
+export function emptyEquipment(): Record<TEquipmentSlot, string | null> {
+  return Object.fromEntries(
+    EQUIPMENT_SLOTS.map((slot) => [slot, null])
+  ) as Record<TEquipmentSlot, string | null>
 }
 
 /** ⌊baseHealth × (100 + peak) ÷ 100⌋ (README 7.4; REQ-34). */

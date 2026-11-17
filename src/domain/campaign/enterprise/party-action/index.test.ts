@@ -258,4 +258,111 @@ describe('parsePartyAction', () => {
       ])
     })
   })
+
+  describe('prepare (REQ-72 a REQ-74)', () => {
+    it('REQ-72: equip válido → a ação', () => {
+      const result = parsePartyAction({
+        type: 'prepare',
+        operation: 'equip',
+        cardId: 'fixture.blade-of-dusk',
+      })
+
+      expect(result.isRight() && result.value).toEqual({
+        type: 'prepare',
+        operation: 'equip',
+        cardId: 'fixture.blade-of-dusk',
+      })
+    })
+
+    it('REQ-73: unequip válido em cada uma das 8 categorias → a ação', () => {
+      for (const slot of [
+        'head',
+        'torso',
+        'legs',
+        'feet',
+        'cape',
+        'weapon',
+        'shield',
+        'accessory',
+      ]) {
+        const result = parsePartyAction({
+          type: 'prepare',
+          operation: 'unequip',
+          slot,
+        })
+        expect(result.isRight() && result.value).toEqual({
+          type: 'prepare',
+          operation: 'unequip',
+          slot,
+        })
+      }
+    })
+
+    it('REQ-74: operation ausente → required; não texto → notString; fora de equip|unequip → unknownOperation (sempre sozinho)', () => {
+      expect(parsePartyAction({ type: 'prepare', cardId: 'a' }).value).toEqual([
+        { field: 'operation', reason: 'required' },
+      ])
+      expect(
+        parsePartyAction({ type: 'prepare', operation: 1, cardId: 'a' }).value
+      ).toEqual([{ field: 'operation', reason: 'notString' }])
+      expect(
+        parsePartyAction({
+          type: 'prepare',
+          operation: 'use',
+          cardId: 'a',
+          extra: 1,
+        }).value
+      ).toEqual([{ field: 'operation', reason: 'unknownOperation' }])
+    })
+
+    it('REQ-74: equip — cardId ausente → required; não texto → notString', () => {
+      expect(
+        parsePartyAction({ type: 'prepare', operation: 'equip' }).value
+      ).toEqual([{ field: 'cardId', reason: 'required' }])
+      expect(
+        parsePartyAction({ type: 'prepare', operation: 'equip', cardId: 7 })
+          .value
+      ).toEqual([{ field: 'cardId', reason: 'notString' }])
+    })
+
+    it('REQ-74: unequip — slot ausente → required; não texto → notString; fora das 8 → unknownSlot', () => {
+      expect(
+        parsePartyAction({ type: 'prepare', operation: 'unequip' }).value
+      ).toEqual([{ field: 'slot', reason: 'required' }])
+      expect(
+        parsePartyAction({ type: 'prepare', operation: 'unequip', slot: 1 })
+          .value
+      ).toEqual([{ field: 'slot', reason: 'notString' }])
+      expect(
+        parsePartyAction({
+          type: 'prepare',
+          operation: 'unequip',
+          slot: 'hands',
+        }).value
+      ).toEqual([{ field: 'slot', reason: 'unknownSlot' }])
+    })
+
+    it('REQ-74: campo a mais → unknownKey, na ordem do pedido', () => {
+      expect(
+        parsePartyAction({
+          type: 'prepare',
+          operation: 'equip',
+          cardId: 'a',
+          slot: 'head',
+          foo: 1,
+        }).value
+      ).toEqual([
+        { field: 'slot', reason: 'unknownKey' },
+        { field: 'foo', reason: 'unknownKey' },
+      ])
+      expect(
+        parsePartyAction({
+          type: 'prepare',
+          operation: 'unequip',
+          slot: 'head',
+          cardId: 'a',
+        }).value
+      ).toEqual([{ field: 'cardId', reason: 'unknownKey' }])
+    })
+  })
 })

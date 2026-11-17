@@ -1,6 +1,9 @@
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { DomainEvent } from '@/core/events/domain-event'
-import type { TPlayerClass } from '@/domain/catalog/enterprise/value-objects/card'
+import type {
+  TEquipmentSlot,
+  TPlayerClass,
+} from '@/domain/catalog/enterprise/value-objects/card'
 
 import type { TRecoverOption } from '../../party-action'
 
@@ -87,6 +90,31 @@ export interface DeckLockChangedEvent extends DomainEvent {
   readonly deckLockMet: boolean
 }
 
+/** Preparar: um equipamento saiu do slot para o inventário (REQ-72, REQ-73). */
+export interface EquipmentUnequippedEvent extends DomainEvent {
+  readonly type: 'EquipmentUnequipped'
+  readonly memberId: UniqueEntityID
+  readonly cardId: string
+  readonly slot: TEquipmentSlot
+}
+
+/** Preparar: um equipamento entrou em uso (REQ-72). */
+export interface EquipmentEquippedEvent extends DomainEvent {
+  readonly type: 'EquipmentEquipped'
+  readonly memberId: UniqueEntityID
+  readonly cardId: string
+  readonly slot: TEquipmentSlot
+}
+
+/** Doação do laboratório (REQ-77, D-78); no ouro, o que entrou e o que se perdeu (REQ-76). */
+export interface LabGrantAppliedEvent extends DomainEvent {
+  readonly type: 'LabGrantApplied'
+  readonly memberId: UniqueEntityID
+  readonly grant:
+    | { type: 'card'; cardId: string; quantity: number }
+    | { type: 'gold'; amount: number; received: number; lost: number }
+}
+
 /** Registrado antes de apagar o save, para o despacho. */
 export interface PartyAbandonedEvent extends DomainEvent {
   readonly type: 'PartyAbandoned'
@@ -106,4 +134,7 @@ export type TPartyEvent =
   | PlayerRecoveredEvent
   | DeckAdjustedEvent
   | DeckLockChangedEvent
+  | EquipmentUnequippedEvent
+  | EquipmentEquippedEvent
+  | LabGrantAppliedEvent
   | PartyAbandonedEvent

@@ -6,13 +6,16 @@ import type { TPartyActionType } from '../party-action'
 
 /**
  * Ações que o membro pode mandar agora (README 12.1, 11.4; REQ-58; D-65).
- * Ordem fixa: `move`, `recover`, `adjustDeck`, `endTurn` (12.2; REQ-67). Só a
- * vez de quem age; os demais não têm nada.
+ * Ordem fixa: `move`, `recover`, `prepare`, `adjustDeck`, `endTurn` (12.2;
+ * REQ-75). Só a vez de quem age; os demais não têm nada.
+ * `equipmentCardIds`: quais ids do inventário são cartas `equipment` (o
+ * inventário guarda só o id, D-75; quem chama lê no catálogo).
  * Só entram ações já implementadas (cada FEAT acrescenta as suas).
  */
 export function availableActions(
   party: Party,
-  memberId: UniqueEntityID
+  memberId: UniqueEntityID,
+  equipmentCardIds: ReadonlySet<string>
 ): TPartyActionType[] {
   const { turn } = party
   if (!turn.memberId.equals(memberId)) return []
@@ -26,7 +29,18 @@ export function availableActions(
   ) {
     actions.push('move')
   }
-  if (turn.actionPoints >= 1) actions.push('recover', 'adjustDeck')
+  if (turn.actionPoints >= 1) actions.push('recover')
+  // Gratuita (K2, D-77): entra com qualquer quantidade de pontos.
+  if (
+    member &&
+    (member.player.inventory.some((slot) =>
+      equipmentCardIds.has(slot.cardId)
+    ) ||
+      Object.values(member.player.equipment).some((cardId) => cardId !== null))
+  ) {
+    actions.push('prepare')
+  }
+  if (turn.actionPoints >= 1) actions.push('adjustDeck')
   actions.push('endTurn')
   return actions
 }

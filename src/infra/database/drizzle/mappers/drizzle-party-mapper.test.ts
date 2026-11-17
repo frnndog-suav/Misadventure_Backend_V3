@@ -18,7 +18,7 @@ function usedRngParty() {
 }
 
 describe('DrizzlePartyMapper', () => {
-  it('D-31/D-70: separa colunas consultáveis e o state com schemaVersion 4', () => {
+  it('D-31/D-79: separa colunas consultáveis e o state com schemaVersion 5', () => {
     const party = usedRngParty()
 
     const row = DrizzlePartyMapper.toDrizzle(party)
@@ -30,7 +30,7 @@ describe('DrizzlePartyMapper', () => {
       createdAt: party.createdAt,
       savedAt: party.savedAt,
       state: {
-        schemaVersion: 4,
+        schemaVersion: 5,
         members: [
           {
             id: 'member-1',
@@ -105,8 +105,11 @@ describe('DrizzlePartyMapper', () => {
     expect(restored.turn).toEqual(party.turn)
   })
 
-  /** Linha como as FEATs 06 a 08 gravavam: sem as chaves de REQ-60 e sem `tcgFolder`. */
-  function legacyRow(version: 2 | 3, actionPointsPerTurn = 3) {
+  /**
+   * Linha como as FEATs 06 a 09 gravavam: sem as chaves de REQ-69, `inventory`
+   * e `equipment`; até a FEAT-08 (v2, v3), também sem as de REQ-60 e `tcgFolder`.
+   */
+  function legacyRow(version: 2 | 3 | 4, actionPointsPerTurn = 3) {
     const party = usedRngParty()
     const row = JSON.parse(
       JSON.stringify(DrizzlePartyMapper.toDrizzle(party))
@@ -121,16 +124,22 @@ describe('DrizzlePartyMapper', () => {
       ...row.state.config,
       actionPointsPerTurn,
     }
-    for (const key of [
-      'maxCopiesPerCard',
-      'tcgFolderCapacity',
-      'recoverHealthPercent',
-      'recoverVigorPercent',
-      'recoverHandSize',
-    ]) {
-      delete config[key]
+    const removedKeys = ['inventoryCapacity', 'purseCapacity']
+    if (version < 4) {
+      removedKeys.push(
+        'maxCopiesPerCard',
+        'tcgFolderCapacity',
+        'recoverHealthPercent',
+        'recoverVigorPercent',
+        'recoverHandSize'
+      )
     }
-    for (const member of row.state.members) delete member.player.tcgFolder
+    for (const key of removedKeys) delete config[key]
+    for (const member of row.state.members) {
+      delete member.player.inventory
+      delete member.player.equipment
+      if (version < 4) delete member.player.tcgFolder
+    }
     if (version === 2) delete row.state.turn
     return {
       party,
@@ -153,7 +162,7 @@ describe('DrizzlePartyMapper', () => {
     expect(restored.turn.actionPoints).toBe(5)
     expect(restored.pullDomainEvents()).toEqual([])
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(4)
+    expect(rewritten.schemaVersion).toBe(5)
     expect(rewritten.turn).toEqual({
       round: 1,
       memberId: 'member-1',
@@ -182,8 +191,74 @@ describe('DrizzlePartyMapper', () => {
     })
     expect(restored.pullDomainEvents()).toEqual([])
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(4)
+    expect(rewritten.schemaVersion).toBe(5)
     expect(rewritten.members[0].player.tcgFolder).toEqual([])
+  })
+
+  it('REQ-79/D-79: save v4 é lido como v5 com inventário vazio, nada equipado e as chaves de REQ-69 nos padrões; regravado como v5', () => {
+    const { party, row } = legacyRow(4)
+
+    const restored = DrizzlePartyMapper.toDomain(row)
+
+    const { player } = restored.members[0]
+    expect(player.inventory).toEqual([])
+    expect(player.equipment).toEqual({
+      head: null,
+      torso: null,
+      legs: null,
+      feet: null,
+      cape: null,
+      weapon: null,
+      shield: null,
+      accessory: null,
+    })
+    expect(player.tcgFolder).toEqual(party.members[0].player.tcgFolder)
+    expect(restored.config).toEqual({
+      ...GAME_CONFIG_DEFAULTS,
+      initialGold: 40,
+      inventoryCapacity: 10,
+      purseCapacity: 300,
+    })
+    expect(restored.turn).toEqual(party.turn)
+    const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
+    expect(rewritten.schemaVersion).toBe(5)
+    expect(rewritten.members[0].player.inventory).toEqual([])
+  })
+
+  it('REQ-79: ida e volta preserva inventário (com a ordem), equipamentos e ouro', () => {
+    const base = makeParty({ status: 'inSession' })
+    const member = base.members[0]
+    const player = {
+      ...member.player,
+      gold: 250,
+      inventory: [
+        { cardId: 'fixture.healing-potion', quantity: 5 },
+        { cardId: 'fixture.pickaxe', quantity: 1 },
+      ],
+      equipment: { ...member.player.equipment, weapon: 'fixture.short-sword' },
+    }
+    const party = makeParty({
+      status: 'inSession',
+      members: [
+        PartyMember.create(
+          { characterName: member.characterName, kind: member.kind, player },
+          member.id
+        ),
+      ],
+      config: { ...GAME_CONFIG_DEFAULTS, inventoryCapacity: 12 },
+    })
+    const row = JSON.parse(
+      JSON.stringify(DrizzlePartyMapper.toDrizzle(party))
+    ) as TPartyRow
+
+    const restored = DrizzlePartyMapper.toDomain({
+      ...row,
+      createdAt: party.createdAt,
+      savedAt: party.savedAt,
+    })
+
+    expect(restored.members[0].player).toEqual(player)
+    expect(restored.config.inventoryCapacity).toBe(12)
   })
 
   it('REQ-68/D-70: save v3 com build fora de ordem é lido com a build em ordem de cardId', () => {
@@ -264,7 +339,7 @@ describe('DrizzlePartyMapper', () => {
       'host fora dos membros',
       (r: ReturnType<typeof validRow>) => (r.state.hostMemberId = 'x'),
     ],
-    ['v4 sem turn', (r: ReturnType<typeof validRow>) => delete r.state.turn],
+    ['v5 sem turn', (r: ReturnType<typeof validRow>) => delete r.state.turn],
     [
       'turn com membro fora de turnOrder',
       (r: ReturnType<typeof validRow>) =>

@@ -110,7 +110,8 @@ function playerToHTTP(party: Party, member: PartyMember): TPlayerStateHttp {
     zoneId: player.zoneId,
     respawnZoneId: player.respawnZoneId,
     moveTargets: connectedZones(map, player.zoneId),
-    availableActions: availableActions(party, member.id),
+    // T-29: os ids de equipamento do inventário vêm do catálogo (REQ-75).
+    availableActions: availableActions(party, member.id, new Set()),
     build: copiesToHTTP(player.build),
     buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),
     tcgFolder: copiesToHTTP(player.tcgFolder),

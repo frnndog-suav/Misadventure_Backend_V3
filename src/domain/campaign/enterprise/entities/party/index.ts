@@ -7,8 +7,11 @@ import { isClassActive } from '@/domain/catalog/enterprise/class-lock'
 import { checkDimensionComposition } from '@/domain/catalog/enterprise/dimension-composition'
 import type {
   TAttributeCard,
+  TCard,
   TClassDefinition,
   TDimensionCard,
+  TEquipmentCard,
+  TItemCard,
   TStarterDeckEntry,
   TZoneCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
@@ -16,8 +19,9 @@ import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/ga
 
 import { connectedZones } from '../../connected-zones'
 import type { TPartyEvent } from '../../events/party-events'
+import { addToInventory, type TInventorySlot } from '../../inventory'
 import { assembleMap, type TPartyMap } from '../../map-assembly'
-import type { TRecoverOption } from '../../party-action'
+import type { TPrepareOperation, TRecoverOption } from '../../party-action'
 import type { TPartyTurn } from '../../party-turn'
 import { shuffle } from '../../shuffle'
 import {
@@ -61,6 +65,29 @@ export type TAdjustDeckRefusal =
   | { reason: 'notOwned' | 'copyLimitExceeded'; cardId: string }
   | 'buildBelowMinimum'
   | 'tcgFolderFull'
+
+/** Por que o Preparar foi recusado (REQ-74; D-79). */
+export type TPrepareRefusal =
+  | 'sessionNotActive'
+  | {
+      reason:
+        | 'notInInventory'
+        | 'notEquipment'
+        | 'peakRequirementNotMet'
+        | 'classRestricted'
+        | 'shieldBlocked'
+        | 'inventoryFull'
+        | 'slotEmpty'
+    }
+
+/** Doação do laboratório já resolvida no catálogo (REQ-77; D-78, D-79). */
+export type TLabGrant =
+  | {
+      type: 'card'
+      card: TEquipmentCard | TItemCard | TAttributeCard
+      quantity: number
+    }
+  | { type: 'gold'; amount: number }
 
 /** Dimensão do grupo (D-42; CONTRATO `PartyDimension`). */
 export type TPartyDimension = Readonly<{
@@ -155,8 +182,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   }
 
   /**
-   * Conteúdo que este save usa (REQ-39): a Carta de Dimensão, as zonas do
-   * mapa, as cartas da build de cada jogador e as classes deles.
+   * Conteúdo que este save usa (REQ-39, REQ-78): a Carta de Dimensão, as zonas
+   * do mapa, as cartas da build, da pasta, do inventário e dos equipamentos em
+   * uso de cada jogador e as classes deles.
    */
   contentInUse(): { cardIds: string[]; playerClasses: string[] } {
     const cardIds = new Set<string>([
@@ -165,7 +193,13 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     ])
     const playerClasses = new Set<string>()
     for (const member of this.props.members) {
-      for (const entry of member.player.build) cardIds.add(entry.cardId)
+      const { build, tcgFolder, inventory, equipment } = member.player
+      for (const entry of [...build, ...tcgFolder, ...inventory]) {
+        cardIds.add(entry.cardId)
+      }
+      for (const cardId of Object.values(equipment)) {
+        if (cardId !== null) cardIds.add(cardId)
+      }
       for (const { playerClass } of member.player.playerClasses) {
         playerClasses.add(playerClass)
       }
@@ -714,6 +748,236 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return right(undefined)
   }
 
+  /**
+   * Preparar, parte a (README 12.2, 5.1; REQ-72 a REQ-74; D-77, D-79). Quem age
+   * é o membro da vez; gratuita (K2), aceita com 0 pontos. `catalog.cards`
+   * traz a carta a equipar e os equipamentos em uso. Ordem das recusas: fora
+   * de sessão; no `equip`, `notInInventory`, `notEquipment`,
+   * `peakRequirementNotMet`, `classRestricted`, `shieldBlocked`,
+   * `inventoryFull`; no `unequip`, `slotEmpty`, `inventoryFull`. Recusado,
+   * nada muda. O RNG não é usado.
+   */
+  prepare(
+    operation: TPrepareOperation,
+    catalog: { cards: readonly TCard[] },
+    at: Date
+  ): Either<TPrepareRefusal, void> {
+    switch (this.props.status) {
+      case 'idle':
+        return left('sessionNotActive')
+      case 'inSession':
+        break
+      default: {
+        const _exhaustive: never = this.props.status
+        return _exhaustive
+      }
+    }
+
+    const capacity = this.props.config.inventoryCapacity
+    const index = this.actorIndex()
+    const actor = this.props.members[index]
+    const { player } = actor
+    const base = { memberId: actor.id, occurredAt: at, aggregateId: this.id }
+    const asSlot = (cardId: string): TInventorySlot => ({ cardId, quantity: 1 })
+
+    switch (operation.operation) {
+      case 'equip': {
+        const { cardId } = operation
+        const position = player.inventory.findIndex(
+          (slot) => slot.cardId === cardId
+        )
+        if (position < 0) return left({ reason: 'notInInventory' })
+
+        const card = catalog.cards.find((c) => c.id === cardId)
+        if (!card || card.type !== 'equipment') {
+          return left({ reason: 'notEquipment' })
+        }
+        if (
+          card.peakRequirement !== null &&
+          player.peak < card.peakRequirement
+        ) {
+          return left({ reason: 'peakRequirementNotMet' })
+        }
+        // 8.2: a classe conta mesmo inativa.
+        if (
+          card.classRestriction.length > 0 &&
+          !player.playerClasses.some(({ playerClass }) =>
+            card.classRestriction.includes(playerClass)
+          )
+        ) {
+          return left({ reason: 'classRestricted' })
+        }
+        const weapon = catalog.cards.find(
+          (c) => c.id === player.equipment.weapon
+        )
+        if (
+          card.slot === 'shield' &&
+          weapon?.type === 'equipment' &&
+          weapon.blocksShield
+        ) {
+          return left({ reason: 'shieldBlocked' })
+        }
+
+        const previous = player.equipment[card.slot]
+        const shield =
+          card.slot === 'weapon' && card.blocksShield
+            ? player.equipment.shield
+            : null
+        const removed = player.inventory.flatMap((slot, i) =>
+          i !== position
+            ? [slot]
+            : slot.quantity > 1
+              ? [{ cardId: slot.cardId, quantity: slot.quantity - 1 }]
+              : []
+        )
+        const inventory = [
+          ...removed,
+          ...(previous !== null ? [asSlot(previous)] : []),
+          ...(shield !== null ? [asSlot(shield)] : []),
+        ]
+        // B J1: o escudo precisa de slot livre depois de E sair e da arma antiga entrar.
+        if (inventory.length > capacity)
+          return left({ reason: 'inventoryFull' })
+
+        this.replaceActor(index, {
+          ...player,
+          inventory,
+          equipment: {
+            ...player.equipment,
+            ...(shield !== null ? { shield: null } : {}),
+            [card.slot]: cardId,
+          },
+        })
+        this.props.savedAt = at
+        if (previous !== null) {
+          this.addDomainEvent({
+            type: 'EquipmentUnequipped',
+            cardId: previous,
+            slot: card.slot,
+            ...base,
+          })
+        }
+        if (shield !== null) {
+          this.addDomainEvent({
+            type: 'EquipmentUnequipped',
+            cardId: shield,
+            slot: 'shield',
+            ...base,
+          })
+        }
+        this.addDomainEvent({
+          type: 'EquipmentEquipped',
+          cardId,
+          slot: card.slot,
+          ...base,
+        })
+        return right(undefined)
+      }
+      case 'unequip': {
+        const { slot } = operation
+        const cardId = player.equipment[slot]
+        if (cardId === null) return left({ reason: 'slotEmpty' })
+        if (player.inventory.length >= capacity) {
+          return left({ reason: 'inventoryFull' })
+        }
+
+        this.replaceActor(index, {
+          ...player,
+          inventory: [...player.inventory, asSlot(cardId)],
+          equipment: { ...player.equipment, [slot]: null },
+        })
+        this.props.savedAt = at
+        this.addDomainEvent({
+          type: 'EquipmentUnequipped',
+          cardId,
+          slot,
+          ...base,
+        })
+        return right(undefined)
+      }
+      default: {
+        const _exhaustive: never = operation
+        return _exhaustive
+      }
+    }
+  }
+
+  /**
+   * Doação do laboratório (REQ-76, REQ-77; D-78). Não é ação do jogo: vale
+   * com o grupo `idle`, para qualquer membro, sem gastar pontos. Carta
+   * `equipment`/`item` → inventário (empilhamento de REQ-70); `attribute` →
+   * pasta. Não cabe inteira → recusa e nada muda. Ouro → bolsa; o excedente é
+   * perdido (5.3). O RNG não é usado.
+   */
+  grant(
+    memberId: UniqueEntityID,
+    grant: TLabGrant,
+    at: Date
+  ): Either<'memberNotFound' | 'inventoryFull' | 'tcgFolderFull', void> {
+    const index = this.props.members.findIndex((m) => m.id.equals(memberId))
+    if (index < 0) return left('memberNotFound')
+    const { config } = this.props
+    const { player } = this.props.members[index]
+
+    let next: TPlayerState
+    let event: TLabGrantAppliedPayload
+    switch (grant.type) {
+      case 'card': {
+        const { card, quantity } = grant
+        if (card.type === 'attribute') {
+          const folderSize = player.tcgFolder.reduce((s, e) => s + e.copies, 0)
+          if (folderSize + quantity > config.tcgFolderCapacity) {
+            return left('tcgFolderFull')
+          }
+          const existing = player.tcgFolder.find((e) => e.cardId === card.id)
+          const tcgFolder = sortedByCardId([
+            ...player.tcgFolder.filter((e) => e.cardId !== card.id),
+            { cardId: card.id, copies: (existing?.copies ?? 0) + quantity },
+          ])
+          next = { ...player, tcgFolder }
+        } else {
+          const inventory = addToInventory(
+            player.inventory,
+            card,
+            quantity,
+            config.inventoryCapacity
+          )
+          if (inventory === null) return left('inventoryFull')
+          next = { ...player, inventory }
+        }
+        event = { type: 'card', cardId: card.id, quantity }
+        break
+      }
+      case 'gold': {
+        const gold = Math.min(config.purseCapacity, player.gold + grant.amount)
+        const received = gold - player.gold
+        next = { ...player, gold }
+        event = {
+          type: 'gold',
+          amount: grant.amount,
+          received,
+          lost: grant.amount - received,
+        }
+        break
+      }
+      default: {
+        const _exhaustive: never = grant
+        return _exhaustive
+      }
+    }
+
+    this.replaceActor(index, next)
+    this.props.savedAt = at
+    this.addDomainEvent({
+      type: 'LabGrantApplied',
+      memberId,
+      grant: event,
+      occurredAt: at,
+      aggregateId: this.id,
+    })
+    return right(undefined)
+  }
+
   /** Posição do membro da vez (D-63). */
   private actorIndex(): number {
     return this.props.members.findIndex((member) =>
@@ -798,3 +1062,8 @@ function checkName(
   }
   return trimmed
 }
+
+type TLabGrantAppliedPayload = Extract<
+  TPartyEvent,
+  { type: 'LabGrantApplied' }
+>['grant']

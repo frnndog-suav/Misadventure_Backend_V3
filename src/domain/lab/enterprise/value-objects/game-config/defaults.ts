@@ -26,6 +26,8 @@ export interface TGameConfigValues {
   recoverHealthPercent: number // README 12.5
   recoverVigorPercent: number // README 7.3 item 6
   recoverHandSize: number // README 12.5
+  inventoryCapacity: number // README 6.2 (D-73)
+  purseCapacity: number // README 5.3 (D-73)
 }
 
 export type TGameConfigKey = keyof TGameConfigValues
@@ -60,6 +62,8 @@ export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
   recoverHealthPercent: 15,
   recoverVigorPercent: 5,
   recoverHandSize: 7,
+  inventoryCapacity: 10,
+  purseCapacity: 300,
 })
 
 /** Inteiros, inclusivos. Além deles, `minPlayers ≤ maxPlayers`. */
@@ -90,4 +94,6 @@ export const GAME_CONFIG_LIMITS: Readonly<
   recoverHealthPercent: { min: 0, max: 100 },
   recoverVigorPercent: { min: 0, max: 100 },
   recoverHandSize: { min: 0, max: 200 },
+  inventoryCapacity: { min: 0, max: 100 },
+  purseCapacity: { min: 0, max: 1000000 },
 })

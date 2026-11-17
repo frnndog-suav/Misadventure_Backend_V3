@@ -50,7 +50,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 030 | T-24 | Domínio da vez (FEAT-08): `PartyTurn`, `Party.endTurn`, custo do `move`, `availableActions` | concluída |
 | 031 | T-25 | Save v3 e rota da vez (FEAT-08): mapper v3 com leitura de v2, `turn` e `availableActions` no `Party`, `implementado (BE)`; FEAT-08 `validado` | concluída |
 | 032 | T-26 | Domínio do deck (FEAT-09): config REQ-60, `starterDeckCopyLimit`, pasta, `Party.recover`/`adjustDeck`; mapper v4 adiantado | concluída |
-| 033 | T-27 | Rota do deck (FEAT-09): presenter com build e pasta, e2e de REQ-60 a REQ-68, `client.http`, `implementado (BE)`; FEAT-09 `validado` | aguardando revisão |
+| 033 | T-27 | Rota do deck (FEAT-09): presenter com build e pasta, e2e de REQ-60 a REQ-68, `client.http`, `implementado (BE)`; FEAT-09 `validado` | concluída |
+| 034 | T-28 | Domínio de inventário, equipar e bolsa (FEAT-10): config REQ-69, inventário e equipamentos, `effectiveModifiers`, `Party.prepare`/`grant`, doação; mapper v5 adiantado | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

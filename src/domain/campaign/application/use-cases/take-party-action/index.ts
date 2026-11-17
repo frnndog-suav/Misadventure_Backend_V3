@@ -2,10 +2,14 @@ import { type Either, left, right } from '@/core/error/either'
 import type { Clock } from '@/core/ports/clock'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
-import { parsePartyAction } from '@/domain/campaign/enterprise/party-action'
+import {
+  parsePartyAction,
+  type TPrepareOperation,
+} from '@/domain/campaign/enterprise/party-action'
 import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import type {
   TAttributeCard,
+  TCard,
   TClassDefinition,
 } from '@/domain/catalog/enterprise/value-objects/card'
 
@@ -126,6 +130,28 @@ export class TakePartyActionUseCase {
         }
         break
       }
+      case 'prepare': {
+        const prepared = party.prepare(
+          action,
+          { cards: await this.findPrepareCatalog(party, action) },
+          this.clock.now()
+        )
+        if (prepared.isLeft()) {
+          const refusal = prepared.value
+          if (typeof refusal === 'object') {
+            return left(new ActionNotAllowedError(refusal.reason))
+          }
+          switch (refusal) {
+            case 'sessionNotActive':
+              return left(new PartySessionNotActiveError())
+            default: {
+              const _exhaustive: never = refusal
+              return _exhaustive
+            }
+          }
+        }
+        break
+      }
       case 'endTurn': {
         const ended = party.endTurn(this.clock.now())
         if (ended.isLeft()) {
@@ -150,6 +176,32 @@ export class TakePartyActionUseCase {
     await this.partiesRepository.save(party)
 
     return right({ party })
+  }
+
+  /**
+   * O que o Preparar precisa do catálogo (D-79): a carta a equipar e os
+   * equipamentos em uso pelo membro da vez. A que o catálogo não tem fica de
+   * fora (o agregado a trata como não equipamento).
+   */
+  private async findPrepareCatalog(
+    party: Party,
+    operation: TPrepareOperation
+  ): Promise<TCard[]> {
+    const actor = party.members.find((member) =>
+      member.id.equals(party.turn.memberId)
+    )
+    const cardIds = new Set(
+      Object.values(actor?.player.equipment ?? {}).filter(
+        (cardId): cardId is string => cardId !== null
+      )
+    )
+    if (operation.operation === 'equip') cardIds.add(operation.cardId)
+    const cards: TCard[] = []
+    for (const cardId of cardIds) {
+      const card = await this.cardCatalog.findCard(cardId)
+      if (card) cards.push(card)
+    }
+    return cards
   }
 
   /**

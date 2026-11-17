@@ -58,6 +58,36 @@ describe('createStartingPlayer', () => {
     expect(maxHealthOf(player)).toBe(22)
   })
 
+  it('REQ-70 (9.1): nasce com inventário vazio e as 8 categorias de equipamento null', () => {
+    const player = createStartingPlayer(input())
+
+    expect(player.inventory).toEqual([])
+    expect(player.equipment).toEqual({
+      head: null,
+      torso: null,
+      legs: null,
+      feet: null,
+      cape: null,
+      weapon: null,
+      shield: null,
+      accessory: null,
+    })
+  })
+
+  it('REQ-70 (5.3): gold = min(initialGold, purseCapacity); o excedente é perdido', () => {
+    const player = createStartingPlayer(
+      input({
+        config: {
+          ...GAME_CONFIG_DEFAULTS,
+          initialGold: 500,
+          purseCapacity: 300,
+        },
+      })
+    )
+
+    expect(player.gold).toBe(300)
+  })
+
   it('REQ-34: mão = as 7 primeiras do deck embaralhado; o deck fica com as 53 restantes', () => {
     const player = createStartingPlayer(input())
 

@@ -1,6 +1,7 @@
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { SeededRng } from '@/core/rng/seeded-rng'
 import {
+  emptyEquipment,
   PartyMember,
   type TPlayerState,
 } from '@/domain/campaign/enterprise/entities/party-member'
@@ -23,6 +24,8 @@ export function makePlayerState(
       { cardId: 'fixture.strength-basic', copies: 30 },
     ],
     tcgFolder: [],
+    inventory: [],
+    equipment: emptyEquipment(),
     deck: [
       ...Array.from({ length: 27 }, () => 'fixture.endurance-basic'),
       ...Array.from({ length: 26 }, () => 'fixture.strength-basic'),

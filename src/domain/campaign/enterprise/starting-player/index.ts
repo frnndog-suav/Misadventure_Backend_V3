@@ -7,7 +7,11 @@ import type {
 } from '@/domain/catalog/enterprise/value-objects/card'
 import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
-import { maxHealthOf, type TPlayerState } from '../entities/party-member'
+import {
+  emptyEquipment,
+  maxHealthOf,
+  type TPlayerState,
+} from '../entities/party-member'
 import { shuffle } from '../shuffle'
 
 export type TStartingPlayerInput = Readonly<{
@@ -78,10 +82,14 @@ export function createStartingPlayer({
     playerClasses: [{ playerClass: classDefinition.playerClass, deckLockMet }],
     build,
     tcgFolder: [],
+    // README 9.1: primeira aventura sem equipamentos nem recursos (REQ-70).
+    inventory: [],
+    equipment: emptyEquipment(),
     deck,
     hand,
     discard: [],
-    gold: config.initialGold,
+    // README 5.3: o que passa da bolsa é perdido (REQ-70).
+    gold: Math.min(config.initialGold, config.purseCapacity),
     baseHealth,
     health: maxHealthOf({ baseHealth, peak }),
     peak,

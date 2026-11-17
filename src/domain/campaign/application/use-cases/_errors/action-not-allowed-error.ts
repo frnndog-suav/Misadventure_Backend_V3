@@ -8,6 +8,13 @@ export type TActionNotAllowedReason =
   | 'copyLimitExceeded'
   | 'buildBelowMinimum'
   | 'tcgFolderFull'
+  | 'notInInventory'
+  | 'notEquipment'
+  | 'peakRequirementNotMet'
+  | 'classRestricted'
+  | 'shieldBlocked'
+  | 'inventoryFull'
+  | 'slotEmpty'
 
 export class ActionNotAllowedError extends DomainError {
   readonly code = 'ACTION_NOT_ALLOWED'

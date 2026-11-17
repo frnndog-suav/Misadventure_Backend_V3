@@ -30,6 +30,8 @@ describe('GameConfig', () => {
       recoverHealthPercent: 15,
       recoverVigorPercent: 5,
       recoverHandSize: 7,
+      inventoryCapacity: 10,
+      purseCapacity: 300,
     })
     expect(GameConfig.withDefaults().values).toEqual(GAME_CONFIG_DEFAULTS)
   })
@@ -75,6 +77,25 @@ describe('GameConfig', () => {
       recoverVigorPercent: { min: 0, max: 100 },
       recoverHandSize: { min: 0, max: 200 },
     })
+  })
+
+  it('REQ-69: inventoryCapacity e purseCapacity com padrão e limites de D-73', () => {
+    expect(GAME_CONFIG_DEFAULTS).toMatchObject({
+      inventoryCapacity: 10,
+      purseCapacity: 300,
+    })
+    expect(GAME_CONFIG_LIMITS).toMatchObject({
+      inventoryCapacity: { min: 0, max: 100 },
+      purseCapacity: { min: 0, max: 1000000 },
+    })
+
+    const ok = GameConfig.withDefaults().applyPatch({ purseCapacity: 500 })
+    expect(ok.isRight() && ok.value.values.purseCapacity).toBe(500)
+
+    const bad = GameConfig.withDefaults().applyPatch({ inventoryCapacity: 101 })
+    expect(bad.isLeft() && bad.value).toEqual([
+      { field: 'inventoryCapacity', reason: 'outOfRange' },
+    ])
   })
 
   it('REQ-60: as chaves do deck aceitam ajuste e respeitam o limite (REQ-05, REQ-06)', () => {

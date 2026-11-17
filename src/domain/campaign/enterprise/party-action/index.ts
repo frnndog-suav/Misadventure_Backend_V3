@@ -1,4 +1,8 @@
 import { type Either, left, right } from '@/core/error/either'
+import {
+  EQUIPMENT_SLOTS,
+  type TEquipmentSlot,
+} from '@/domain/catalog/enterprise/value-objects/card'
 
 /** Os três modos do Recuperar (README 12.5; REQ-63). */
 export const RECOVER_OPTIONS = [
@@ -8,12 +12,18 @@ export const RECOVER_OPTIONS = [
 ] as const
 export type TRecoverOption = (typeof RECOVER_OPTIONS)[number]
 
+/** Uma operação do Preparar, parte a (README 12.2; REQ-72, REQ-73; D-77). */
+export type TPrepareOperation =
+  | { operation: 'equip'; cardId: string }
+  | { operation: 'unequip'; slot: TEquipmentSlot }
+
 /** Intenção de jogo (CONTRATO §1.6). União por `type`; as FEATs 10+ acrescentam variantes. */
 export type TPartyAction =
   | { type: 'move'; zoneId: string }
   | { type: 'endTurn' }
   | { type: 'recover'; option: TRecoverOption }
   | { type: 'adjustDeck'; build: { cardId: string; copies: number }[] }
+  | ({ type: 'prepare' } & TPrepareOperation)
 
 /** Os `type` possíveis, para `availableActions` (REQ-58). */
 export type TPartyActionType = TPartyAction['type']
@@ -25,6 +35,11 @@ export type TActionIssue =
   | { field: 'zoneId'; reason: 'required' | 'notString' | 'zoneNotInMap' }
   | { field: 'option'; reason: 'required' | 'notString' | 'unknownOption' }
   | { field: 'build'; reason: 'required' | 'notArray' }
+  | {
+      field: 'operation'
+      reason: 'required' | 'notString' | 'unknownOperation'
+    }
+  | { field: 'slot'; reason: 'required' | 'notString' | 'unknownSlot' }
   | {
       /** `build.i`, `build.i.cardId`, `build.i.copies` ou o campo a mais. */
       field: string
@@ -66,6 +81,8 @@ export function parsePartyAction(
       return parseRecover(body)
     case 'adjustDeck':
       return parseAdjustDeck(body)
+    case 'prepare':
+      return parsePrepare(body)
     default:
       return left([{ field: 'type', reason: 'unknownAction' }])
   }
@@ -151,6 +168,62 @@ function parseAdjustDeck(
   issues.push(...extraKeys(body, ['type', 'build']))
   if (issues.length > 0) return left(issues)
   return right({ type: 'adjustDeck', build: items })
+}
+
+function isEquipmentSlot(value: string): value is TEquipmentSlot {
+  return (EQUIPMENT_SLOTS as readonly string[]).includes(value)
+}
+
+/**
+ * REQ-74 item 1: problema em `operation` vem sozinho; depois o campo da
+ * operação (`cardId` ou `slot`) e os campos a mais, na ordem do pedido.
+ */
+function parsePrepare(
+  body: Record<string, unknown>
+): Either<TActionIssue[], TPartyAction> {
+  const { operation } = body
+  if (operation === undefined) {
+    return left([{ field: 'operation', reason: 'required' }])
+  }
+  if (typeof operation !== 'string') {
+    return left([{ field: 'operation', reason: 'notString' }])
+  }
+
+  const issues: TActionIssue[] = []
+  switch (operation) {
+    case 'equip': {
+      const { cardId } = body
+      if (cardId === undefined) {
+        issues.push({ field: 'cardId', reason: 'required' })
+      } else if (typeof cardId !== 'string') {
+        issues.push({ field: 'cardId', reason: 'notString' })
+      }
+      issues.push(...extraKeys(body, ['type', 'operation', 'cardId']))
+      if (issues.length > 0 || typeof cardId !== 'string') return left(issues)
+      return right({ type: 'prepare', operation, cardId })
+    }
+    case 'unequip': {
+      const { slot } = body
+      if (slot === undefined) {
+        issues.push({ field: 'slot', reason: 'required' })
+      } else if (typeof slot !== 'string') {
+        issues.push({ field: 'slot', reason: 'notString' })
+      } else if (!isEquipmentSlot(slot)) {
+        issues.push({ field: 'slot', reason: 'unknownSlot' })
+      }
+      issues.push(...extraKeys(body, ['type', 'operation', 'slot']))
+      if (
+        issues.length > 0 ||
+        typeof slot !== 'string' ||
+        !isEquipmentSlot(slot)
+      ) {
+        return left(issues)
+      }
+      return right({ type: 'prepare', operation, slot })
+    }
+    default:
+      return left([{ field: 'operation', reason: 'unknownOperation' }])
+  }
 }
 
 function extraKeys(

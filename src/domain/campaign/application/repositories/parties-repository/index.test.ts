@@ -43,6 +43,32 @@ describe('REQ-39: conteúdo em uso por saves', () => {
     expect(inUse.playerClasses.sort()).toEqual(['rogue', 'warrior'])
   })
 
+  it('REQ-78: a porta conta inventário, equipamentos em uso e pasta de qualquer membro', async () => {
+    const repository = new InMemoryPartiesRepository()
+    const host = PartyMember.create(
+      {
+        characterName: 'Lia',
+        kind: 'human',
+        player: makePlayerState({
+          inventory: [{ cardId: 'fixture.healing-potion', quantity: 2 }],
+          equipment: {
+            ...makePlayerState().equipment,
+            shield: 'fixture.oak-shield',
+          },
+          tcgFolder: [{ cardId: 'fixture.dexterity-basic', copies: 1 }],
+        }),
+      },
+      new UniqueEntityID('member-1')
+    )
+    await repository.create(makeParty({ members: [host] }))
+
+    const { cardIds } = await repository.findContentInUse()
+
+    expect(cardIds.has('fixture.healing-potion')).toBe(true)
+    expect(cardIds.has('fixture.oak-shield')).toBe(true)
+    expect(cardIds.has('fixture.dexterity-basic')).toBe(true)
+  })
+
   it('REQ-39: repositório em memória une os saves; apagado o grupo, deixa de estar em uso', async () => {
     const repository = new InMemoryPartiesRepository()
     expect((await repository.findContentInUse()).cardIds.size).toBe(0)
