@@ -39,6 +39,22 @@ export class DrizzlePartiesRepository implements PartiesRepository {
     return rows.map((row) => DrizzlePartyMapper.toDomain(row))
   }
 
+  /** REQ-39: lê todos os saves; o editor só existe em dev (II.6). */
+  async findContentInUse(): Promise<{
+    cardIds: ReadonlySet<string>
+    playerClasses: ReadonlySet<string>
+  }> {
+    const cardIds = new Set<string>()
+    const playerClasses = new Set<string>()
+    for (const party of await this.findAll()) {
+      const inUse = party.contentInUse()
+      for (const id of inUse.cardIds) cardIds.add(id)
+      for (const playerClass of inUse.playerClasses)
+        playerClasses.add(playerClass)
+    }
+    return { cardIds, playerClasses }
+  }
+
   async delete(party: Party): Promise<void> {
     await this.db.delete(parties).where(eq(parties.id, party.id.toString()))
   }

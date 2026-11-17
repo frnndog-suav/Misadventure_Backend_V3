@@ -58,11 +58,16 @@ export type TCatalogIssue = {
   reason: TCatalogIssueReason
 }
 
+/** Classe com a situação (ausente = `published`, D-47); rascunho só confere o formato (D-57b). */
+export type TClassEntry = TClassDefinition & {
+  readonly status?: 'draft' | 'published'
+}
+
 export type TCatalogContent = {
   collections: readonly TCollection[]
   cards: readonly TCard[]
   /** Classes (D-40); ausente = nenhuma. */
-  classes?: readonly TClassDefinition[]
+  classes?: readonly TClassEntry[]
 }
 
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/
@@ -183,7 +188,7 @@ export function checkCatalogIntegrity({
 
 /** README 8.5 a 8.7, 4.4 (REQ-26), com os padrões da `GameConfig` (D-40). */
 function checkClasses(
-  classes: readonly TClassDefinition[],
+  classes: readonly TClassEntry[],
   cards: readonly TCard[],
   issues: TCatalogIssue[]
 ): void {
@@ -219,11 +224,15 @@ function checkClasses(
       report('essentialAttributes', 'essentialAttributeCount')
     }
     checkNoDuplicates(essentials, 'essentialAttributes', report)
+    // Só as publicadas disputam o conjunto de essenciais (README 8.5, D-57b).
+    const published = definition.status !== 'draft'
     const essentialKey = JSON.stringify([...new Set(essentials)].sort())
-    if (essentialsValid && essentialSets.has(essentialKey)) {
-      report('essentialAttributes', 'duplicateEssentials')
+    if (published) {
+      if (essentialsValid && essentialSets.has(essentialKey)) {
+        report('essentialAttributes', 'duplicateEssentials')
+      }
+      essentialSets.add(essentialKey)
     }
-    essentialSets.add(essentialKey)
 
     for (const modifier of MODIFIERS) {
       if (!isIntegerBetween(definition.baseModifiers[modifier], 0, Infinity)) {
@@ -231,7 +240,7 @@ function checkClasses(
       }
     }
 
-    checkStarterDeck(definition, cardsById, essentialsValid, report)
+    checkStarterDeck(definition, cardsById, essentialsValid, published, report)
   }
 }
 
@@ -239,6 +248,7 @@ function checkStarterDeck(
   definition: TClassDefinition,
   cardsById: ReadonlyMap<string, TCard>,
   essentialsValid: boolean,
+  published: boolean,
   report: TReport
 ): void {
   const deck = definition.starterDeck
@@ -268,8 +278,9 @@ function checkStarterDeck(
     }
   })
 
-  // Tamanho e trava só fazem sentido com todas as entradas válidas.
-  if (!valid) return
+  // Tamanho e trava só fazem sentido com todas as entradas válidas e só valem
+  // para a classe publicada (D-57b).
+  if (!valid || !published) return
 
   const total = deck.reduce((sum, entry) => sum + entry.copies, 0)
   if (total !== GAME_CONFIG_DEFAULTS.minDeckSize) {

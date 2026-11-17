@@ -6,6 +6,7 @@ import {
   CONTENT_INVALID,
   createContentApp,
   FORCA_INPUT,
+  MAGE_INPUT,
 } from '../../../../../test/content-app'
 
 describe('POST /lab/content/import (e2e)', () => {
@@ -20,6 +21,10 @@ describe('POST /lab/content/import (e2e)', () => {
       .post('/lab/content/collections/bosque/cards')
       .send({ ...FORCA_INPUT, slug: 'forca-bruta' })
     await request(server).post('/lab/content/cards/bosque.forca-bruta/publish')
+    await request(server)
+      .post('/lab/content/collections/bosque/classes')
+      .send(MAGE_INPUT)
+      .expect(201)
     exported = (
       await request(server).get('/lab/content/collections/bosque/export')
     ).body as unknown
@@ -61,7 +66,7 @@ describe('POST /lab/content/import (e2e)', () => {
     expect(response.body).toEqual({
       collectionId: 'bosque',
       cardCount: 1,
-      classCount: 0,
+      classCount: 1,
     })
     expect(
       (await request(server).get('/lab/content/collections/bosque/export')).body
@@ -82,7 +87,7 @@ describe('POST /lab/content/import (e2e)', () => {
     expect(response.body).toEqual({
       collectionId: 'bosque',
       cardCount: 1,
-      classCount: 0,
+      classCount: 1,
     })
   })
 
@@ -101,16 +106,41 @@ describe('POST /lab/content/import (e2e)', () => {
     expect(await readdir(ctx.root)).toEqual(before)
   })
 
-  it('REQ-48/D-53: classes não vazio → 400 CONTENT_INVALID em classes', async () => {
+  it('REQ-38/REQ-48: export leva a classe e o import com replace a reproduz', async () => {
+    const server = ctx.app.getHttpServer()
+    const classes = (exported as { classes: unknown[] }).classes
+    expect(classes).toEqual([
+      {
+        status: 'draft',
+        classDefinition: { ...MAGE_INPUT, collectionId: 'bosque' },
+      },
+    ])
+    expect(
+      (await request(server).get('/lab/content/classes/mage')).body
+    ).toEqual(classes[0])
+  })
+
+  it('REQ-38/REQ-48: classe com playerClass desconhecido → 400 CONTENT_INVALID em classes.0.classDefinition.playerClass', async () => {
+    const file = exported as { classes: { classDefinition: object }[] }
     const response = await request(ctx.app.getHttpServer())
       .post('/lab/content/import?replace=true')
-      .send({ ...(exported as object), classes: [{}] })
+      .send({
+        ...file,
+        classes: [
+          {
+            status: 'draft',
+            classDefinition: {
+              ...file.classes[0].classDefinition,
+              playerClass: 'paladino',
+            },
+          },
+        ],
+      })
 
     expect(response.status).toBe(400)
-    expect(response.body.error.details.fields).toContainEqual({
-      path: 'classes',
-      message: 'Classes entram na FEAT-06.',
-    })
+    expect(
+      response.body.error.details.fields.map((f: { path: string }) => f.path)
+    ).toContain('classes.0.classDefinition.playerClass')
   })
 
   it('REQ-48: replace fora de true/false → 400 CONTENT_INVALID no parâmetro replace', async () => {

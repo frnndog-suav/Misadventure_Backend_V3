@@ -185,3 +185,42 @@ Content-Type: application/json
 
 ### FEAT-31 — excluir coleção (204)
 DELETE {{baseUrl}}/lab/content/collections/bosque
+
+### FEAT-06 — classes do editor: listar (200 EditorClassSummary[])
+GET {{baseUrl}}/lab/content/collections/fixture/classes
+
+### FEAT-06 — criar classe (201 EditorClass draft; warrior → 409 CONTENT_ID_TAKEN)
+POST {{baseUrl}}/lab/content/collections/fixture/classes
+Content-Type: application/json
+
+{
+  "playerClass": "mage",
+  "name": "Mago",
+  "essentialAttributes": ["intelligence", "spirit"],
+  "baseModifiers": { "attack": 4, "defense": 2, "accuracy": 50, "evasion": 20, "celerity": 10, "piercing": 0, "reflection": 0 },
+  "starterDeck": [{ "cardId": "fixture.strength-basic", "copies": 60 }]
+}
+
+### FEAT-06 — ler classe (200 EditorClass; inexistente → 404 CLASS_NOT_FOUND)
+GET {{baseUrl}}/lab/content/classes/mage
+
+### FEAT-06 — substituir classe (200; renomear publicada → 409 CONTENT_LOCKED)
+PUT {{baseUrl}}/lab/content/classes/mage
+Content-Type: application/json
+
+{
+  "playerClass": "mage",
+  "name": "Maga",
+  "essentialAttributes": ["intelligence", "spirit"],
+  "baseModifiers": { "attack": 4, "defense": 2, "accuracy": 50, "evasion": 20, "celerity": 10, "piercing": 0, "reflection": 0 },
+  "starterDeck": [{ "cardId": "fixture.strength-basic", "copies": 60 }]
+}
+
+### FEAT-06 — publicar classe (trava do Mago não cumprida → 400 CONTENT_INVALID)
+POST {{baseUrl}}/lab/content/classes/mage/publish
+
+### FEAT-06 — excluir classe (204; em uso por save → 409 CONTENT_IN_USE)
+DELETE {{baseUrl}}/lab/content/classes/mage
+
+### FEAT-06 — carta do deck pré-pronto (409 CONTENT_REFERENCED, sem grupos)
+DELETE {{baseUrl}}/lab/content/cards/fixture.dexterity-basic

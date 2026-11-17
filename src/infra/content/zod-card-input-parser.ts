@@ -10,7 +10,7 @@ import {
 
 import { cardInputSchema } from './card-schemas'
 
-const zodLocale = z.locales.ptBR().localeError
+export const zodLocale = z.locales.ptBR().localeError
 
 function joinPath(segments: readonly PropertyKey[]): string {
   return segments.map(String).join('.')
@@ -29,23 +29,30 @@ export class ZodCardInputParser extends CardInputParser {
     // O schema espelha `TCardInput` (sem `id`/`collectionId`, com `slug`).
     if (parsed.success) return right(parsed.data as TCardInput)
 
-    const issues: TContentIssue[] = []
-    for (const issue of parsed.error.issues) {
-      if (issue.code === 'unrecognized_keys') {
-        for (const key of issue.keys) {
-          issues.push({
-            path: joinPath([...issue.path, key]),
-            reason: 'unknownField',
-          })
-        }
-        continue
-      }
-      issues.push({
-        path: joinPath(issue.path),
-        reason: 'invalidFormat',
-        message: issue.message,
-      })
-    }
-    return left(issues)
+    return left(toContentIssues(parsed.error.issues))
   }
+}
+
+/** Problemas do Zod → `TContentIssue` (campo desconhecido no próprio campo). */
+export function toContentIssues(
+  zodIssues: readonly z.core.$ZodIssue[]
+): TContentIssue[] {
+  const issues: TContentIssue[] = []
+  for (const issue of zodIssues) {
+    if (issue.code === 'unrecognized_keys') {
+      for (const key of issue.keys) {
+        issues.push({
+          path: joinPath([...issue.path, key]),
+          reason: 'unknownField',
+        })
+      }
+      continue
+    }
+    issues.push({
+      path: joinPath(issue.path),
+      reason: 'invalidFormat',
+      message: issue.message,
+    })
+  }
+  return issues
 }

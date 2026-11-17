@@ -785,3 +785,84 @@ describe('checkCatalogIntegrity', () => {
     })
   })
 })
+
+describe('REQ-26/REQ-38: classe em rascunho (D-57b)', () => {
+  const cards = [
+    makeAttributeCard(),
+    makeAttributeCard({
+      id: 'fixture.dexterity-basic',
+      name: 'Destreza',
+      attributes: ['dexterity'],
+    }),
+  ]
+  const shortDeck = [
+    { cardId: 'fixture.strength-basic', copies: 1 },
+    { cardId: 'fixture.dexterity-basic', copies: 1 },
+  ]
+
+  function run(
+    classes: Parameters<typeof checkCatalogIntegrity>[0]['classes']
+  ) {
+    return checkCatalogIntegrity({
+      collections: [makeCollection()],
+      cards,
+      classes,
+    })
+  }
+
+  it('REQ-38: rascunho não reporta tamanho nem trava do deck', () => {
+    expect(
+      run([
+        { ...makeClassDefinition({ starterDeck: shortDeck }), status: 'draft' },
+      ])
+    ).toEqual([])
+  })
+
+  it('REQ-38: publicada (status ausente ou published) continua reportando', () => {
+    const issues = run([
+      makeClassDefinition({ starterDeck: shortDeck }),
+      {
+        ...makeClassDefinition({
+          playerClass: 'mage',
+          name: 'Mago',
+          essentialAttributes: ['dexterity'],
+          starterDeck: shortDeck,
+        }),
+        status: 'published',
+      },
+    ])
+    expect(issues.map((issue) => issue.reason)).toEqual([
+      'starterDeckSize',
+      'starterDeckLockNotMet',
+      'starterDeckSize',
+      'starterDeckLockNotMet',
+    ])
+  })
+
+  it('REQ-38: rascunho com os mesmos essenciais de uma publicada não é duplicata (8.5 só entre publicadas)', () => {
+    expect(
+      run([
+        makeClassDefinition(),
+        {
+          ...makeClassDefinition({ playerClass: 'mage', name: 'Mago' }),
+          status: 'draft',
+        },
+      ])
+    ).toEqual([])
+  })
+
+  it('REQ-38: rascunho ainda confere formato, nome e playerClass', () => {
+    const issues = run([
+      makeClassDefinition(),
+      {
+        ...makeClassDefinition({ essentialAttributes: [] }),
+        status: 'draft',
+      },
+    ])
+    expect(issues.map((issue) => issue.reason)).toEqual([
+      'duplicateId',
+      'duplicateName',
+      'essentialAttributeCount',
+    ])
+  })
+})

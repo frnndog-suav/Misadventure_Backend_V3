@@ -13,20 +13,18 @@ describe('DELETE /lab/content/cards/:cardId (e2e)', () => {
     await ctx.close()
   })
 
-  it('REQ-45: apaga a carta (204); some do editor e do catálogo', async () => {
+  it('REQ-45: apaga a carta (204); some do editor e do catálogo (zona sem grupo nem classe que a use, REQ-39/REQ-40)', async () => {
     const server = ctx.app.getHttpServer()
     const response = await request(server).delete(
-      '/lab/content/cards/fixture.strength-basic'
+      '/lab/content/cards/fixture.old-mine'
     )
 
     expect(response.status).toBe(204)
     expect(
-      (await request(server).get('/lab/content/cards/fixture.strength-basic'))
-        .status
+      (await request(server).get('/lab/content/cards/fixture.old-mine')).status
     ).toBe(404)
     expect(
-      (await request(server).get('/catalog/cards/fixture.strength-basic'))
-        .status
+      (await request(server).get('/catalog/cards/fixture.old-mine')).status
     ).toBe(404)
   })
 

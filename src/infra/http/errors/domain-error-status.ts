@@ -13,4 +13,7 @@ export const DOMAIN_ERROR_STATUS: Readonly<Record<string, HttpStatus>> = {
   CONTENT_INVALID: HttpStatus.BAD_REQUEST,
   CONTENT_ID_TAKEN: HttpStatus.CONFLICT,
   CONTENT_LOCKED: HttpStatus.CONFLICT,
+  CONTENT_IN_USE: HttpStatus.CONFLICT,
+  CONTENT_REFERENCED: HttpStatus.CONFLICT,
+  CLASS_NOT_FOUND: HttpStatus.NOT_FOUND,
 }

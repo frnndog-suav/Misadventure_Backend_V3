@@ -167,6 +167,7 @@ export const cardInputSchema = z.discriminatedUnion('type', [
   cardSchemas.item.omit({ id: true }).extend(inputKeys('item')),
   cardSchemas.randomEvent.omit({ id: true }).extend(inputKeys('randomEvent')),
   cardSchemas.combatEvent.omit({ id: true }).extend(inputKeys('combatEvent')),
+  cardSchemas.dimension.omit({ id: true }).extend(inputKeys('dimension')),
 ])
 
 /**
@@ -174,14 +175,16 @@ export const cardInputSchema = z.discriminatedUnion('type', [
  * `status` opcional como nas cartas (D-47). Faixas, unicidade, deck e trava
  * ficam em `checkCatalogIntegrity` (REQ-26).
  */
-export const classFileSchema = z.strictObject({
+/** `ClassInput` do editor (CONTRATO FEAT-06): a classe sem `collectionId`. */
+export const classInputSchema = z.strictObject({
   playerClass: z.enum(PLAYER_CLASSES),
   name: text,
   essentialAttributes: z.array(z.enum(ATTRIBUTES)),
   baseModifiers: enemyModifiers,
   starterDeck: z.array(z.strictObject({ cardId: text, copies: z.number() })),
-  status,
 })
+
+export const classFileSchema = classInputSchema.extend({ status })
 
 export const collectionFileSchema = z.strictObject({
   name: text,

@@ -41,6 +41,7 @@ type TState = {
 }
 
 const COLLECTION_FILE = 'collection.json'
+const CLASS_FILE = 'class.json'
 
 /**
  * Conteúdo em arquivo (D-47, D-48): serve o editor (`ContentStore`) e o
@@ -110,11 +111,23 @@ export class FileContentStore extends ContentStore implements CardCatalog {
     return entry?.status === 'published' ? entry.classDefinition : null
   }
 
+  async listEditorClasses(): Promise<TEditorClass[]> {
+    return [...this.state.classes]
+  }
+
+  async findEditorClass(playerClass: string): Promise<TEditorClass | null> {
+    return (
+      this.state.classes.find(
+        (e) => e.classDefinition.playerClass === playerClass
+      ) ?? null
+    )
+  }
+
   // Gravação
 
   createCollection(collection: TContentCollection): Promise<void> {
     return this.mutate(async (state) => {
-      await this.writeCollectionDir(collection, [], false)
+      await this.writeCollectionDir(collection, [], [], false)
       return { ...state, collections: [...state.collections, collection] }
     })
   }
@@ -183,14 +196,67 @@ export class FileContentStore extends ContentStore implements CardCatalog {
     })
   }
 
+  saveClass(
+    definition: TClassDefinition,
+    status: TContentStatus,
+    replacedPlayerClass?: string
+  ): Promise<void> {
+    return this.mutate(async (state) => {
+      const oldKey = replacedPlayerClass ?? definition.playerClass
+      const old = state.classes.find(
+        (e) => e.classDefinition.playerClass === oldKey
+      )
+      const next: TState = {
+        ...state,
+        classes: [
+          ...state.classes.filter(
+            (e) => e.classDefinition.playerClass !== oldKey
+          ),
+          { status, classDefinition: definition },
+        ],
+      }
+      await this.writeClassFile(next, definition.collectionId)
+      if (old && old.classDefinition.collectionId !== definition.collectionId) {
+        await this.writeClassFile(next, old.classDefinition.collectionId)
+      }
+      return next
+    })
+  }
+
+  deleteClass(playerClass: string): Promise<void> {
+    return this.mutate(async (state) => {
+      const old = state.classes.find(
+        (e) => e.classDefinition.playerClass === playerClass
+      )
+      if (!old) return state
+      const next: TState = {
+        ...state,
+        classes: state.classes.filter(
+          (e) => e.classDefinition.playerClass !== playerClass
+        ),
+      }
+      await this.writeClassFile(next, old.classDefinition.collectionId)
+      return next
+    })
+  }
+
   importCollection(
-    file: { collection: TContentCollection; cards: readonly TEditorCard[] },
+    file: {
+      collection: TContentCollection
+      cards: readonly TEditorCard[]
+      classes: readonly TEditorClass[]
+    },
     replace: boolean
   ): Promise<void> {
     return this.mutate(async (state) => {
-      const { collection, cards } = file
+      const { collection, cards, classes } = file
       const exists = state.collections.some((c) => c.id === collection.id)
-      await this.writeCollectionDir(collection, cards, replace && exists)
+      await this.writeCollectionDir(
+        collection,
+        cards,
+        classes,
+        replace && exists
+      )
       return {
         collections: [
           ...state.collections.filter((c) => c.id !== collection.id),
@@ -200,8 +266,10 @@ export class FileContentStore extends ContentStore implements CardCatalog {
           ...state.cards.filter((e) => e.card.collectionId !== collection.id),
           ...cards,
         ],
-        // A pasta nova não tem `class.json` (classes no import: T-18).
-        classes: withoutClassesOf(state.classes, collection.id),
+        classes: [
+          ...withoutClassesOf(state.classes, collection.id),
+          ...classes,
+        ],
       }
     })
   }
@@ -236,6 +304,20 @@ export class FileContentStore extends ContentStore implements CardCatalog {
     await this.writeAtomic(dir, `${type}.json`, entries.map(fileCard))
   }
 
+  /** Reescreve o `class.json` da coleção; vazio = arquivo apagado (D-47). */
+  private async writeClassFile(
+    state: TState,
+    collectionId: string
+  ): Promise<void> {
+    const dir = this.dirOf(collectionId)
+    const entries = classesOf(state.classes, collectionId)
+    if (entries.length === 0) {
+      await this.fs.rm(join(dir, CLASS_FILE))
+      return
+    }
+    await this.writeAtomic(dir, CLASS_FILE, entries.map(fileClass))
+  }
+
   /** Escreve `<arquivo>.tmp` e renomeia (D-47); falha não deixa o `.tmp`. */
   private async writeAtomic(
     dir: string,
@@ -260,6 +342,7 @@ export class FileContentStore extends ContentStore implements CardCatalog {
   private async writeCollectionDir(
     collection: TContentCollection,
     cards: readonly TEditorCard[],
+    classes: readonly TEditorClass[],
     replace: boolean
   ): Promise<void> {
     const dir = this.dirOf(collection.id)
@@ -274,6 +357,10 @@ export class FileContentStore extends ContentStore implements CardCatalog {
         if (entries.length > 0) {
           await this.writeAtomic(tmp, `${type}.json`, entries.map(fileCard))
         }
+      }
+      const classEntries = classesOf(classes, collection.id)
+      if (classEntries.length > 0) {
+        await this.writeAtomic(tmp, CLASS_FILE, classEntries.map(fileClass))
       }
       if (replace) {
         await this.fs.rm(old)
@@ -330,4 +417,26 @@ function fileCard({ status, card }: TEditorCard): object {
   void type
   void collectionId
   return status === 'draft' ? { id, ...fields, status } : { id, ...fields }
+}
+
+function classesOf(
+  classes: readonly TEditorClass[],
+  collectionId: string
+): TEditorClass[] {
+  return classes
+    .filter((e) => e.classDefinition.collectionId === collectionId)
+    .sort((a, b) =>
+      a.classDefinition.playerClass < b.classDefinition.playerClass
+        ? -1
+        : a.classDefinition.playerClass > b.classDefinition.playerClass
+          ? 1
+          : 0
+    )
+}
+
+/** Classe no `class.json` (D-40, D-57): sem `collectionId`, `status` só no rascunho. */
+function fileClass({ status, classDefinition }: TEditorClass): object {
+  const { collectionId, ...fields } = classDefinition
+  void collectionId
+  return status === 'draft' ? { ...fields, status } : fields
 }

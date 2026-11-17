@@ -2,12 +2,14 @@ import { Global, Module } from '@nestjs/common'
 
 import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import { CardInputParser } from '@/domain/catalog/application/repositories/card-input-parser'
+import { ClassInputParser } from '@/domain/catalog/application/repositories/class-input-parser'
 import { ContentStore } from '@/domain/catalog/application/repositories/content-store'
 
 import { EnvService } from '../env/env.service'
 import { FileContentStore } from './file-content-store'
 import { InvalidContentError, loadContent } from './load-content'
 import { ZodCardInputParser } from './zod-card-input-parser'
+import { ZodClassInputParser } from './zod-class-input-parser'
 
 /**
  * Carrega `CONTENT_DIR` no boot (REQ-10, D-48). Conteúdo inválido derruba o
@@ -30,7 +32,8 @@ import { ZodCardInputParser } from './zod-card-input-parser'
     { provide: CardCatalog, useExisting: FileContentStore },
     { provide: ContentStore, useExisting: FileContentStore },
     { provide: CardInputParser, useClass: ZodCardInputParser },
+    { provide: ClassInputParser, useClass: ZodClassInputParser },
   ],
-  exports: [CardCatalog, ContentStore, CardInputParser],
+  exports: [CardCatalog, ContentStore, CardInputParser, ClassInputParser],
 })
 export class ContentModule {}

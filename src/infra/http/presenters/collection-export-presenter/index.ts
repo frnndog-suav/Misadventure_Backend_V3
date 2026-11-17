@@ -1,15 +1,19 @@
 import type { TCollectionExport } from '@/domain/catalog/enterprise/value-objects/content'
 import {
+  EditorClassPresenter,
+  type TEditorClassHttp,
+} from '../editor-class-presenter'
+import {
   EditorCardPresenter,
   type TEditorCardHttp,
 } from '../editor-card-presenter'
 
-/** CONTRATO FEAT-31, tipo `CollectionExport` (`classes` vazio até a FEAT-06, D-53). */
+/** CONTRATO FEAT-31, tipo `CollectionExport` (`classes` preenchido pela FEAT-06). */
 export interface TCollectionExportHttp {
   formatVersion: 1
   collection: { id: string; name: string; description: string }
   cards: TEditorCardHttp[]
-  classes: never[]
+  classes: TEditorClassHttp[]
 }
 
 export class CollectionExportPresenter {
@@ -22,7 +26,7 @@ export class CollectionExportPresenter {
         description: file.collection.description,
       },
       cards: file.cards.map((entry) => EditorCardPresenter.toHTTP(entry)),
-      classes: [],
+      classes: file.classes.map((entry) => EditorClassPresenter.toHTTP(entry)),
     }
   }
 }

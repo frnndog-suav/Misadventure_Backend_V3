@@ -307,3 +307,12 @@ export function makeFixtureContent(): {
     ],
   }
 }
+
+/** A classe como corpo de `ClassInput`: sem `collectionId`. */
+export function toClassInput(
+  definition: TClassDefinition
+): Record<string, unknown> {
+  const { collectionId, ...rest } = definition
+  void collectionId
+  return { ...rest }
+}

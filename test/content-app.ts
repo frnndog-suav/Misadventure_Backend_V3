@@ -55,3 +55,20 @@ export const CONTENT_INVALID = {
   code: 'CONTENT_INVALID',
   message: 'Conteúdo inválido.',
 } as const
+
+/** Classe `mage` do cenário do contrato (FEAT-06): trava não cumprida. */
+export const MAGE_INPUT = {
+  playerClass: 'mage',
+  name: 'Mago',
+  essentialAttributes: ['intelligence', 'spirit'],
+  baseModifiers: {
+    attack: 4,
+    defense: 2,
+    accuracy: 50,
+    evasion: 20,
+    celerity: 10,
+    piercing: 0,
+    reflection: 0,
+  },
+  starterDeck: [{ cardId: 'fixture.strength-basic', copies: 60 }],
+} as const

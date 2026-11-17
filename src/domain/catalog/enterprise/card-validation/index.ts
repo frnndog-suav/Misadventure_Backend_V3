@@ -1,5 +1,8 @@
 import { checkCatalogIntegrity } from '@/domain/catalog/enterprise/catalog-integrity'
-import type { TCard } from '@/domain/catalog/enterprise/value-objects/card'
+import type {
+  TCard,
+  TDimensionCard,
+} from '@/domain/catalog/enterprise/value-objects/card'
 import {
   SLUG_PATTERN,
   type TCardInput,
@@ -43,12 +46,16 @@ export function sortByCardId<T extends { readonly id: string }>(
  * carta que já existe (`replacedId` = o id que ela tinha) mantém o lugar
  * dele, então editar ou publicar a original não é barrado pela cópia (D-50,
  * D-54). A unicidade de id fica com o caso de uso (vira 409, não 400).
+ * `otherDimensions` = as Cartas de Dimensão das outras coleções: o
+ * `releaseOrder` é único no catálogo todo (REQ-26); vão antes das da coleção
+ * para a duplicata recair sobre a candidata.
  */
 export function validateCandidate(
   collection: TContentCollection,
   others: readonly TCard[],
   candidate: TCard,
-  replacedId?: string
+  replacedId?: string,
+  otherDimensions: readonly TDimensionCard[] = []
 ): TContentIssue[] {
   const issues: TContentIssue[] = []
 
@@ -69,7 +76,7 @@ export function validateCandidate(
         ]
   for (const issue of checkCatalogIntegrity({
     collections: [collection],
-    cards,
+    cards: [...otherDimensions, ...cards],
   })) {
     if (issue.cardId !== candidate.id) continue
     // `id` e `collectionId` saem do `slug` e da rota, não do corpo.

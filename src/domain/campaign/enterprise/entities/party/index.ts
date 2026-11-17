@@ -130,6 +130,25 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return this.props.savedAt
   }
 
+  /**
+   * Conteúdo que este save usa (REQ-39): a Carta de Dimensão, as zonas do
+   * mapa, as cartas da build de cada jogador e as classes deles.
+   */
+  contentInUse(): { cardIds: string[]; playerClasses: string[] } {
+    const cardIds = new Set<string>([
+      this.props.dimension.dimensionCardId,
+      ...this.props.dimension.map.zones.map((zone) => zone.zoneId),
+    ])
+    const playerClasses = new Set<string>()
+    for (const member of this.props.members) {
+      for (const entry of member.player.build) cardIds.add(entry.cardId)
+      for (const { playerClass } of member.player.playerClasses) {
+        playerClasses.add(playerClass)
+      }
+    }
+    return { cardIds: [...cardIds], playerClasses: [...playerClasses] }
+  }
+
   isHost(member: PartyMember): boolean {
     return member.id.equals(this.props.hostMemberId)
   }

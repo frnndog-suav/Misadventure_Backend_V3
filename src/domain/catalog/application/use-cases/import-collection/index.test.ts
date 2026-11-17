@@ -9,7 +9,9 @@ import {
   makeZoneCard,
 } from '../../../../../../test/factories/make-card'
 import { FakeCardInputParser } from '../../../../../../test/fakes/fake-card-input-parser'
+import { FakeClassInputParser } from '../../../../../../test/fakes/fake-class-input-parser'
 import { InMemoryContentStore } from '../../../../../../test/fakes/in-memory-content-store'
+import { InMemoryPartiesRepository } from '../../../../../../test/repositories/in-memory-parties-repository'
 
 import { ImportCollectionUseCase } from '.'
 
@@ -39,14 +41,20 @@ async function fieldsOf(body: unknown, replace?: string) {
   const result = await sut.execute({ body, replace })
   expect(result.isLeft()).toBe(true)
   if (result.isRight()) return null
-  return { error: result.value, fields: result.value.details?.fields }
+  const { details } = result.value as ContentInvalidError | ContentIdTakenError
+  return { error: result.value, fields: details?.fields }
 }
 
 describe('ImportCollectionUseCase', () => {
   beforeEach(() => {
     store = new InMemoryContentStore()
     parser = new FakeCardInputParser()
-    sut = new ImportCollectionUseCase(store, parser)
+    sut = new ImportCollectionUseCase(
+      store,
+      parser,
+      new FakeClassInputParser(),
+      new InMemoryPartiesRepository()
+    )
   })
 
   it('REQ-48: importa a coleção nova, com o status de cada carta vindo do arquivo', async () => {
@@ -233,12 +241,10 @@ describe('ImportCollectionUseCase', () => {
     ])
   })
 
-  it('REQ-48/D-53: classes diferente de [] → path classes (até a FEAT-06)', async () => {
-    const out = await fieldsOf(file({ classes: [{ playerClass: 'warrior' }] }))
+  it('REQ-48: classes que não é lista → path classes', async () => {
+    const out = await fieldsOf(file({ classes: { playerClass: 'warrior' } }))
 
-    expect(out?.fields).toEqual([
-      { path: 'classes', reason: 'classesNotSupported' },
-    ])
+    expect(out?.fields).toEqual([{ path: 'classes', reason: 'invalidFormat' }])
   })
 
   it('REQ-48: replace diferente de true/false → path replace', async () => {
@@ -260,7 +266,7 @@ describe('ImportCollectionUseCase', () => {
     expect(out?.fields?.map((field) => field.path)).toEqual([
       'formatVersion',
       'collection.name',
-      'classes',
+      'classes.0',
       'replace',
     ])
   })

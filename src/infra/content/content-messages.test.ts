@@ -62,9 +62,12 @@ describe('content-messages (D-49)', () => {
     expect(
       message({ path: 'formatVersion', reason: 'unsupportedFormatVersion' })
     ).toBe('Versão do arquivo não suportada.')
-    expect(message({ path: 'classes', reason: 'classesNotSupported' })).toBe(
-      'Classes entram na FEAT-06.'
-    )
+    expect(
+      message({
+        path: 'starterDeck.0.cardId',
+        reason: 'starterDeckCardNotPublished',
+      })
+    ).toBe('Toda carta do deck pré-pronto precisa estar publicada.')
     expect(message({ path: 'collection.id', reason: 'idTaken' })).toBe(
       'Já existe uma coleção com este identificador.'
     )

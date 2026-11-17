@@ -240,6 +240,101 @@ describe('FileContentStore', () => {
     expect(await store.findEditorCard('fixture.strength-basic')).toBeNull()
   })
 
+  it('REQ-38/REQ-49: classe em rascunho gravada no class.json com status, por playerClass, e relida', async () => {
+    const store = await open()
+    const warrior = await store.findEditorClass('warrior')
+    if (!warrior) throw new Error('fixture sem warrior')
+    const mage = {
+      ...warrior.classDefinition,
+      playerClass: 'mage' as const,
+      name: 'Mago',
+    }
+    await store.saveClass(mage, 'draft')
+
+    const file = (await readJson('fixture/class.json')) as {
+      playerClass: string
+      status?: string
+      collectionId?: string
+    }[]
+    expect(file.map((c) => c.playerClass)).toEqual(['mage', 'rogue', 'warrior'])
+    expect(file[0].status).toBe('draft')
+    expect(file[1].status).toBeUndefined()
+    expect(file[0].collectionId).toBeUndefined()
+    expect(await store.findClass('mage')).toBeNull()
+
+    const reopened = await reopen()
+    expect(await reopened.findEditorClass('mage')).toEqual({
+      status: 'draft',
+      classDefinition: mage,
+    })
+  })
+
+  it('REQ-38/REQ-49: renomear e excluir classe; vazio apaga o class.json', async () => {
+    const store = await open()
+    const rogue = await store.findEditorClass('rogue')
+    if (!rogue) throw new Error('fixture sem rogue')
+    await store.saveClass(
+      { ...rogue.classDefinition, playerClass: 'ranger' },
+      'draft',
+      'rogue'
+    )
+    expect(await store.findEditorClass('rogue')).toBeNull()
+    expect(
+      (await store.listEditorClasses()).map(
+        (c) => c.classDefinition.playerClass
+      )
+    ).toEqual(expect.arrayContaining(['ranger', 'warrior']))
+
+    await store.deleteClass('ranger')
+    await store.deleteClass('warrior')
+    expect(await exists('fixture/class.json')).toBe(false)
+    expect(await (await reopen()).listEditorClasses()).toEqual([])
+  })
+
+  it('REQ-48/REQ-49: import com classes grava o class.json', async () => {
+    const store = await open()
+    const card = {
+      ...draft,
+      id: 'bosque.agility-basic',
+      collectionId: 'bosque',
+    }
+    const classes = [
+      {
+        status: 'draft' as const,
+        classDefinition: {
+          playerClass: 'mage' as const,
+          collectionId: 'bosque',
+          name: 'Mago',
+          essentialAttributes: ['intelligence' as const],
+          baseModifiers: {
+            attack: 1,
+            defense: 1,
+            accuracy: 1,
+            evasion: 1,
+            celerity: 1,
+            piercing: 0,
+            reflection: 0,
+          },
+          starterDeck: [{ cardId: card.id, copies: 60 }],
+        },
+      },
+    ]
+    await store.importCollection(
+      {
+        collection: { id: 'bosque', name: 'Bosque', description: '' },
+        cards: [{ status: 'draft', card }],
+        classes,
+      },
+      false
+    )
+    expect(await exists('bosque/class.json')).toBe(true)
+    expect(
+      (await (await reopen()).listEditorClasses()).filter(
+        (c) => c.classDefinition.collectionId === 'bosque'
+      )
+    ).toEqual(classes)
+  })
+
   it('REQ-49: import com replace troca a coleção inteira', async () => {
     const store = await open()
     const cards: TEditorCard[] = [{ status: 'draft', card: draft }]
@@ -247,13 +342,14 @@ describe('FileContentStore', () => {
       {
         collection: { id: 'fixture', name: 'Nova', description: 'Trocada.' },
         cards,
+        classes: [],
       },
       true
     )
 
     expect(await store.listEditorCards('fixture')).toEqual(cards)
     expect(await exists('fixture/zone.json')).toBe(false)
-    // D-57: o arquivo de import ainda não traz classes (T-18).
+    // Arquivo sem classes: a coleção trocada fica sem `class.json`.
     expect(await exists('fixture/class.json')).toBe(false)
     expect(await store.listClasses()).toEqual([])
     expect(await readJson('fixture/collection.json')).toEqual({
@@ -277,6 +373,7 @@ describe('FileContentStore', () => {
       {
         collection: { id: 'bosque', name: 'Bosque', description: '' },
         cards: [{ status: 'published', card }],
+        classes: [],
       },
       false
     )
@@ -329,6 +426,7 @@ describe('FileContentStore', () => {
         {
           collection: { id: 'fixture', name: 'Nova', description: '' },
           cards: [{ status: 'draft', card: draft }],
+          classes: [],
         },
         true
       )

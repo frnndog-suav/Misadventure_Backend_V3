@@ -98,8 +98,8 @@ export function contentIssueMessage(issue: TContentIssue): string {
       return 'Versão do arquivo não suportada.'
     case 'collectionMismatch':
       return 'A carta precisa ser da coleção do arquivo.'
-    case 'classesNotSupported':
-      return 'Classes entram na FEAT-06.'
+    case 'starterDeckCardNotPublished':
+      return 'Toda carta do deck pré-pronto precisa estar publicada.'
     case 'invalidReplace':
       return 'Use true ou false.'
     case 'invalidFormat':

@@ -56,12 +56,21 @@ export type TEditorCardSummary = Readonly<{
   status: TContentStatus
 }>
 
-/** `CollectionExport` (`classes` só a partir da FEAT-06, D-53). */
+/** `ClassInput` (CONTRATO FEAT-06): a classe sem `collectionId`. */
+export type TClassInput = Omit<TClassDefinition, 'collectionId'>
+
+export type TEditorClassSummary = Readonly<{
+  playerClass: string
+  name: string
+  status: TContentStatus
+}>
+
+/** `CollectionExport` (CONTRATO FEAT-31; `classes` preenchido pela FEAT-06). */
 export type TCollectionExport = Readonly<{
   formatVersion: 1
   collection: TContentCollection
   cards: readonly TEditorCard[]
-  classes: readonly never[]
+  classes: readonly TEditorClass[]
 }>
 
 /** Motivos de um problema de conteúdo (D-49): o infra traduz para pt-BR. */
@@ -77,7 +86,7 @@ export type TContentIssueReason =
   | 'repeatedParam'
   | 'unsupportedFormatVersion'
   | 'collectionMismatch'
-  | 'classesNotSupported'
+  | 'starterDeckCardNotPublished'
   | 'invalidReplace'
   | 'invalidFormat'
 

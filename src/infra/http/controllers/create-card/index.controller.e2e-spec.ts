@@ -49,6 +49,53 @@ describe('POST /lab/content/collections/:collectionId/cards (e2e)', () => {
     expect(catalog.body).toEqual([])
   })
 
+  it('REQ-38/REQ-26: cria Carta de Dimensão e zona com arrowLayout pelo editor; releaseOrder repetido no catálogo → 400', async () => {
+    const server = ctx.app.getHttpServer()
+    const dimension = {
+      slug: 'bosque-dimensao',
+      type: 'dimension',
+      name: 'Dimensão do Bosque',
+      flavorText: null,
+      releaseOrder: 2,
+      arrivalZoneTitle: null,
+      effects: [],
+    }
+    const created = await request(server)
+      .post('/lab/content/collections/bosque/cards')
+      .send(dimension)
+    expect(created.status).toBe(201)
+    expect(created.body.card).toMatchObject({
+      type: 'dimension',
+      id: 'bosque.bosque-dimensao',
+      releaseOrder: 2,
+    })
+
+    const zone = await request(server)
+      .post('/lab/content/collections/bosque/cards')
+      .send({
+        slug: 'trilha',
+        type: 'zone',
+        title: 'Trilha',
+        zoneType: 'forest',
+        location: 'Bosque',
+        connectionArrows: 2,
+        arrowLayout: 'corner',
+        zoneActions: ['startEvent'],
+        effects: [],
+      })
+    expect(zone.status).toBe(201)
+    expect(zone.body.card.arrowLayout).toBe('corner')
+
+    // `releaseOrder: 1` já é da fixture.test-dimension.
+    const repeated = await request(server)
+      .put('/lab/content/cards/bosque.bosque-dimensao')
+      .send({ ...dimension, releaseOrder: 1 })
+    expect(repeated.status).toBe(400)
+    expect(
+      repeated.body.error.details.fields.map((f: { path: string }) => f.path)
+    ).toContain('releaseOrder')
+  })
+
   it('REQ-43: carta básica com 2 atributos → 400 CONTENT_INVALID no campo attributes', async () => {
     const response = await request(ctx.app.getHttpServer())
       .post('/lab/content/collections/bosque/cards')

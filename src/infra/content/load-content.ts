@@ -123,7 +123,10 @@ export async function loadContent(
   for (const issue of checkCatalogIntegrity({
     collections,
     cards: cards.map(({ card }) => card),
-    classes: classes.map(({ classDefinition }) => classDefinition),
+    classes: classes.map(({ status, classDefinition }) => ({
+      ...classDefinition,
+      status,
+    })),
   })) {
     if (issue.playerClass !== undefined) {
       problems.push({

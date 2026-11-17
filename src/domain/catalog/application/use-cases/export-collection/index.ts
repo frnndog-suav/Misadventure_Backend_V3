@@ -10,7 +10,7 @@ export type TExportCollectionUseCaseResponse = Either<
   { file: TCollectionExport }
 >
 
-/** REQ-48: todas as cartas, de todos os status, por id; `classes` vazio até a FEAT-06 (D-53). */
+/** REQ-48: todas as cartas, de todos os status, por id, e as classes da coleção por `playerClass`. */
 export class ExportCollectionUseCase {
   constructor(private readonly contentStore: ContentStore) {}
 
@@ -33,7 +33,18 @@ export class ExportCollectionUseCase {
         cards: [...entries].sort((a, b) =>
           a.card.id < b.card.id ? -1 : a.card.id > b.card.id ? 1 : 0
         ),
-        classes: [],
+        classes: (await this.contentStore.listEditorClasses())
+          .filter(
+            ({ classDefinition }) =>
+              classDefinition.collectionId === collectionId
+          )
+          .sort((a, b) =>
+            a.classDefinition.playerClass < b.classDefinition.playerClass
+              ? -1
+              : a.classDefinition.playerClass > b.classDefinition.playerClass
+                ? 1
+                : 0
+          ),
       },
     })
   }

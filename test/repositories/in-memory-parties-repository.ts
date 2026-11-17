@@ -29,6 +29,20 @@ export class InMemoryPartiesRepository implements PartiesRepository {
   async delete(party: Party): Promise<void> {
     this.items = this.items.filter((item) => !item.id.equals(party.id))
   }
+
+  async findContentInUse(): Promise<{
+    cardIds: ReadonlySet<string>
+    playerClasses: ReadonlySet<string>
+  }> {
+    const cardIds = new Set<string>()
+    const playerClasses = new Set<string>()
+    for (const item of this.items) {
+      const inUse = item.contentInUse()
+      inUse.cardIds.forEach((id) => cardIds.add(id))
+      inUse.playerClasses.forEach((id) => playerClasses.add(id))
+    }
+    return { cardIds, playerClasses }
+  }
 }
 
 function snapshot(party: Party): Party {

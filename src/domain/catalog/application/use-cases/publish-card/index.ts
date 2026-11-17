@@ -1,5 +1,6 @@
 import { type Either, left, right } from '@/core/error/either'
 import { ContentStore } from '@/domain/catalog/application/repositories/content-store'
+import { loadOtherDimensions } from '@/domain/catalog/application/use-cases/_shared/other-dimensions'
 import { CardNotFoundError } from '@/domain/catalog/application/use-cases/_errors/card-not-found-error'
 import { CollectionNotFoundError } from '@/domain/catalog/application/use-cases/_errors/collection-not-found-error'
 import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_errors/content-invalid-error'
@@ -32,7 +33,13 @@ export class PublishCardUseCase {
       .map((entry) => entry.card)
       .filter((other) => other.id !== card.id)
 
-    const issues = validateCandidate(collection, others, card, card.id)
+    const issues = validateCandidate(
+      collection,
+      others,
+      card,
+      card.id,
+      await loadOtherDimensions(this.contentStore, card.collectionId)
+    )
     if (issues.length > 0) return left(new ContentInvalidError(issues))
 
     await this.contentStore.saveCard(card, 'published')

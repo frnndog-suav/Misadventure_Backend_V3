@@ -1,6 +1,7 @@
 import { type Either, left, right } from '@/core/error/either'
 import { CardInputParser } from '@/domain/catalog/application/repositories/card-input-parser'
 import { ContentStore } from '@/domain/catalog/application/repositories/content-store'
+import { loadOtherDimensions } from '@/domain/catalog/application/use-cases/_shared/other-dimensions'
 import { CollectionNotFoundError } from '@/domain/catalog/application/use-cases/_errors/collection-not-found-error'
 import { ContentIdTakenError } from '@/domain/catalog/application/use-cases/_errors/content-id-taken-error'
 import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_errors/content-invalid-error'
@@ -45,7 +46,13 @@ export class CreateCardUseCase {
       (entry) => entry.card
     )
 
-    const issues = validateCandidate(collection, others, card)
+    const issues = validateCandidate(
+      collection,
+      others,
+      card,
+      undefined,
+      await loadOtherDimensions(this.contentStore, collectionId)
+    )
     if (issues.length > 0) return left(new ContentInvalidError(issues))
 
     if (await this.contentStore.findEditorCard(card.id)) {

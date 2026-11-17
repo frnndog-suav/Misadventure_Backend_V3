@@ -8,4 +8,9 @@ export abstract class PartiesRepository {
   /** Sem ordem garantida: a ordem é do caso de uso (REQ-18). */
   abstract findAll(): Promise<Party[]>
   abstract delete(party: Party): Promise<void>
+  /** União do conteúdo usado por todos os saves (REQ-39); o editor consulta antes de excluir. */
+  abstract findContentInUse(): Promise<{
+    cardIds: ReadonlySet<string>
+    playerClasses: ReadonlySet<string>
+  }>
 }

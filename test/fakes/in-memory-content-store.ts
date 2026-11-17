@@ -8,16 +8,17 @@ import type {
   TContentCollection,
   TContentStatus,
   TEditorCard,
+  TEditorClass,
 } from '@/domain/catalog/enterprise/value-objects/content'
 
 /**
  * Conteúdo em memória: serve o editor (`ContentStore`) e o catálogo
- * (`CardCatalog`, só com as cartas publicadas, REQ-41).
+ * (`CardCatalog`, só com o publicado, REQ-41).
  */
 export class InMemoryContentStore implements ContentStore, CardCatalog {
   public collections: TContentCollection[] = []
   public cards: TEditorCard[] = []
-  public classes: TClassDefinition[] = []
+  public classes: TEditorClass[] = []
 
   // ContentStore
 
@@ -39,6 +40,18 @@ export class InMemoryContentStore implements ContentStore, CardCatalog {
     return this.cards.find((entry) => entry.card.id === id) ?? null
   }
 
+  async listEditorClasses(): Promise<TEditorClass[]> {
+    return [...this.classes]
+  }
+
+  async findEditorClass(playerClass: string): Promise<TEditorClass | null> {
+    return (
+      this.classes.find(
+        (entry) => entry.classDefinition.playerClass === playerClass
+      ) ?? null
+    )
+  }
+
   async createCollection(collection: TContentCollection): Promise<void> {
     this.collections.push(collection)
   }
@@ -54,6 +67,9 @@ export class InMemoryContentStore implements ContentStore, CardCatalog {
       (collection) => collection.id !== id
     )
     this.cards = this.cards.filter((entry) => entry.card.collectionId !== id)
+    this.classes = this.classes.filter(
+      (entry) => entry.classDefinition.collectionId !== id
+    )
   }
 
   async saveCard(
@@ -71,13 +87,38 @@ export class InMemoryContentStore implements ContentStore, CardCatalog {
     this.cards = this.cards.filter((entry) => entry.card.id !== id)
   }
 
+  async saveClass(
+    definition: TClassDefinition,
+    status: TContentStatus,
+    replacedPlayerClass?: string
+  ): Promise<void> {
+    const oldId = replacedPlayerClass ?? definition.playerClass
+    const index = this.classes.findIndex(
+      (entry) => entry.classDefinition.playerClass === oldId
+    )
+    const entry = { status, classDefinition: definition }
+    if (index === -1) this.classes.push(entry)
+    else this.classes[index] = entry
+  }
+
+  async deleteClass(playerClass: string): Promise<void> {
+    this.classes = this.classes.filter(
+      (entry) => entry.classDefinition.playerClass !== playerClass
+    )
+  }
+
   async importCollection(
-    file: { collection: TContentCollection; cards: readonly TEditorCard[] },
+    file: {
+      collection: TContentCollection
+      cards: readonly TEditorCard[]
+      classes: readonly TEditorClass[]
+    },
     replace: boolean
   ): Promise<void> {
     if (replace) await this.deleteCollection(file.collection.id)
     this.collections.push(file.collection)
     this.cards.push(...file.cards)
+    this.classes.push(...file.classes)
   }
 
   // CardCatalog: só as publicadas (REQ-41)
@@ -97,14 +138,16 @@ export class InMemoryContentStore implements ContentStore, CardCatalog {
     return entry?.status === 'published' ? entry.card : null
   }
 
-  // Classes no editor (rascunho/publicada) entram na T-18.
   async listClasses(): Promise<TClassDefinition[]> {
-    return [...this.classes]
+    return this.classes
+      .filter((entry) => entry.status === 'published')
+      .map((entry) => entry.classDefinition)
   }
 
   async findClass(playerClass: string): Promise<TClassDefinition | null> {
-    return (
-      this.classes.find((entry) => entry.playerClass === playerClass) ?? null
+    const entry = this.classes.find(
+      (current) => current.classDefinition.playerClass === playerClass
     )
+    return entry?.status === 'published' ? entry.classDefinition : null
   }
 }

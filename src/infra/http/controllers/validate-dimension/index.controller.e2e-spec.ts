@@ -40,6 +40,21 @@ describe('POST /lab/content/collections/:collectionId/validate-dimension (e2e)',
     )
   })
 
+  it('REQ-36: bosque sem zonas nem Carta de Dimensão → os dois problemas', async () => {
+    const response = await request(ctx.app.getHttpServer()).post(
+      '/lab/content/collections/bosque/validate-dimension'
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.body.valid).toBe(false)
+    expect(response.body.problems).toEqual(
+      expect.arrayContaining([
+        'A coleção precisa de 1 Carta de Dimensão publicada.',
+        'A coleção precisa de pelo menos 1 zona Urbana publicada.',
+      ])
+    )
+  })
+
   it('REQ-47: coleção inexistente → 404 COLLECTION_NOT_FOUND', async () => {
     const response = await request(ctx.app.getHttpServer()).post(
       '/lab/content/collections/nope/validate-dimension'
