@@ -100,6 +100,7 @@ TypeScript, NestJS, Drizzle ORM, PostgreSQL, Docker Compose, Vitest, Supertest; 
 - **Verificação:** cada tarefa é verificada pelos testes, por comando (`curl`/`client.http`) e pelo roteiro de testes. Nenhum endpoint de depuração fora do laboratório.
 - **Commits:** o autor faz. O agente só sugere a mensagem, sempre **em inglês**, no formato `type/short description in lowercase` (ex.: `chore/backend foundation`).
 - **Docker (manual, só o autor):** o agente **nunca** abre ou fecha o Docker Desktop nem roda/para containers (`docker compose up/down/start/stop/restart/build`, `docker run/stop`). Quando algo precisar do Docker (e2e, migração, roteiro de testes), **pare e peça ao autor**: abrir o Docker Desktop e qual comando rodar (ex.: `docker compose up -d postgres`); ao terminar, diga o que ele pode derrubar. Comandos só de leitura (`docker compose ps`, `docker compose logs`) são permitidos para conferir o estado.
+- **Servidor do backend (manual, só o autor; 2026-11-17):** o agente **nunca** sobe nem para o backend (`npm run start:dev`, `npm run start`, `node dist/...`) nem encerra processos dele. Quando precisar do servidor no ar (roteiro de testes, `curl`, validação do frontend), **pare e peça ao autor**, como no Docker: qual comando rodar (ex.: `npm run start:dev`), a URL e como conferir (`curl http://localhost:3333/health`); ao terminar, diga o que ele pode parar. Testes (`npm test`, `npm run test:e2e`) continuam com o agente. Ler o estado é permitido (ex.: `netstat` na porta, `curl` no servidor que o autor subiu).
 - **Datas** absolutas (AAAA-MM-DD) em tudo o que é registrado.
 
 ## Guardas automáticas
@@ -111,7 +112,7 @@ TypeScript, NestJS, Drizzle ORM, PostgreSQL, Docker Compose, Vitest, Supertest; 
 
 ```
 docker compose up -d        # o autor roda (ver "Docker" acima)
-npm run start:dev
+npm run start:dev           # o autor roda (ver "Servidor do backend" acima)
 npm test
 npx vitest related --run <arquivos>
 npm run test:e2e

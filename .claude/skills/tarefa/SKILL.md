@@ -57,7 +57,7 @@ Sem endpoints de depuração. Diga o comando ou request (`curl`/`client.http`) q
 3. **/registrar-etapa**.
 4. Responda com:
    - o que foi feito (curto);
-   - **Roteiro de testes** (obrigatório): passos numerados com pré-requisitos (o que o autor abre/roda no Docker, ex.: Docker Desktop + `docker compose up -d`; `.env`), o comando ou request exato e a resposta esperada (status e corpo). Pelo menos um caso de erro. **Execute cada passo antes** e copie o resultado real (se precisar do Docker, peça ao autor para abrir o Docker Desktop e subir o container antes; nunca suba nem derrube por conta própria);
+   - **Roteiro de testes** (obrigatório): passos numerados com pré-requisitos (o que o autor abre/roda no Docker, ex.: Docker Desktop + `docker compose up -d`; `.env`), o comando ou request exato e a resposta esperada (status e corpo). Pelo menos um caso de erro. **Execute cada passo antes** e copie o resultado real (se precisar do Docker, peça ao autor para abrir o Docker Desktop e subir o container antes; nunca suba nem derrube por conta própria; o mesmo vale para o servidor do backend: peça ao autor para rodar `npm run start:dev` e confirmar, e nunca o suba nem encerre o processo você mesmo);
    - tabela critério → teste;
    - decisões registradas;
    - resultado dos checks;

@@ -36,3 +36,7 @@ AVISO DE FRONTEND — FEAT-07 emitido (CONTRATO v0.29, ROADMAP v0.33). O FE vali
 
 ## Commit sugerido
 `feat/feat-07 actions route`
+
+## Revisão 2026-11-17
+- O FE achou o `/health` com `contractVersion "0.26"` e `/actions` com 404. Havia duas causas: `src/infra/http/contract-version.ts` não tinha acompanhado as versões 0.27 a 0.29 (corrigido para `'0.29'`), e um processo antigo (`node dist/infra/main`) ocupava a porta 3333. Esse processo foi encerrado a pedido do autor.
+- Convenção nova do autor: o agente nunca sobe nem para o servidor do backend. Foi registrada em `CLAUDE.md` (Convenções), `.claude/skills/{tarefa,contrato}/SKILL.md` e `.claude/agents/infra-dev.md`. A `/contrato` agora confere `CONTRACT_VERSION` ao subir a versão.

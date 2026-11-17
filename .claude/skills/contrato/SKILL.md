@@ -53,7 +53,7 @@ Traga de volta: <a resposta do frontend | o resultado da validação | nada>
 Enquanto isso, aqui: <o que segue / o que fica bloqueado>
 ```
 
-Para `implementado (BE)`, o aviso inclui como o autor sobe o backend (abrir o Docker Desktop, `docker compose up -d`; o agente não sobe), `npm run start:dev`, URL, dados de teste/seed dos cenários).
+Para `implementado (BE)`, o aviso inclui como o autor sobe o backend (abrir o Docker Desktop, `docker compose up -d`; o agente não sobe), `npm run start:dev` (o autor roda; o agente nunca sobe o servidor), URL, conferência por `curl <URL>/health` (`contractVersion` igual à versão do contrato; confira que `src/infra/http/contract-version.ts` acompanhou a subida), dados de teste/seed dos cenários).
 
 4. **O que você faz agora** (lista para o autor): commit com a mensagem sugerida (`tipo/descrição curta em minúsculas`), copiar os arquivos para o frontend, e se deve esperar o retorno antes de seguir aqui.
 
