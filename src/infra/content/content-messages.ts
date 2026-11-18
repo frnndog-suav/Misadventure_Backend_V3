@@ -45,6 +45,15 @@ const CATALOG_MESSAGES: Record<TCatalogIssueReason, string> = {
   starterDeckLockNotMet:
     'O deck pré-pronto precisa cumprir a trava da classe (padrão).',
   starterDeckCopyLimit: `Carta sinérgica ou aprimorada pode ter no máximo ${GAME_CONFIG_DEFAULTS.maxCopiesPerCard} cópias no deck pré-pronto.`,
+  toolKindOnlyForTools:
+    'Só item da categoria Ferramenta tem tipo de ferramenta.',
+  scavengeZoneTypesRequired:
+    'Ferramenta precisa de pelo menos 1 tipo de zona onde vasculha.',
+  scavengeZoneTypesNotAllowed:
+    'Só ferramenta (com tipo de ferramenta) tem tipos de zona para vasculhar.',
+  notKebabCase: 'Use só letras minúsculas, números e hífens.',
+  notARewardCard:
+    'O deck de recompensas só tem cartas de atributo, equipamento ou item.',
 }
 
 /** Relatório de REQ-11 (o arquivo e a carta já localizam o problema). */
@@ -102,6 +111,8 @@ export function contentIssueMessage(issue: TContentIssue): string {
       return 'A carta precisa ser da coleção do arquivo.'
     case 'starterDeckCardNotPublished':
       return 'Toda carta do deck pré-pronto precisa estar publicada.'
+    case 'rewardDeckCardNotPublished':
+      return 'Toda carta do deck de recompensas precisa estar publicada.'
     case 'invalidReplace':
       return 'Use true ou false.'
     case 'invalidFormat':
@@ -133,6 +144,11 @@ export function contentIssueMessage(issue: TContentIssue): string {
     case 'starterDeckSize':
     case 'starterDeckLockNotMet':
     case 'starterDeckCopyLimit':
+    case 'toolKindOnlyForTools':
+    case 'scavengeZoneTypesRequired':
+    case 'scavengeZoneTypesNotAllowed':
+    case 'notKebabCase':
+    case 'notARewardCard':
       return CATALOG_MESSAGES[reason]
     default: {
       const _exhaustive: never = reason

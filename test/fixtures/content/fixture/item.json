@@ -1,12 +1,39 @@
 [
   {
+    "id": "fixture.fishing-rod",
+    "name": "Vara de Pesca",
+    "flavorText": null,
+    "rarity": "common",
+    "itemCategory": "tool",
+    "tags": ["ferramenta"],
+    "effects": [{ "text": "Permite pescar." }],
+    "toolKind": "fishing-rod",
+    "scavengeZoneTypes": ["coastal", "fluvial", "lacustrine", "urban"],
+    "scavengeTool": null
+  },
+  {
     "id": "fixture.healing-potion",
     "name": "Poção de Cura",
     "flavorText": null,
     "rarity": "common",
     "itemCategory": "consumable",
     "tags": ["poção"],
-    "effects": [{ "text": "Recupera 5 de vida." }]
+    "effects": [{ "text": "Recupera 5 de vida." }],
+    "toolKind": null,
+    "scavengeZoneTypes": [],
+    "scavengeTool": null
+  },
+  {
+    "id": "fixture.iron-ore",
+    "name": "Minério de Ferro",
+    "flavorText": null,
+    "rarity": "common",
+    "itemCategory": "material",
+    "tags": ["minério"],
+    "effects": [],
+    "toolKind": null,
+    "scavengeZoneTypes": [],
+    "scavengeTool": "pickaxe"
   },
   {
     "id": "fixture.pickaxe",
@@ -15,6 +42,21 @@
     "rarity": "common",
     "itemCategory": "tool",
     "tags": ["ferramenta"],
-    "effects": [{ "text": "Permite minerar." }]
+    "effects": [{ "text": "Permite minerar." }],
+    "toolKind": "pickaxe",
+    "scavengeZoneTypes": ["underground", "mountainous"],
+    "scavengeTool": null
+  },
+  {
+    "id": "fixture.silver-fish",
+    "name": "Peixe Prateado",
+    "flavorText": null,
+    "rarity": "common",
+    "itemCategory": "material",
+    "tags": ["peixe"],
+    "effects": [],
+    "toolKind": null,
+    "scavengeZoneTypes": [],
+    "scavengeTool": "fishing-rod"
   }
 ]

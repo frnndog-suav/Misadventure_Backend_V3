@@ -250,6 +250,8 @@ export type TEquipmentCard = Readonly<{
   refinement: Readonly<{ maxLevel: number; materials: TRuleText }> | null
   enchantment: TRuleText | null
   priceMultiplier: number
+  /** D-86: `toolKind` da ferramenta que coleta esta carta (README 12.6). */
+  scavengeTool: string | null
 }>
 
 export type TItemCard = Readonly<{
@@ -262,6 +264,12 @@ export type TItemCard = Readonly<{
   itemCategory: TItemCategory
   tags: readonly string[]
   effects: readonly TRuleText[]
+  /** D-86: só em `tool` (`kebab-case`); senão `null`. */
+  toolKind: string | null
+  /** D-86: zonas onde a ferramenta vasculha; não vazia se e só se `toolKind`. */
+  scavengeZoneTypes: readonly TZoneType[]
+  /** D-86: `toolKind` da ferramenta que coleta esta carta. */
+  scavengeTool: string | null
 }>
 
 export type TRandomEventCard = Readonly<{
@@ -303,6 +311,12 @@ export type TCombatEventCard = Readonly<{
   noEscape: boolean
 }>
 
+/** README 3.4, D-74: composição do deck de recompensas de um tipo de zona. */
+export type TRewardDeck = Readonly<{
+  zoneType: TZoneType
+  cards: readonly Readonly<{ cardId: string; copies: number }>[]
+}>
+
 /** README 3.2, mínima (D-39): as zonas da dimensão são as da sua coleção. */
 export type TDimensionCard = Readonly<{
   type: 'dimension'
@@ -313,6 +327,7 @@ export type TDimensionCard = Readonly<{
   releaseOrder: number
   arrivalZoneTitle: string | null
   effects: readonly TRuleText[]
+  rewardDecks: readonly TRewardDeck[]
 }>
 
 export type TCard =

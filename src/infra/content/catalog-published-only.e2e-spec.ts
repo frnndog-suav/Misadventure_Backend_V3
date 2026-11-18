@@ -42,6 +42,9 @@ describe('Catálogo só com publicadas (e2e)', () => {
           itemCategory: 'consumable',
           tags: [],
           effects: [{ text: 'Cura 3.' }],
+          toolKind: null,
+          scavengeZoneTypes: [],
+          scavengeTool: null,
           status: 'draft',
         },
       ])

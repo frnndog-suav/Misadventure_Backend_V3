@@ -48,6 +48,16 @@ describe('GET /catalog/cards/:cardId (e2e)', () => {
       releaseOrder: 1,
       arrivalZoneTitle: 'Porto Cinzento',
       effects: [],
+      rewardDecks: [
+        {
+          zoneType: 'urban',
+          cards: [
+            { cardId: 'fixture.silver-fish', copies: 1 },
+            { cardId: 'fixture.iron-ore', copies: 1 },
+            { cardId: 'fixture.healing-potion', copies: 2 },
+          ],
+        },
+      ],
     })
   })
 

@@ -8,6 +8,7 @@ import {
   type TCardInput,
   type TContentCollection,
   type TContentIssue,
+  type TContentStatus,
 } from '@/domain/catalog/enterprise/value-objects/content'
 
 /** `<coleção>.<slug>` (D-22). */
@@ -49,13 +50,16 @@ export function sortByCardId<T extends { readonly id: string }>(
  * `otherDimensions` = as Cartas de Dimensão das outras coleções: o
  * `releaseOrder` é único no catálogo todo (REQ-26); vão antes das da coleção
  * para a duplicata recair sobre a candidata.
+ * `referenceCards` = as cartas das outras coleções, só para achar as citadas
+ * em `rewardDecks` (REQ-82, D-91).
  */
 export function validateCandidate(
   collection: TContentCollection,
   others: readonly TCard[],
   candidate: TCard,
   replacedId?: string,
-  otherDimensions: readonly TDimensionCard[] = []
+  otherDimensions: readonly TDimensionCard[] = [],
+  referenceCards: readonly TCard[] = []
 ): TContentIssue[] {
   const issues: TContentIssue[] = []
 
@@ -77,6 +81,7 @@ export function validateCandidate(
   for (const issue of checkCatalogIntegrity({
     collections: [collection],
     cards: [...otherDimensions, ...cards],
+    referenceCards,
   })) {
     if (issue.cardId !== candidate.id) continue
     // `id` e `collectionId` saem do `slug` e da rota, não do corpo.
@@ -85,4 +90,43 @@ export function validateCandidate(
   }
 
   return issues
+}
+
+/**
+ * REQ-82: ao publicar (ou editar publicada), cada carta citada em
+ * `rewardDecks` precisa estar `published`. `statusById` = status das cartas
+ * de todas as coleções; carta ausente já é `unknownCard` da integridade.
+ */
+export function rewardDeckPublicationIssues(
+  candidate: TCard,
+  statusById: ReadonlyMap<string, TContentStatus>
+): TContentIssue[] {
+  if (candidate.type !== 'dimension') return []
+  const issues: TContentIssue[] = []
+  candidate.rewardDecks.forEach((deck, index) => {
+    deck.cards.forEach((entry, cardIndex) => {
+      const status = statusById.get(entry.cardId)
+      if (status !== undefined && status !== 'published') {
+        issues.push({
+          path: `rewardDecks.${index}.cards.${cardIndex}.cardId`,
+          reason: 'rewardDeckCardNotPublished',
+        })
+      }
+    })
+  })
+  return issues
+}
+
+/** REQ-82: alguma Carta de Dimensão cita uma destas cartas em `rewardDecks`? */
+export function isCitedInRewardDeck(
+  cards: readonly TCard[],
+  cardIds: ReadonlySet<string>
+): boolean {
+  return cards.some(
+    (card) =>
+      card.type === 'dimension' &&
+      card.rewardDecks.some((deck) =>
+        deck.cards.some((entry) => cardIds.has(entry.cardId))
+      )
+  )
 }

@@ -6,7 +6,7 @@
     "location": "Costa Cinzenta",
     "connectionArrows": 4,
     "arrowLayout": null,
-    "zoneActions": ["startEvent", "useVault", "saveRespawnPoint"],
+    "zoneActions": ["startEvent", "scavenge", "useVault", "saveRespawnPoint"],
     "effects": []
   },
   {

@@ -9,7 +9,9 @@ import {
   type TClassDefinition,
   type TCollection,
   type TCombatEventCard,
+  type TDimensionCard,
   type TEquipmentCard,
+  type TItemCard,
   type TZoneCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
@@ -48,6 +50,13 @@ export type TCatalogIssueReason =
   | 'starterDeckLockNotMet'
   // REQ-61
   | 'starterDeckCopyLimit'
+  // REQ-81
+  | 'toolKindOnlyForTools'
+  | 'scavengeZoneTypesRequired'
+  | 'scavengeZoneTypesNotAllowed'
+  | 'notKebabCase'
+  // REQ-82
+  | 'notARewardCard'
 
 export type TCatalogIssue = {
   collectionId: string
@@ -70,6 +79,11 @@ export type TCatalogContent = {
   cards: readonly TCard[]
   /** Classes (D-40); ausente = nenhuma. */
   classes?: readonly TClassEntry[]
+  /**
+   * Cartas de fora do conjunto conferido, só para achar as citadas em
+   * `rewardDecks` (REQ-82, D-91); elas mesmas não são conferidas.
+   */
+  referenceCards?: readonly TCard[]
 }
 
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/
@@ -86,6 +100,7 @@ export function checkCatalogIntegrity({
   collections,
   cards,
   classes = [],
+  referenceCards = [],
 }: TCatalogContent): TCatalogIssue[] {
   const issues: TCatalogIssue[] = []
 
@@ -115,6 +130,9 @@ export function checkCatalogIntegrity({
   const zoneTitles = new Set<string>()
   const dimensionCollections = new Set<string>()
   const releaseOrders = new Set<number>()
+  const cardsById = new Map(
+    [...referenceCards, ...cards].map((card) => [card.id, card])
+  )
 
   for (const card of cards) {
     const report: TReport = (field, reason) =>
@@ -156,6 +174,8 @@ export function checkCatalogIntegrity({
         break
       case 'item':
         checkNoDuplicates(card.tags, 'tags', report)
+        checkTool(card, report)
+        checkKebab(card.scavengeTool, 'scavengeTool', report)
         break
       case 'randomEvent':
         if (card.requirements.length === 0) report('requirements', 'empty')
@@ -175,6 +195,7 @@ export function checkCatalogIntegrity({
           report('releaseOrder', 'duplicateValue')
         }
         releaseOrders.add(card.releaseOrder)
+        checkRewardDecks(card, cardsById, report)
         break
       default: {
         const _exhaustive: never = card
@@ -393,6 +414,67 @@ function checkEquipment(card: TEquipmentCard, report: TReport): void {
   }
 
   checkNoDuplicates(card.tags, 'tags', report)
+  checkKebab(card.scavengeTool, 'scavengeTool', report)
+}
+
+/** README 12.6, D-86: ferramenta = item `tool` com `toolKind` e zonas. */
+function checkTool(card: TItemCard, report: TReport): void {
+  if (card.toolKind !== null && card.itemCategory !== 'tool') {
+    report('toolKind', 'toolKindOnlyForTools')
+  }
+  checkKebab(card.toolKind, 'toolKind', report)
+  if (card.toolKind === null && card.scavengeZoneTypes.length > 0) {
+    report('scavengeZoneTypes', 'scavengeZoneTypesNotAllowed')
+  } else if (card.toolKind !== null && card.scavengeZoneTypes.length === 0) {
+    report('scavengeZoneTypes', 'scavengeZoneTypesRequired')
+  }
+  checkNoDuplicates(card.scavengeZoneTypes, 'scavengeZoneTypes', report)
+}
+
+function checkKebab(value: string | null, field: string, report: TReport) {
+  if (value !== null && !SLUG.test(value)) report(field, 'notKebabCase')
+}
+
+/** README 3.4, D-74 (REQ-82). As cartas citadas são procuradas em `cardsById`. */
+function checkRewardDecks(
+  card: TDimensionCard,
+  cardsById: ReadonlyMap<string, TCard>,
+  report: TReport
+): void {
+  const zoneTypes = new Set<string>()
+  card.rewardDecks.forEach((deck, index) => {
+    const path = `rewardDecks[${index}]`
+    if (zoneTypes.has(deck.zoneType))
+      report(`${path}.zoneType`, 'duplicateValue')
+    zoneTypes.add(deck.zoneType)
+    if (deck.cards.length === 0) report(`${path}.cards`, 'empty')
+    checkNoDuplicates(
+      deck.cards.map((entry) => entry.cardId),
+      `${path}.cards`,
+      report
+    )
+    deck.cards.forEach((entry, cardIndex) => {
+      const entryPath = `${path}.cards[${cardIndex}]`
+      const cited = cardsById.get(entry.cardId)
+      if (!cited) {
+        report(`${entryPath}.cardId`, 'unknownCard')
+      } else if (!isRewardCard(cited)) {
+        report(`${entryPath}.cardId`, 'notARewardCard')
+      }
+      if (!isIntegerBetween(entry.copies, 1, Infinity)) {
+        report(`${entryPath}.copies`, 'outOfRange')
+      }
+    })
+  })
+}
+
+/** Tipos que entram em deck de recompensas (REQ-82). */
+export function isRewardCard(card: TCard): boolean {
+  return (
+    card.type === 'attribute' ||
+    card.type === 'equipment' ||
+    card.type === 'item'
+  )
 }
 
 /** README 14.1, 18.1 */

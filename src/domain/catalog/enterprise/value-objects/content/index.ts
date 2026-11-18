@@ -87,6 +87,7 @@ export type TContentIssueReason =
   | 'unsupportedFormatVersion'
   | 'collectionMismatch'
   | 'starterDeckCardNotPublished'
+  | 'rewardDeckCardNotPublished'
   | 'invalidReplace'
   | 'invalidFormat'
 

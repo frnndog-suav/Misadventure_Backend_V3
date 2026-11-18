@@ -4,6 +4,7 @@ import type {
   TCard,
   TClassDefinition,
   TCollection,
+  TRewardDeck,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import {
   makeAttributeCard,
@@ -951,6 +952,145 @@ describe('REQ-26/REQ-38: classe em rascunho (D-57b)', () => {
       'duplicateId',
       'duplicateName',
       'essentialAttributeCount',
+    ])
+  })
+})
+
+describe('REQ-81: ferramentas e cartas coletáveis (12.6, D-86)', () => {
+  const tool = (override: Parameters<typeof makeItemCard>[0] = {}) =>
+    makeItemCard({
+      id: 'fixture.pickaxe',
+      itemCategory: 'tool',
+      toolKind: 'pickaxe',
+      scavengeZoneTypes: ['underground', 'mountainous'],
+      ...override,
+    })
+
+  const fields = (cards: TCard[]) =>
+    check(cards).map((issue) => [issue.field, issue.reason])
+
+  it('REQ-81: ferramenta e coletáveis válidos não têm problemas', () => {
+    expect(
+      check([
+        tool(),
+        makeItemCard({
+          id: 'fixture.iron-ore',
+          itemCategory: 'material',
+          scavengeTool: 'pickaxe',
+        }),
+        makeEquipmentCard({ scavengeTool: 'pickaxe' }),
+      ])
+    ).toEqual([])
+  })
+
+  it('REQ-81: toolKind fora de itemCategory tool', () => {
+    expect(
+      fields([
+        makeItemCard({ toolKind: 'pickaxe', scavengeZoneTypes: ['urban'] }),
+      ])
+    ).toEqual([['toolKind', 'toolKindOnlyForTools']])
+  })
+
+  it('REQ-81: scavengeZoneTypes preenchida sem toolKind', () => {
+    expect(fields([makeItemCard({ scavengeZoneTypes: ['urban'] })])).toEqual([
+      ['scavengeZoneTypes', 'scavengeZoneTypesNotAllowed'],
+    ])
+  })
+
+  it('REQ-81: scavengeZoneTypes vazia com toolKind preenchido', () => {
+    expect(fields([tool({ scavengeZoneTypes: [] })])).toEqual([
+      ['scavengeZoneTypes', 'scavengeZoneTypesRequired'],
+    ])
+  })
+
+  it('REQ-81: tipo de zona repetido', () => {
+    expect(fields([tool({ scavengeZoneTypes: ['urban', 'urban'] })])).toEqual([
+      ['scavengeZoneTypes', 'duplicateValue'],
+    ])
+  })
+
+  it('REQ-81: toolKind e scavengeTool fora de kebab-case', () => {
+    expect(
+      fields([
+        tool({ toolKind: 'Pick Axe' }),
+        makeItemCard({ id: 'fixture.ore', scavengeTool: 'pick_axe' }),
+        makeEquipmentCard({ scavengeTool: '-x' }),
+      ])
+    ).toEqual([
+      ['toolKind', 'notKebabCase'],
+      ['scavengeTool', 'notKebabCase'],
+      ['scavengeTool', 'notKebabCase'],
+    ])
+  })
+})
+
+describe('REQ-82: decks de recompensas na Carta de Dimensão (3.4, D-74)', () => {
+  const potion = makeItemCard()
+  const dimension = (rewardDecks: TRewardDeck[]) =>
+    makeDimensionCard({ rewardDecks })
+  const fields = (rewardDecks: TRewardDeck[], extra: TCard[] = [potion]) =>
+    check([dimension(rewardDecks), ...extra]).map((issue) => [
+      issue.field,
+      issue.reason,
+    ])
+
+  it('REQ-82: composição válida (carta repetida entre tipos de zona) não tem problemas', () => {
+    expect(
+      fields([
+        { zoneType: 'urban', cards: [{ cardId: potion.id, copies: 2 }] },
+        { zoneType: 'forest', cards: [{ cardId: potion.id, copies: 1 }] },
+      ])
+    ).toEqual([])
+  })
+
+  it('REQ-82: zoneType repetido', () => {
+    expect(
+      fields([
+        { zoneType: 'urban', cards: [{ cardId: potion.id, copies: 1 }] },
+        { zoneType: 'urban', cards: [{ cardId: potion.id, copies: 1 }] },
+      ])
+    ).toEqual([['rewardDecks[1].zoneType', 'duplicateValue']])
+  })
+
+  it('REQ-82: deck sem cartas', () => {
+    expect(fields([{ zoneType: 'urban', cards: [] }])).toEqual([
+      ['rewardDecks[0].cards', 'empty'],
+    ])
+  })
+
+  it('REQ-82: cardId repetido no mesmo deck', () => {
+    expect(
+      fields([
+        {
+          zoneType: 'urban',
+          cards: [
+            { cardId: potion.id, copies: 1 },
+            { cardId: potion.id, copies: 1 },
+          ],
+        },
+      ])
+    ).toEqual([['rewardDecks[0].cards', 'duplicateValue']])
+  })
+
+  it('REQ-82: carta inexistente, de tipo que não entra e copies inválido', () => {
+    expect(
+      fields(
+        [
+          {
+            zoneType: 'urban',
+            cards: [
+              { cardId: 'fixture.nope', copies: 1 },
+              { cardId: 'fixture.old-mine', copies: 1 },
+              { cardId: potion.id, copies: 0 },
+            ],
+          },
+        ],
+        [potion, makeZoneCard({ id: 'fixture.old-mine', title: 'Mina Velha' })]
+      )
+    ).toEqual([
+      ['rewardDecks[0].cards[0].cardId', 'unknownCard'],
+      ['rewardDecks[0].cards[1].cardId', 'notARewardCard'],
+      ['rewardDecks[0].cards[2].copies', 'outOfRange'],
     ])
   })
 })

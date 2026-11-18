@@ -94,6 +94,7 @@ export function makeEquipmentCard(
     refinement: { maxLevel: 10, materials: { text: '1 minério de ferro' } },
     enchantment: null,
     priceMultiplier: 1.2,
+    scavengeTool: null,
     ...override,
   }
 }
@@ -109,6 +110,9 @@ export function makeItemCard(override: Partial<TItemCard> = {}): TItemCard {
     itemCategory: 'consumable',
     tags: ['Poção'],
     effects: [{ text: 'Recupere 10 de vida.' }],
+    toolKind: null,
+    scavengeZoneTypes: [],
+    scavengeTool: null,
     ...override,
   }
 }
@@ -194,6 +198,7 @@ export function makeDimensionCard(
     releaseOrder: 1,
     arrivalZoneTitle: 'Porto Cinzento',
     effects: [],
+    rewardDecks: [],
     ...override,
   }
 }

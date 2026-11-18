@@ -4,6 +4,8 @@ import { ContentStore } from '@/domain/catalog/application/repositories/content-
 import { CardNotFoundError } from '@/domain/catalog/application/use-cases/_errors/card-not-found-error'
 import { ContentInUseError } from '@/domain/catalog/application/use-cases/_errors/content-in-use-error'
 import { ContentReferencedError } from '@/domain/catalog/application/use-cases/_errors/content-referenced-error'
+import { loadAllCards } from '@/domain/catalog/application/use-cases/_shared/all-cards'
+import { isCitedInRewardDeck } from '@/domain/catalog/enterprise/card-validation'
 
 export type TDeleteCardUseCaseRequest = { cardId: string }
 
@@ -41,6 +43,14 @@ export class DeleteCardUseCase {
       )
     ) {
       return left(new ContentReferencedError())
+    }
+
+    // REQ-82: citada em `rewardDecks` de alguma Carta de Dimensão.
+    const allCards = (await loadAllCards(this.contentStore)).map(
+      (entry) => entry.card
+    )
+    if (isCitedInRewardDeck(allCards, new Set([cardId]))) {
+      return left(new ContentReferencedError('rewardDeck'))
     }
 
     await this.contentStore.deleteCard(cardId)

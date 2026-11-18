@@ -9,7 +9,14 @@ import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_err
 import { ContentReferencedError } from '@/domain/catalog/application/use-cases/_errors/content-referenced-error'
 import { checkCatalogIntegrity } from '@/domain/catalog/enterprise/catalog-integrity'
 import {
+  cardsOutside,
+  loadAllCards,
+  statusById,
+} from '@/domain/catalog/application/use-cases/_shared/all-cards'
+import {
   buildCard,
+  isCitedInRewardDeck,
+  rewardDeckPublicationIssues,
   sortByCardId,
   toContentPath,
 } from '@/domain/catalog/enterprise/card-validation'
@@ -89,11 +96,35 @@ export class ImportCollectionUseCase {
 
     const collection = this.readCollection(body.collection, issues)
 
+    // REQ-82 (D-91): cartas das outras coleções citadas em `rewardDecks`.
+    const outside = collection
+      ? (await loadAllCards(this.contentStore)).filter(
+          ({ card }) => card.collectionId !== collection.id
+        )
+      : []
+
     let parsedCards: TParsedCard[] = []
     if (!Array.isArray(body.cards)) {
       issues.push({ path: 'cards', reason: 'invalidFormat' })
     } else {
-      parsedCards = this.readCards(body.cards, collection, issues)
+      parsedCards = this.readCards(
+        body.cards,
+        collection,
+        issues,
+        cardsOutside(outside, collection?.id ?? '')
+      )
+      const statuses = statusById([
+        ...outside,
+        ...parsedCards.flatMap(({ card, status }) =>
+          status ? [{ status, card }] : []
+        ),
+      ])
+      for (const { index, card, status } of parsedCards) {
+        if (status !== 'published') continue
+        for (const issue of rewardDeckPublicationIssues(card, statuses)) {
+          issues.push({ ...issue, path: `cards.${index}.card.${issue.path}` })
+        }
+      }
     }
 
     let parsedClasses: TParsedClass[] = []
@@ -161,7 +192,8 @@ export class ImportCollectionUseCase {
       const blocked = await this.checkReplacement(
         collection.id,
         parsedCards.map(({ card }) => card.id),
-        otherClasses
+        otherClasses,
+        outside.map(({ card }) => card)
       )
       if (blocked) return left(blocked)
     }
@@ -199,7 +231,8 @@ export class ImportCollectionUseCase {
   private async checkReplacement(
     collectionId: string,
     keptCardIds: readonly string[],
-    otherClasses: readonly TEditorClass[]
+    otherClasses: readonly TEditorClass[],
+    outsideCards: readonly TCard[]
   ): Promise<ContentInUseError | ContentReferencedError | null> {
     const oldCardIds = (
       await this.contentStore.listEditorCards(collectionId)
@@ -225,6 +258,10 @@ export class ImportCollectionUseCase {
       )
     ) {
       return new ContentReferencedError()
+    }
+    // REQ-82: carta que some e é citada por dimensão de outra coleção.
+    if (isCitedInRewardDeck(outsideCards, removed)) {
+      return new ContentReferencedError('rewardDeck')
     }
     return null
   }
@@ -376,7 +413,8 @@ export class ImportCollectionUseCase {
   private readCards(
     entries: readonly unknown[],
     collection: TCollectionInput | null,
-    issues: TContentIssue[]
+    issues: TContentIssue[],
+    referenceCards: readonly TCard[]
   ): TParsedCard[] {
     const parsedCards: TParsedCard[] = []
     const seenIds = new Set<string>()
@@ -460,6 +498,7 @@ export class ImportCollectionUseCase {
       const integrity = checkCatalogIntegrity({
         collections: [collection],
         cards: sortByCardId(parsedCards.map(({ card }) => card)),
+        referenceCards,
       })
       for (const issue of integrity) {
         if (issue.cardId === null) continue

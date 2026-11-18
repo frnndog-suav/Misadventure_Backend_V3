@@ -1,10 +1,18 @@
 import { type Either, left, right } from '@/core/error/either'
 import { ContentStore } from '@/domain/catalog/application/repositories/content-store'
+import {
+  cardsOutside,
+  loadAllCards,
+  statusById,
+} from '@/domain/catalog/application/use-cases/_shared/all-cards'
 import { loadOtherDimensions } from '@/domain/catalog/application/use-cases/_shared/other-dimensions'
 import { CardNotFoundError } from '@/domain/catalog/application/use-cases/_errors/card-not-found-error'
 import { CollectionNotFoundError } from '@/domain/catalog/application/use-cases/_errors/collection-not-found-error'
 import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_errors/content-invalid-error'
-import { validateCandidate } from '@/domain/catalog/enterprise/card-validation'
+import {
+  rewardDeckPublicationIssues,
+  validateCandidate,
+} from '@/domain/catalog/enterprise/card-validation'
 import type { TEditorCard } from '@/domain/catalog/enterprise/value-objects/content'
 
 export type TPublishCardUseCaseRequest = { cardId: string }
@@ -33,13 +41,19 @@ export class PublishCardUseCase {
       .map((entry) => entry.card)
       .filter((other) => other.id !== card.id)
 
-    const issues = validateCandidate(
-      collection,
-      others,
-      card,
-      card.id,
-      await loadOtherDimensions(this.contentStore, card.collectionId)
-    )
+    const allCards =
+      card.type === 'dimension' ? await loadAllCards(this.contentStore) : []
+    const issues = [
+      ...validateCandidate(
+        collection,
+        others,
+        card,
+        card.id,
+        await loadOtherDimensions(this.contentStore, card.collectionId),
+        cardsOutside(allCards, card.collectionId)
+      ),
+      ...rewardDeckPublicationIssues(card, statusById(allCards)),
+    ]
     if (issues.length > 0) return left(new ContentInvalidError(issues))
 
     await this.contentStore.saveCard(card, 'published')

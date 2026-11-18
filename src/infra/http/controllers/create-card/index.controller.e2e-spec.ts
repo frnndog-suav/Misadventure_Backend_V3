@@ -59,6 +59,7 @@ describe('POST /lab/content/collections/:collectionId/cards (e2e)', () => {
       releaseOrder: 2,
       arrivalZoneTitle: null,
       effects: [],
+      rewardDecks: [],
     }
     const created = await request(server)
       .post('/lab/content/collections/bosque/cards')

@@ -218,9 +218,12 @@ describe('FileContentStore', () => {
     expect(await exists('fixture/combatEvent.json')).toBe(false)
     const items = (await readJson('fixture/item.json')) as { id: string }[]
     expect(items.map((card) => card.id)).toEqual([
+      'fixture.fishing-rod',
       'fixture.healing-potion',
       'fixture.howling-wolves',
+      'fixture.iron-ore',
       'fixture.pickaxe',
+      'fixture.silver-fish',
     ])
   })
 
@@ -465,7 +468,8 @@ describe('FileContentStore', () => {
       'draft'
     )
     await store.saveCard(draft, 'published')
-    await store.deleteCard('fixture.healing-potion')
+    // Carta que nenhum `rewardDecks` cita (REQ-82): o store não confere referências.
+    await store.deleteCard('fixture.pickaxe')
 
     const result = await loadContent(root)
     expect(result.ok ? [] : result.problems).toEqual([])

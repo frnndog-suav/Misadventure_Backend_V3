@@ -100,6 +100,7 @@ const cardSchemas = {
       .nullable(),
     enchantment: ruleText.nullable(),
     priceMultiplier: z.number(),
+    scavengeTool: text.nullable(),
   }),
   item: z.strictObject({
     id,
@@ -109,6 +110,9 @@ const cardSchemas = {
     itemCategory: z.enum(ITEM_CATEGORIES),
     tags: z.array(text),
     effects: z.array(ruleText),
+    toolKind: text.nullable(),
+    scavengeZoneTypes: z.array(z.enum(ZONE_TYPES)),
+    scavengeTool: text.nullable(),
   }),
   randomEvent: z.strictObject({
     id,
@@ -135,6 +139,12 @@ const cardSchemas = {
     releaseOrder: z.number(),
     arrivalZoneTitle: text.nullable(),
     effects: z.array(ruleText),
+    rewardDecks: z.array(
+      z.strictObject({
+        zoneType: z.enum(ZONE_TYPES),
+        cards: z.array(z.strictObject({ cardId: text, copies: z.number() })),
+      })
+    ),
   }),
 } satisfies Record<TCardType, z.ZodType>
 

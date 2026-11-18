@@ -4,6 +4,11 @@ import { ContentStore } from '@/domain/catalog/application/repositories/content-
 import { CollectionNotFoundError } from '@/domain/catalog/application/use-cases/_errors/collection-not-found-error'
 import { ContentInUseError } from '@/domain/catalog/application/use-cases/_errors/content-in-use-error'
 import { ContentReferencedError } from '@/domain/catalog/application/use-cases/_errors/content-referenced-error'
+import {
+  cardsOutside,
+  loadAllCards,
+} from '@/domain/catalog/application/use-cases/_shared/all-cards'
+import { isCitedInRewardDeck } from '@/domain/catalog/enterprise/card-validation'
 
 export type TDeleteCollectionUseCaseRequest = { collectionId: string }
 
@@ -60,6 +65,16 @@ export class DeleteCollectionUseCase {
       )
     ) {
       return left(new ContentReferencedError())
+    }
+
+    // REQ-82: carta dela citada por Carta de Dimensão de outra coleção.
+    if (
+      isCitedInRewardDeck(
+        cardsOutside(await loadAllCards(this.contentStore), collectionId),
+        cardIds
+      )
+    ) {
+      return left(new ContentReferencedError('rewardDeck'))
     }
 
     await this.contentStore.deleteCollection(collectionId)

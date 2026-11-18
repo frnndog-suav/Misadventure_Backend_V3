@@ -1,6 +1,11 @@
 import { type Either, left, right } from '@/core/error/either'
 import { CardInputParser } from '@/domain/catalog/application/repositories/card-input-parser'
 import { ContentStore } from '@/domain/catalog/application/repositories/content-store'
+import {
+  cardsOutside,
+  loadAllCards,
+  statusById,
+} from '@/domain/catalog/application/use-cases/_shared/all-cards'
 import { loadOtherDimensions } from '@/domain/catalog/application/use-cases/_shared/other-dimensions'
 import { CardNotFoundError } from '@/domain/catalog/application/use-cases/_errors/card-not-found-error'
 import { CollectionNotFoundError } from '@/domain/catalog/application/use-cases/_errors/collection-not-found-error'
@@ -10,6 +15,8 @@ import { ContentLockedError } from '@/domain/catalog/application/use-cases/_erro
 import { ContentReferencedError } from '@/domain/catalog/application/use-cases/_errors/content-referenced-error'
 import {
   buildCard,
+  isCitedInRewardDeck,
+  rewardDeckPublicationIssues,
   validateCandidate,
 } from '@/domain/catalog/enterprise/card-validation'
 import type { TEditorCard } from '@/domain/catalog/enterprise/value-objects/content'
@@ -57,13 +64,20 @@ export class ReplaceCardUseCase {
       .map((entry) => entry.card)
       .filter((other) => other.id !== cardId)
 
-    const issues = validateCandidate(
-      collection,
-      others,
-      card,
-      cardId,
-      await loadOtherDimensions(this.contentStore, collectionId)
-    )
+    const allCards = await loadAllCards(this.contentStore)
+    const issues = [
+      ...validateCandidate(
+        collection,
+        others,
+        card,
+        cardId,
+        await loadOtherDimensions(this.contentStore, collectionId),
+        card.type === 'dimension' ? cardsOutside(allCards, collectionId) : []
+      ),
+      ...(current.status === 'published'
+        ? rewardDeckPublicationIssues(card, statusById(allCards))
+        : []),
+    ]
     if (issues.length > 0) return left(new ContentInvalidError(issues))
 
     const renamed = card.id !== cardId
@@ -76,6 +90,14 @@ export class ReplaceCardUseCase {
         )
       ) {
         return left(new ContentReferencedError())
+      }
+      if (
+        isCitedInRewardDeck(
+          allCards.map((entry) => entry.card),
+          new Set([cardId])
+        )
+      ) {
+        return left(new ContentReferencedError('rewardDeck'))
       }
       if (await this.contentStore.findEditorCard(card.id)) {
         return left(
