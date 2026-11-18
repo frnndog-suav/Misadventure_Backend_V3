@@ -20,17 +20,17 @@ Supertest, TDD.
 
 ## Mapa (onde o quê)
 
-| Caminho | O que guarda | Quando leio |
-|---|---|---|
-| `CLAUDE.md` | Constituição deste lado: 16 princípios inegociáveis, fluxos de trabalho (`/tarefa`, `/contrato`…), AVISO DE FRONTEND, convenções, comandos, guardas | Sempre; é a autoridade final |
-| `docs/SPEC-BACKEND.md` | Comportamento do backend: arquitetura, REQs, decisões D, tarefas T (spec-anchored) | Antes e durante qualquer implementação |
-| `docs/README.md` | Regras do jogo (Parte I) e requisitos técnicos (II). **Apêndice B = decisões registradas: não se reabre** | Para entender a regra por trás de um REQ; citar por seção (ex.: `README 19.2`), nunca copiar |
-| `docs/CONTRATO.md` | Contrato com o frontend: §1 convenções, §2 glossário, §4 códigos de erro, seções por FEAT com situação (§0) | Antes de criar/alterar endpoint, campo, evento ou erro; `/contrato` |
-| `docs/ROADMAP.md` | Fases e features (FEAT-nn) dos dois lados; **§2 = protocolo da ponte entre repositórios** | Para situar a FEAT; para regras de sincronização entre os lados |
-| `docs/devlog/` | Registro de cada etapa (formato em `docs/devlog/README.md`) | Antes de alterar funcionalidade: índice + entradas da área + `git log` |
-| `.claude/skills/*/SKILL.md` | Workflows pedidos por nome (`/tarefa T-xx`, `/contrato`, `/mudar-spec`, `/retorno-frontend`, `/checar`, `/testar`, `/registrar-etapa`, `/validar-cartas`) | Quando o autor pedir o fluxo correspondente |
-| `.claude/agents/*.md` | Papéis: `test-writer`, `domain-dev`, `infra-dev`, `spec-reviewer`, `content-author` | Para delegar ou assumir um papel do fluxo |
-| `.claude/hooks/` | Guardas: `domain-guard.mjs` (violações dos princípios 2/3/10) e `tempo.mjs` (registro de tempo) | `domain-guard.mjs --all` roda manualmente; o resto é automático no Claude Code |
+| Caminho                     | O que guarda                                                                                                                                              | Quando leio                                                                                  |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `CLAUDE.md`                 | Constituição deste lado: 16 princípios inegociáveis, fluxos de trabalho (`/tarefa`, `/contrato`…), AVISO DE FRONTEND, convenções, comandos, guardas       | Sempre; é a autoridade final                                                                 |
+| `docs/SPEC-BACKEND.md`      | Comportamento do backend: arquitetura, REQs, decisões D, tarefas T (spec-anchored)                                                                        | Antes e durante qualquer implementação                                                       |
+| `docs/README.md`            | Regras do jogo (Parte I) e requisitos técnicos (II). **Apêndice B = decisões registradas: não se reabre**                                                 | Para entender a regra por trás de um REQ; citar por seção (ex.: `README 19.2`), nunca copiar |
+| `docs/CONTRATO.md`          | Contrato com o frontend: §1 convenções, §2 glossário, §4 códigos de erro, seções por FEAT com situação (§0)                                               | Antes de criar/alterar endpoint, campo, evento ou erro; `/contrato`                          |
+| `docs/ROADMAP.md`           | Fases e features (FEAT-nn) dos dois lados; **§2 = protocolo da ponte entre repositórios**                                                                 | Para situar a FEAT; para regras de sincronização entre os lados                              |
+| `docs/devlog/`              | Registro de cada etapa (formato em `docs/devlog/README.md`)                                                                                               | Antes de alterar funcionalidade: índice + entradas da área + `git log`                       |
+| `.claude/skills/*/SKILL.md` | Workflows pedidos por nome (`/tarefa T-xx`, `/contrato`, `/mudar-spec`, `/retorno-frontend`, `/checar`, `/testar`, `/registrar-etapa`, `/validar-cartas`) | Quando o autor pedir o fluxo correspondente                                                  |
+| `.claude/agents/*.md`       | Papéis: `test-writer`, `domain-dev`, `infra-dev`, `spec-reviewer`, `content-author`                                                                       | Para delegar ou assumir um papel do fluxo                                                    |
+| `.claude/hooks/`            | Guardas: `domain-guard.mjs` (violações dos princípios 2/3/10) e `tempo.mjs` (registro de tempo)                                                           | `domain-guard.mjs --all` roda manualmente; o resto é automático no Claude Code               |
 
 ## Invariantes (resumo — autoridade: `CLAUDE.md`)
 

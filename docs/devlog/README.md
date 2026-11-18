@@ -1,4 +1,4 @@
-﻿# Devlog
+# Devlog
 
 Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto** lendo as entradas em ordem.
 
@@ -57,7 +57,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 037 | T-31 | Domínio do cofre e do limbo (FEAT-32): config REQ-80, `Party.useVault` com 9 operações, `applyVaultOperations`, parser, eventos, `availableActions`; mapper v6 adiantado (D-92) | concluída |
 | 038 | T-32 | Domínio do deck de recompensas e do Vasculhar (FEAT-32): `assembleRewardDecks`, `scavengeTargets`, `Party.scavenge`, `lastScavenge`, evento `Scavenged`, parser, `availableActions`; mapper v6 adiantado (D-93) | concluída |
 | 039 | T-33 | FEAT-32 ponta a ponta: `PartyPresenter` com cofre, capacidades, `scavengeTargets`, `lastScavenge` e ações de zona; e2e da FEAT-32; mapper v6 testado; CONTRATO v0.47 `implementado (BE)` (D-94) | concluída |
-| 040 | FEAT-32 | FEAT-32 validada pelo frontend: CONTRATO v0.48 `validado`, ROADMAP v0.53 | aguardando revisão |
+| 040 | FEAT-32 | FEAT-32 validada pelo frontend: CONTRATO v0.48 `validado`, ROADMAP v0.53 | concluída |
+| 041 | T-34 | Catálogo de variações de efeitos (FEAT-11): `docs/EFEITOS-CATALOGO.md` v0.1, aguardando validação do autor | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
