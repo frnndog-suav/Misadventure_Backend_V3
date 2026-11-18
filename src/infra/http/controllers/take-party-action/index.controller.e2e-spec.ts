@@ -207,7 +207,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
     expect(response.body).toEqual(PARTY_NOT_FOUND)
   })
 
-  it('REQ-55/REQ-58/REQ-67: criação traz turn na rodada 1 e availableActions [move, recover, adjustDeck, endTurn]', async () => {
+  it('REQ-55/REQ-58/REQ-67: criação traz turn na rodada 1 e availableActions [move, recover, adjustDeck, useVault, endTurn]', async () => {
     const created = (await postParty(app)) as unknown as TParty
     const memberId = created.members[0].id
     expect(created.turn).toEqual({ round: 1, memberId, actionPoints: 3 })
@@ -215,6 +215,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
       'move',
       'recover',
       'adjustDeck',
+      'useVault',
       'endTurn',
     ])
   })
@@ -357,6 +358,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
         delete player.inventory
         delete player.equipment
         delete player.vault
+        delete player.lastScavenge
         return { ...m, player }
       }
     )
@@ -368,7 +370,13 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
     await db
       .update(parties)
       .set({
-        state: { ...rest, members, schemaVersion: 2, config: legacyConfig },
+        state: {
+          ...rest,
+          rewardDecks: undefined,
+          members,
+          schemaVersion: 2,
+          config: legacyConfig,
+        },
       })
       .where(eq(parties.id, party.id))
 

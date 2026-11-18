@@ -338,3 +338,39 @@ POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
 Content-Type: application/json
 
 { "type": "prepare", "operation": "unequip", "slot": "head" }
+
+### FEAT-32 — doar a Vara de Pesca (200; scavengeTargets ["fixture.silver-fish"]; availableActions com scavenge antes de useVault)
+POST {{baseUrl}}/lab/parties/{{createParty.response.body.id}}/members/{{createParty.response.body.members[0].id}}/grants
+Content-Type: application/json
+
+{ "type": "card", "cardId": "fixture.fishing-rod", "quantity": 1 }
+
+### FEAT-32 — Vasculhar o Peixe Prateado (200; 1ª vez lastScavenge { found: true }, 2ª vez { found: false })
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "scavenge", "cardId": "fixture.silver-fish" }
+
+### FEAT-32 — Vasculhar fora dos alvos (409 ACTION_NOT_ALLOWED notScavengeable)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "scavenge", "cardId": "fixture.iron-ore" }
+
+### FEAT-32 — Usar cofre: guardar 1 poção e 60 de ouro (200; vault.slots, vault.gold 60, actionPoints − 1)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "useVault", "operations": [{ "operation": "store", "cardId": "fixture.healing-potion", "quantity": 1 }, { "operation": "storeGold", "amount": 60 }] }
+
+### FEAT-32 — Usar cofre: retirar mais do que há (409 notInVault, operationIndex 1; nada muda)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "useVault", "operations": [{ "operation": "takeGold", "amount": 10 }, { "operation": "take", "cardId": "fixture.healing-potion", "quantity": 5 }] }
+
+### FEAT-32 — Usar cofre sem operações (400 ACTION_INVALID operations invalidLength)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "useVault", "operations": [] }

@@ -9,6 +9,7 @@ import type {
 import { availableActions } from '@/domain/campaign/enterprise/available-actions'
 import { connectedZones } from '@/domain/campaign/enterprise/connected-zones'
 import { effectiveModifiers } from '@/domain/campaign/enterprise/effective-modifiers'
+import { scavengeTargets } from '@/domain/campaign/enterprise/scavenge'
 import type { TPartyActionType } from '@/domain/campaign/enterprise/party-action'
 import type { TDirection } from '@/domain/campaign/enterprise/map-assembly'
 import type { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
@@ -58,6 +59,17 @@ export interface TPlayerStateHttp {
   equipment: Record<TEquipmentSlot, string | null>
   purseCapacity: number
   effectiveModifiers: Record<TModifier, number>
+  /** FEAT-32 (REQ-83, REQ-90, REQ-96). */
+  vault: {
+    slots: { cardId: string; quantity: number }[]
+    decks: TCardCopiesHttp[][]
+    gold: number
+  }
+  vaultCapacity: number
+  vaultDeckSlots: number
+  vaultGoldCapacity: number
+  scavengeTargets: string[]
+  lastScavenge: { cardId: string; found: boolean } | null
 }
 
 const copiesToHTTP = (
@@ -118,6 +130,17 @@ function playerToHTTP(
       .map(({ cardId }) => cardId)
       .filter((cardId) => cards.get(cardId)?.type === 'equipment')
   )
+  // Zona e Carta de Dimensão lidas no catálogo (D-81, D-92, D-93).
+  const zoneCard = cards.get(player.zoneId)
+  const zone = zoneCard?.type === 'zone' ? zoneCard : null
+  const dimensionCard = cards.get(party.dimension.dimensionCardId)
+  const dimension = dimensionCard?.type === 'dimension' ? dimensionCard : null
+  const targets = scavengeTargets({
+    player,
+    zone,
+    dimension,
+    cards: [...cards.values()],
+  })
   return {
     playerClasses: player.playerClasses.map(({ playerClass, deckLockMet }) => ({
       playerClass,
@@ -136,7 +159,13 @@ function playerToHTTP(
     zoneId: player.zoneId,
     respawnZoneId: player.respawnZoneId,
     moveTargets: connectedZones(map, player.zoneId),
-    availableActions: availableActions(party, member.id, equipmentCardIds),
+    availableActions: availableActions(
+      party,
+      member.id,
+      equipmentCardIds,
+      zone?.zoneActions ?? [],
+      targets
+    ),
     build: copiesToHTTP(player.build),
     buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),
     tcgFolder: copiesToHTTP(player.tcgFolder),
@@ -153,13 +182,34 @@ function playerToHTTP(
       peak: player.peak,
       equipment: equipmentCards,
     }),
+    vault: {
+      slots: player.vault.slots.map(({ cardId, quantity }) => ({
+        cardId,
+        quantity,
+      })),
+      decks: player.vault.decks.map(copiesToHTTP),
+      gold: player.vault.gold,
+    },
+    vaultCapacity: party.config.vaultCapacity,
+    vaultDeckSlots: party.config.vaultDeckSlots,
+    vaultGoldCapacity: party.config.vaultGoldCapacity,
+    scavengeTargets: targets,
+    lastScavenge:
+      player.lastScavenge === null
+        ? null
+        : {
+            cardId: player.lastScavenge.cardId,
+            found: player.lastScavenge.found,
+          },
   }
 }
 
 /**
  * Lê no catálogo as cartas do inventário e dos equipamentos em uso de todos os
- * membros (D-80 b). A que o catálogo não tem fica de fora: não conta como
- * equipamento nem soma modificador.
+ * membros (D-80 b), a zona de cada um, a Carta de Dimensão e as cartas citadas
+ * no `rewardDecks` dela (FEAT-32: `useVault` e `scavengeTargets`). A que o
+ * catálogo não tem fica de fora: não conta como equipamento nem soma
+ * modificador; zona ou dimensão ausente = sem ações de zona e sem alvos.
  */
 export async function findPartyCards(
   catalog: CardCatalog,
@@ -171,8 +221,18 @@ export async function findPartyCards(
     for (const cardId of Object.values(player.equipment)) {
       if (cardId !== null) cardIds.add(cardId)
     }
+    cardIds.add(player.zoneId)
   }
   const cards = new Map<string, TCard>()
+  const dimension = await catalog.findCard(party.dimension.dimensionCardId)
+  if (dimension) {
+    cards.set(dimension.id, dimension)
+    if (dimension.type === 'dimension') {
+      for (const deck of dimension.rewardDecks) {
+        for (const { cardId } of deck.cards) cardIds.add(cardId)
+      }
+    }
+  }
   for (const cardId of cardIds) {
     const card = await catalog.findCard(cardId)
     if (card) cards.set(cardId, card)

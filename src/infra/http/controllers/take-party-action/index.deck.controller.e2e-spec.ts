@@ -512,11 +512,20 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
       delete player.inventory
       delete player.equipment
       delete player.vault
+      delete player.lastScavenge
       return { ...m, player }
     })
     await db
       .update(parties)
-      .set({ state: { ...state, schemaVersion: 3, config, members } })
+      .set({
+        state: {
+          ...state,
+          rewardDecks: undefined,
+          schemaVersion: 3,
+          config,
+          members,
+        },
+      })
       .where(eq(parties.id, party.id))
 
     const read = await get(party.id)

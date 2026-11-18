@@ -143,6 +143,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
       'move',
       'recover',
       'adjustDeck',
+      'useVault',
       'endTurn',
     ])
   })
@@ -154,6 +155,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
       'move',
       'recover',
       'adjustDeck',
+      'useVault',
       'endTurn',
     ])
     await give(party, B)
@@ -162,6 +164,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
       'recover',
       'prepare',
       'adjustDeck',
+      'useVault',
       'endTurn',
     ])
 
@@ -351,10 +354,12 @@ describe('Preparar — equip e unequip (e2e)', () => {
       delete player.inventory
       delete player.equipment
       delete player.vault
+      delete player.lastScavenge
       return { ...m, player }
     })
     await writeState(party.id, {
       ...state,
+      rewardDecks: undefined,
       schemaVersion: 4,
       config,
       members,

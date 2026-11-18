@@ -242,6 +242,8 @@ describe('DrizzlePartyMapper', () => {
 
     const { player } = restored.members[0]
     expect(player.vault).toEqual({ slots: [], decks: [], gold: 0 })
+    expect(player.lastScavenge).toBeNull()
+    expect(restored.rewardDecks).toEqual([])
     expect(player.inventory).toEqual(party.members[0].player.inventory)
     expect(restored.config).toEqual({
       ...GAME_CONFIG_DEFAULTS,
@@ -313,6 +315,55 @@ describe('DrizzlePartyMapper', () => {
       vaultDeckSlots: 3,
       vaultGoldCapacity: 5000,
     })
+  })
+
+  it('REQ-95/REQ-96: ida e volta preserva a ordem de cada deck de recompensas, lastScavenge e o próximo sorteio', () => {
+    const base = usedRngParty()
+    const member = base.members[0]
+    const player = {
+      ...member.player,
+      lastScavenge: { cardId: 'fixture.silver-fish', found: false },
+    }
+    const rewardDecks = [
+      {
+        zoneType: 'urban' as const,
+        cards: [
+          'fixture.healing-potion',
+          'fixture.iron-ore',
+          'fixture.healing-potion',
+        ],
+      },
+      { zoneType: 'coastal' as const, cards: ['fixture.silver-fish'] },
+    ]
+    const party = makeParty({
+      status: 'inSession',
+      rngState: base.rngState,
+      members: [
+        PartyMember.create(
+          { characterName: member.characterName, kind: member.kind, player },
+          member.id
+        ),
+      ],
+      rewardDecks,
+    })
+    const row = JSON.parse(
+      JSON.stringify(DrizzlePartyMapper.toDrizzle(party))
+    ) as TPartyRow
+
+    const restored = DrizzlePartyMapper.toDomain({
+      ...row,
+      createdAt: party.createdAt,
+      savedAt: party.savedAt,
+    })
+
+    expect(restored.rewardDecks).toEqual(rewardDecks)
+    expect(restored.members[0].player.lastScavenge).toEqual({
+      cardId: 'fixture.silver-fish',
+      found: false,
+    })
+    expect(SeededRng.fromState(restored.rngState).nextUint32()).toBe(
+      SeededRng.fromState(party.rngState).nextUint32()
+    )
   })
 
   it('REQ-79/D-79: save v4 com ouro acima de purseCapacity é lido com o ouro limitado', () => {
