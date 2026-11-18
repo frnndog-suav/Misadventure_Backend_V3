@@ -60,3 +60,11 @@ AVISO DE FRONTEND — FEAT-10. Levar CONTRATO v0.41 e ROADMAP v0.48.
 
 ## Commit sugerido
 `feat/feat-10 inventory routes (contract v0.41, roadmap v0.48)`
+
+## Revisão 2026-11-18 — FEAT-10 `validado`
+- ROADMAP v0.49 (FE `pronto` com MSW) e depois v0.50 (FEAT-10 `validado` nas duas colunas), copiados do FE.
+- CONTRATO v0.42 (FE): 26 conferências contra o backend real com o conteúdo `base`. `shieldBlocked`, `peakRequirementNotMet`, `classRestricted` e os valores da arma ficam cobertos só pelos e2e do backend (a `base` não tem essas cartas; decisão do autor). `CONTENT_IN_USE` não foi rodado.
+- CONTRATO v0.43 (BE): a v0.42 não mudou o título da seção; corrigido para `validado`. Sem mudança de formato.
+- `src/infra/http/contract-version.ts`: `CONTRACT_VERSION` → `0.43`.
+- AVISO DE FRONTEND: levar o CONTRATO v0.43.
+- Commit sugerido: `docs/feat-10 validated (contract v0.43, roadmap v0.50)`.
