@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.49 · **Data:** 2026-11-18
+> **Versão da spec:** 0.50 · **Data:** 2026-11-18
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -631,6 +631,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.47 | 2026-11-18 | T-33 concluída: D-94 (presenter lê zona, Carta de Dimensão e cartas do `rewardDecks` no catálogo; `DELETE` de carta do deck de recompensas com grupo vivo é `CONTENT_IN_USE`, que vem antes de `CONTENT_REFERENCED`; saves antigos simulados nos e2e sem `lastScavenge`/`rewardDecks`). FEAT-32 `implementado (BE)`. |
 | 0.48 | 2026-11-18 | Planejamento da FEAT-11 (efeitos e status): REQ-97 a REQ-107, D-95 a D-101 (D-95 a D-97 decididas pelo autor; as demais propostas), tarefas T-34 a T-39. Listas de custos, ativações e durações executadas são proposta até o autor validar o catálogo (T-34). Contrato a propor com `/contrato FEAT-11` depois da T-34. |
 | 0.49 | 2026-11-18 | T-34 concluída: `docs/EFEITOS-CATALOGO.md` v0.1 escrito (46 gatilhos, 11 custos, 56 ativações e 59 durações com `kind`, parâmetros, exemplo pt-BR, origem e FEAT que executa; variações cujo momento já existe mas não têm FEAT marcadas "a definir"; `EventPhase` proposto). **Aguardando validação do autor** (coluna Autor e versão/data no arquivo) antes do `/contrato FEAT-11`. |
+| 0.50 | 2026-11-18 | Catálogo de efeitos **validado pelo autor de forma provisória** (EFEITOS-CATALOGO v1.0): as 172 variações `entra`, sem cortes. Listas executadas de REQ-102 a REQ-105 e D-100 **sem mudança** (nada a ajustar com `/mudar-spec`). Caminho livre para o `/contrato FEAT-11`. |
 
 ## Apêndice A — Conteúdo de teste
 

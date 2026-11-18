@@ -39,3 +39,9 @@ Nenhuma: o catálogo é só do backend (D-96); o contrato da FEAT-11 será propo
 
 ## Commit sugerido
 `docs/effects variation catalog (t-34, spec v0.49)`
+
+## Revisão 2026-11-18 — validação do autor
+O autor leu o catálogo e aprovou tudo, de forma provisória, pedindo ao agente para registrar: EFEITOS-CATALOGO **v1.0**, as 172 variações com Autor = `entra`, sem cortes. Linhas "a definir" entram no modelo sem FEAT atribuída. Spec v0.50: listas de REQ-102 a REQ-105 e D-100 sem mudança; caminho livre para o `/contrato FEAT-11`.
+
+## Commit sugerido (revisão)
+`docs/effects catalog validated by the author (spec v0.50)`
