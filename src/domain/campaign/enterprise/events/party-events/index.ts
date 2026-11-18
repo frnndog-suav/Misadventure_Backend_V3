@@ -131,6 +131,15 @@ export interface SentToLimboEvent extends DomainEvent {
   readonly from: 'vault'
 }
 
+/** Vasculhar aceito (README 12.6; REQ-91): `found` diz se a carta saiu do deck. */
+export interface ScavengedEvent extends DomainEvent {
+  readonly type: 'Scavenged'
+  readonly memberId: UniqueEntityID
+  readonly zoneId: string
+  readonly cardId: string
+  readonly found: boolean
+}
+
 /** Registrado antes de apagar o save, para o despacho. */
 export interface PartyAbandonedEvent extends DomainEvent {
   readonly type: 'PartyAbandoned'
@@ -155,4 +164,5 @@ export type TPartyEvent =
   | LabGrantAppliedEvent
   | VaultUsedEvent
   | SentToLimboEvent
+  | ScavengedEvent
   | PartyAbandonedEvent

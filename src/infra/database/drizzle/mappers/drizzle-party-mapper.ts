@@ -16,6 +16,7 @@ import {
   type TEquipmentSlot,
   PLAYER_CLASSES,
   type TModifier,
+  ZONE_TYPES,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import {
   GAME_CONFIG_DEFAULTS,
@@ -174,7 +175,17 @@ const playerSchema = z.strictObject({
     decks: z.array(cardCopies),
     gold: z.number().int().min(0),
   }),
+  // D-93: `lastScavenge` e `rewardDecks` opcionais só por causa dos saves v6
+  // de desenvolvimento gravados na T-31.
+  lastScavenge: z
+    .strictObject({ cardId: id, found: z.boolean() })
+    .nullable()
+    .optional(),
 })
+
+const rewardDecksSchema = z.array(
+  z.strictObject({ zoneType: z.enum(ZONE_TYPES), cards: z.array(id) })
+)
 
 const dimensionSchema = z.strictObject({
   dimensionCardId: id,
@@ -245,6 +256,7 @@ const stateSchema = z
       schemaVersion: z.literal(SCHEMA_VERSION),
       ...stateFields(configSchema, playerSchema),
       turn: turnSchema,
+      rewardDecks: rewardDecksSchema.optional(),
     }),
   ])
   .refine((state) => state.members.some((m) => m.id === state.hostMemberId), {
@@ -309,6 +321,11 @@ export class DrizzlePartyMapper {
         config,
         rngState: state.rngState satisfies RngState,
         dimension: state.dimension,
+        // D-87: save antigo fica sem decks de recompensas.
+        rewardDecks:
+          state.schemaVersion === SCHEMA_VERSION
+            ? (state.rewardDecks ?? [])
+            : [],
         turnOrder,
         // D-64: o save v2 ganha a vez na rodada 1, com o 1º de `turnOrder` e pontos cheios.
         turn:
@@ -359,6 +376,10 @@ export class DrizzlePartyMapper {
               gold: m.player.vault.gold,
             },
             equipment: { ...m.player.equipment },
+            lastScavenge:
+              m.player.lastScavenge === null
+                ? null
+                : { ...m.player.lastScavenge },
             deck: [...m.player.deck],
             hand: [...m.player.hand],
             discard: [...m.player.discard],
@@ -378,6 +399,10 @@ export class DrizzlePartyMapper {
             })),
           },
         },
+        rewardDecks: party.rewardDecks.map((deck) => ({
+          zoneType: deck.zoneType,
+          cards: [...deck.cards],
+        })),
         turnOrder: party.turnOrder.map((m) => m.toString()),
         turn: {
           round: party.turn.round,
@@ -390,7 +415,12 @@ export class DrizzlePartyMapper {
 }
 
 type TStoredPlayer = z.infer<typeof legacyPlayerSchema> &
-  Partial<Pick<TPlayerState, 'tcgFolder' | 'inventory' | 'equipment' | 'vault'>>
+  Partial<
+    Pick<
+      TPlayerState,
+      'tcgFolder' | 'inventory' | 'equipment' | 'vault' | 'lastScavenge'
+    >
+  >
 
 /**
  * D-70: antes da FEAT-09 não havia pasta; a build vai em ordem de cardId
@@ -412,5 +442,6 @@ function upgradePlayer(
     inventory: player.inventory ?? [],
     equipment: player.equipment ?? emptyEquipment(),
     vault: player.vault ?? emptyVault(),
+    lastScavenge: player.lastScavenge ?? null,
   }
 }

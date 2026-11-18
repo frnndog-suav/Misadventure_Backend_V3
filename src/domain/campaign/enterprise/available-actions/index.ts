@@ -7,8 +7,9 @@ import type { TPartyActionType } from '../party-action'
 
 /**
  * Ações que o membro pode mandar agora (README 12.1, 11.4; REQ-58; D-65).
- * Ordem fixa: `move`, `recover`, `prepare`, `adjustDeck`, `useVault`, `endTurn`
- * (12.2; REQ-75, REQ-93). Só a vez de quem age; os demais não têm nada.
+ * Ordem fixa: `move`, `recover`, `prepare`, `adjustDeck`, `scavenge`,
+ * `useVault`, `endTurn` (12.2; REQ-75, REQ-93). Só a vez de quem age; os
+ * demais não têm nada.
  * `equipmentCardIds`: quais ids do inventário são cartas `equipment` (o
  * inventário guarda só o id, D-75; quem chama lê no catálogo).
  * `zoneActions`: as ações da zona atual do membro (também lidas no catálogo).
@@ -18,7 +19,9 @@ export function availableActions(
   party: Party,
   memberId: UniqueEntityID,
   equipmentCardIds: ReadonlySet<string>,
-  zoneActions: readonly TZoneAction[] = []
+  zoneActions: readonly TZoneAction[] = [],
+  /** Os alvos do Vasculhar do membro (REQ-90; `scavengeTargets`). */
+  scavengeTargets: readonly string[] = []
 ): TPartyActionType[] {
   const { turn } = party
   if (!turn.memberId.equals(memberId)) return []
@@ -44,6 +47,9 @@ export function availableActions(
     actions.push('prepare')
   }
   if (turn.actionPoints >= 1) actions.push('adjustDeck')
+  if (turn.actionPoints >= 1 && scavengeTargets.length > 0) {
+    actions.push('scavenge')
+  }
   if (turn.actionPoints >= 1 && zoneActions.includes('useVault')) {
     actions.push('useVault')
   }

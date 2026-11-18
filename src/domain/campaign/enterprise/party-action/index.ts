@@ -37,6 +37,7 @@ export type TPartyAction =
   | { type: 'adjustDeck'; build: { cardId: string; copies: number }[] }
   | ({ type: 'prepare' } & TPrepareOperation)
   | { type: 'useVault'; operations: TVaultOperation[] }
+  | { type: 'scavenge'; cardId: string }
 
 /** Os `type` possíveis, para `availableActions` (REQ-58). */
 export type TPartyActionType = TPartyAction['type']
@@ -102,9 +103,27 @@ export function parsePartyAction(
       return parsePrepare(body)
     case 'useVault':
       return parseUseVault(body)
+    case 'scavenge':
+      return parseScavenge(body)
     default:
       return left([{ field: 'type', reason: 'unknownAction' }])
   }
+}
+
+/** Problemas na ordem `cardId`, depois campos a mais (REQ-92). */
+function parseScavenge(
+  body: Record<string, unknown>
+): Either<TActionIssue[], TPartyAction> {
+  const { cardId } = body
+  const issues: TActionIssue[] = []
+  if (cardId === undefined) {
+    issues.push({ field: 'cardId', reason: 'required' })
+  } else if (typeof cardId !== 'string') {
+    issues.push({ field: 'cardId', reason: 'notString' })
+  }
+  issues.push(...extraKeys(body, ['type', 'cardId']))
+  if (issues.length > 0 || typeof cardId !== 'string') return left(issues)
+  return right({ type: 'scavenge', cardId })
 }
 
 function isRecoverOption(value: string): value is TRecoverOption {

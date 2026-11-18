@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.45 · **Data:** 2026-11-18
+> **Versão da spec:** 0.46 · **Data:** 2026-11-18
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -447,6 +447,7 @@ Regras de README 27 (criação de conteúdo), II.6 (editor no laboratório), 3.5
   - O embaralhamento do fim do lote usa o mesmo helper do Ajustar deck (`rebuildPlayerDeck`, extraído sem mudar o comportamento).
   - O mapper já grava o **save v6** com `vault` e as chaves de REQ-80 (lê v5 a v2 com cofre vazio e padrões); a T-33 acrescenta `lastScavenge` ao mesmo v6 (ainda não lançado). Os e2e de saves antigos passaram a esperar v6.
   - Carta que o catálogo não devolve, ou que não é atributo, equipamento ou item, é `notStorable` em `store`, `take` e `saveDeck` (este antes de `notAttribute`). Saves v6 gravados entre a T-31 e a T-33 (sem `lastScavenge`) são só de desenvolvimento: a T-33 lê o campo ausente como `null` ou os descarta.
+- **D-93 — Deck de recompensas e Vasculhar no domínio (T-32, 2026-11-18):** (a) `Party.rewardDecks` guarda `{ zoneType, cards }` (topo = índice 0), montado por `assembleRewardDecks` depois da ordem dos jogadores; `scavengeTargets` é função pura em `enterprise/scavenge` (só item `tool` do **inventário** conta; equipamento em uso não). (b) `Party.scavenge(cardId, { zone, dimension, cards }, at)`; zona que o catálogo não devolve = `zoneActionUnavailable`; Carta de Dimensão ausente = sem alvos. (c) `inventoryFull` (D-88) vale também quando o Vasculhar não acharia nada: o espaço é conferido antes de olhar o deck, para a recusa não revelar o conteúdo dele (D-74). (d) Sem deck para o tipo da zona (save v5), aceito com `found: false` e sem usar o RNG. (e) `availableActions` recebe `scavengeTargets` como 5º parâmetro (padrão `[]`); a T-33 o passa no presenter. (f) O mapper já grava `rewardDecks` e `lastScavenge` no v6, ambos opcionais na leitura (`[]`/`null`) só por causa dos saves v6 de desenvolvimento da T-31; a T-33 fica com o presenter, o teste de ida e volta do v6 (REQ-95) e os e2e.
 
 ## 4. Tarefas
 
@@ -535,7 +536,7 @@ Contrato: CONTRATO v0.46, seção FEAT-32 `acordado` (2026-11-18; v0.45 do FE ac
 
 - [x] **T-30 — Conteúdo: ferramentas, coletáveis e decks de recompensas (REQ-81, REQ-82).** TDD unitário: tipos e schema das cartas com os campos novos; problemas de integridade e do editor nos `path`; publicação exigindo cartas `published`; `CONTENT_REFERENCED` por `rewardDecks`. Infra: leitor de conteúdo, presenters do catálogo e do editor; `content/` e a fixture atualizados (via `content-author` e `/validar-cartas`): uma zona com `scavenge`, uma ferramenta, dois coletáveis (um que combina e um que não) e `rewardDecks` na `fixture.test-dimension`. e2e do catálogo e do editor afetados. **Verificação:** `npx vitest related --run`, `npm run test:e2e` dos controllers do catálogo e do editor, guarda do domínio.
 - [x] **T-31 — Domínio do cofre e do limbo (REQ-80, REQ-83 a REQ-88; REQ-93 e REQ-94 na parte do cofre).** TDD unitário: chaves da `GameConfig`; `vault` vazio na criação e invariantes; `Party.useVault` com as 10 operações, a simulação em ordem, o `operationIndex` da primeira falha, os exemplos de ouro de REQ-85, `SentToLimbo`, os passos de 4.4 no fim do lote e os eventos em ordem; `parsePartyAction` com `useVault`; `availableActions`; caso de uso lendo as cartas no `CardCatalog`; "em uso" do cofre. **Verificação:** `npx vitest related --run` verde; guarda do domínio.
-- [ ] **T-32 — Domínio do deck de recompensas e do Vasculhar (REQ-89 a REQ-92, REQ-96; REQ-93 e REQ-94 no restante).** TDD unitário: `lastScavenge` (`null` na criação, atualizado só por `scavenge` aceito); decks montados e embaralhados no fim da preparação sem mudar os sorteios anteriores (testes de REQ-31 a REQ-35 continuam verdes sem mudança); `scavengeTargets` (função pura); `Party.scavenge` com achado, não achado (o exemplo de REQ-91), embaralhamento e recusas na ordem de REQ-92; parser; `availableActions`; "em uso" dos decks de recompensas. **Verificação:** `npx vitest related --run` verde; guarda do domínio.
+- [x] **T-32 — Domínio do deck de recompensas e do Vasculhar (REQ-89 a REQ-92, REQ-96; REQ-93 e REQ-94 no restante).** TDD unitário: `lastScavenge` (`null` na criação, atualizado só por `scavenge` aceito); decks montados e embaralhados no fim da preparação sem mudar os sorteios anteriores (testes de REQ-31 a REQ-35 continuam verdes sem mudança); `scavengeTargets` (função pura); `Party.scavenge` com achado, não achado (o exemplo de REQ-91), embaralhamento e recusas na ordem de REQ-92; parser; `availableActions`; "em uso" dos decks de recompensas. **Verificação:** `npx vitest related --run` verde; guarda do domínio.
 - [ ] **T-33 — Save v6, rotas e e2e (REQ-80 a REQ-96 de ponta a ponta).** Mapper Drizzle v6 com `lastScavenge` (lê v5 a v2 com `null`, D-87), sem migração SQL (D-31; conferir `drizzle-kit` sem diferença); `PartyPresenter` com `vault`, capacidades, `scavengeTargets` e `lastScavenge` (cartas lidas no catálogo, D-81); e2e Supertest (um `it` por REQ, estados montados pela doação e por `useVault`); `client.http`. **Verificação:** `npm run test:e2e` verde; `curl` dos cenários. Ao final: `/contrato` marca FEAT-32 `implementado (BE)` e gera o AVISO DE FRONTEND.
 
 ## 8. Histórico
@@ -587,6 +588,7 @@ Contrato: CONTRATO v0.46, seção FEAT-32 `acordado` (2026-11-18; v0.45 do FE ac
 | 0.43 | 2026-11-18 | FEAT-32: REQ-96 (`PlayerState.lastScavenge`, pedido do FE na CONTRATO v0.45, acordado na v0.46); T-32 e T-33 ajustadas. |
 | 0.44 | 2026-11-18 | T-30 concluída: D-91 (cartas citadas em `rewardDecks` de outras coleções, publicação e `CONTENT_REFERENCED`; troca de tipo de carta citada bloqueada e rascunho citado aceito, pela revisão). |
 | 0.45 | 2026-11-18 | T-31 concluída: D-92 (simulação pura do cofre, ordem das checagens por operação, `editBuild`, `saveDeck` vazio, mapper v6 adiantado com o cofre). |
+| 0.46 | 2026-11-18 | T-32 concluída: D-93 (deck de recompensas e Vasculhar no domínio; `inventoryFull` antes de olhar o deck; mapper v6 adiantado com `rewardDecks` e `lastScavenge`). |
 
 ## Apêndice A — Conteúdo de teste
 

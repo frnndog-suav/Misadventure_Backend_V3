@@ -27,6 +27,7 @@ export function makePlayerState(
     inventory: [],
     equipment: emptyEquipment(),
     vault: { slots: [], decks: [], gold: 0 },
+    lastScavenge: null,
     deck: [
       ...Array.from({ length: 27 }, () => 'fixture.endurance-basic'),
       ...Array.from({ length: 26 }, () => 'fixture.strength-basic'),
@@ -82,6 +83,7 @@ export function makeParty(
       status: 'idle',
       config,
       rngState: SeededRng.fromSeed(42).state(),
+      rewardDecks: [],
       dimension: {
         dimensionCardId: 'fixture.test-dimension',
         startingCityZoneId: 'fixture.gray-harbor',

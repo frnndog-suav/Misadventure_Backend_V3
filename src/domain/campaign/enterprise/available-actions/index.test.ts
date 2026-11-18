@@ -177,3 +177,39 @@ describe('availableActions — useVault (REQ-93)', () => {
     ).toEqual([])
   })
 })
+
+describe('availableActions — scavenge (REQ-93)', () => {
+  const inSession = () => makeParty({ status: 'inSession' })
+  const memberId = new UniqueEntityID('member-1')
+  const FISH = 'fixture.silver-fish'
+
+  it('REQ-93: scavengeTargets não vazio e pontos → scavenge entre adjustDeck e useVault', () => {
+    expect(
+      availableActions(inSession(), memberId, new Set(), ['useVault'], [FISH])
+    ).toEqual([
+      'move',
+      'recover',
+      'adjustDeck',
+      'scavenge',
+      'useVault',
+      'endTurn',
+    ])
+  })
+
+  it('REQ-93: scavengeTargets vazio → scavenge não entra', () => {
+    expect(
+      availableActions(inSession(), memberId, new Set(), ['scavenge'], [])
+    ).not.toContain('scavenge')
+  })
+
+  it('REQ-93: com 0 pontos → scavenge não entra', () => {
+    const party = inSession()
+    party.move(MINE, party.savedAt)
+    party.move(HARBOR, party.savedAt)
+    party.move(MINE, party.savedAt)
+
+    expect(availableActions(party, memberId, new Set(), [], [FISH])).toEqual([
+      'endTurn',
+    ])
+  })
+})

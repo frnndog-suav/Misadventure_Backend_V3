@@ -43,6 +43,7 @@ describe('DrizzlePartyMapper', () => {
         config: { ...GAME_CONFIG_DEFAULTS, initialGold: 40 },
         rngState: [...party.rngState],
         dimension: party.dimension,
+        rewardDecks: [],
         turnOrder: ['member-1'],
         turn: { round: 1, memberId: 'member-1', actionPoints: 3 },
       },
@@ -119,6 +120,7 @@ describe('DrizzlePartyMapper', () => {
         config: Record<string, number>
         members: { player: Record<string, unknown> }[]
         turn?: unknown
+        rewardDecks?: unknown
       }
     }
     const config: Record<string, number> = {
@@ -139,6 +141,7 @@ describe('DrizzlePartyMapper', () => {
     for (const key of removedKeys) delete config[key]
     for (const member of row.state.members) {
       delete member.player.vault
+      delete member.player.lastScavenge
       if (version < 5) {
         delete member.player.inventory
         delete member.player.equipment
@@ -146,6 +149,7 @@ describe('DrizzlePartyMapper', () => {
       if (version < 4) delete member.player.tcgFolder
     }
     if (version === 2) delete row.state.turn
+    delete row.state.rewardDecks
     return {
       party,
       row: {

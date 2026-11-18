@@ -55,6 +55,7 @@ function snapshot(party: Party): Party {
       config: party.config,
       rngState: [...party.rngState] as unknown as Party['rngState'],
       dimension: structuredClone(party.dimension),
+      rewardDecks: structuredClone(party.rewardDecks),
       turnOrder: [...party.turnOrder],
       turn: party.turn,
       createdAt: party.createdAt,

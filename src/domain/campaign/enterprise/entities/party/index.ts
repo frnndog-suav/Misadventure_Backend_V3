@@ -34,6 +34,11 @@ import {
   defaultModifiers,
   sortedByCardId,
 } from '../../starting-player'
+import {
+  assembleRewardDecks,
+  scavengeTargets,
+  type TPartyRewardDeck,
+} from '../../scavenge'
 import { rollTurnOrder } from '../../turn-order'
 import { applyVaultOperations, type TVaultRefusal } from '../../vault'
 import { maxHealthOf, PartyMember, type TPlayerState } from '../party-member'
@@ -93,6 +98,14 @@ export type TUseVaultRefusal =
   | 'zoneActionUnavailable'
   | TVaultRefusal
 
+/** Por que o Vasculhar foi recusado (REQ-92; D-88). */
+export type TScavengeRefusal =
+  | 'sessionNotActive'
+  | 'noActionPoints'
+  | 'zoneActionUnavailable'
+  | 'notScavengeable'
+  | 'inventoryFull'
+
 /** Doação do laboratório já resolvida no catálogo (REQ-77; D-78, D-79). */
 export type TLabGrant =
   | {
@@ -118,6 +131,8 @@ export interface TPartyProps {
   config: TGameConfigValues
   rngState: RngState
   dimension: TPartyDimension
+  /** Decks de recompensas por tipo de zona (README 3.4; REQ-89, D-87). */
+  rewardDecks: readonly TPartyRewardDeck[]
   /** Ids de membro, do 1º ao último (REQ-33). */
   turnOrder: UniqueEntityID[]
   /** De quem é a vez (D-63, REQ-55). */
@@ -178,6 +193,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return this.props.dimension
   }
 
+  /** Ordem secreta: não trafega (REQ-89). */
+  get rewardDecks(): readonly TPartyRewardDeck[] {
+    return this.props.rewardDecks
+  }
+
   get turnOrder(): readonly UniqueEntityID[] {
     return [...this.props.turnOrder]
   }
@@ -196,13 +216,15 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 
   /**
    * Conteúdo que este save usa (REQ-39, REQ-78): a Carta de Dimensão, as zonas
-   * do mapa, as cartas da build, da pasta, do inventário, do cofre (slots e
-   * decks, REQ-94) e dos equipamentos em uso de cada jogador e as classes deles.
+   * do mapa, as dos decks de recompensas, as cartas da build, da pasta, do
+   * inventário, do cofre (slots e decks, REQ-94) e dos equipamentos em uso de
+   * cada jogador e as classes deles.
    */
   contentInUse(): { cardIds: string[]; playerClasses: string[] } {
     const cardIds = new Set<string>([
       this.props.dimension.dimensionCardId,
       ...this.props.dimension.map.zones.map((zone) => zone.zoneId),
+      ...this.props.rewardDecks.flatMap((deck) => deck.cards),
     ])
     const playerClasses = new Set<string>()
     for (const member of this.props.members) {
@@ -235,7 +257,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
    * a REQ-36). Primeiro os dados do pedido (problemas na ordem `name`,
    * `characterName`, `playerClass`, `members`), depois a dimensão. Os ids só
    * são gerados quando tudo é válido. Sorteios na ordem: mapa, deck de cada
-   * membro, ordem dos jogadores.
+   * membro, ordem dos jogadores e, por último, os decks de recompensas
+   * (REQ-89, D-87: não mudam os anteriores).
    */
   static create(
     input: TCreatePartyInput,
@@ -310,6 +333,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       members.map((member) => member.id),
       rng
     )
+    const rewardDecks = assembleRewardDecks(dimension.rewardDecks, rng)
 
     const party = new Party(
       {
@@ -320,6 +344,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         config: { ...input.config },
         rngState: rng.state(),
         dimension: { dimensionCardId: dimension.id, startingCityZoneId, map },
+        rewardDecks,
         turnOrder,
         turn: {
           round: 1,
@@ -359,6 +384,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         ...props,
         members: [...props.members],
         config: { ...props.config },
+        rewardDecks: props.rewardDecks.map((deck) => ({
+          zoneType: deck.zoneType,
+          cards: [...deck.cards],
+        })),
         turnOrder: [...props.turnOrder],
       },
       id
@@ -790,6 +819,97 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       const buildSize = changed.build.reduce((sum, e) => sum + e.copies, 0)
       this.addDeckEvents(actor.id, actor.player, rebuilt, buildSize, at)
     }
+    return right(undefined)
+  }
+
+  /**
+   * Vasculhar (README 12.2, 12.6; REQ-90 a REQ-92, REQ-96; D-74, D-88). Quem
+   * age é o membro da vez; gasta 1 ponto. `catalog.zone` é a carta da zona
+   * atual e `dimension` a Carta de Dimensão do grupo (`null` se o catálogo não
+   * tem); `cards`, as do inventário e as citadas pelo deck da zona. Ordem das
+   * recusas: fora de sessão, sem pontos, zona sem `scavenge`,
+   * `notScavengeable`, `inventoryFull` (C abriria slot novo). Recusado, nada
+   * muda. Aceito: a cópia de C mais perto do topo vai ao inventário (REQ-70);
+   * com ou sem achado, o deck do tipo da zona é embaralhado pelo RNG.
+   */
+  scavenge(
+    cardId: string,
+    catalog: {
+      zone: TZoneCard | null
+      dimension: TDimensionCard | null
+      cards: readonly TCard[]
+    },
+    at: Date
+  ): Either<TScavengeRefusal, void> {
+    switch (this.props.status) {
+      case 'idle':
+        return left('sessionNotActive')
+      case 'inSession':
+        break
+      default: {
+        const _exhaustive: never = this.props.status
+        return _exhaustive
+      }
+    }
+
+    if (this.props.turn.actionPoints < 1) {
+      return left('noActionPoints')
+    }
+    const { zone } = catalog
+    if (zone === null || !zone.zoneActions.includes('scavenge')) {
+      return left('zoneActionUnavailable')
+    }
+
+    const index = this.actorIndex()
+    const actor = this.props.members[index]
+    const { player } = actor
+    const targets = scavengeTargets({ player, ...catalog })
+    const card = catalog.cards.find((c) => c.id === cardId)
+    if (
+      !targets.includes(cardId) ||
+      (card?.type !== 'item' && card?.type !== 'equipment')
+    ) {
+      return left('notScavengeable')
+    }
+    const capacity = this.props.config.inventoryCapacity
+    const withCard = addToInventory(player.inventory, card, 1, capacity)
+    if (withCard === null) return left('inventoryFull')
+
+    const deckIndex = this.props.rewardDecks.findIndex(
+      (deck) => deck.zoneType === zone.zoneType
+    )
+    let found = false
+    if (deckIndex >= 0) {
+      const deck = this.props.rewardDecks[deckIndex]
+      const position = deck.cards.indexOf(cardId)
+      found = position >= 0
+      const remaining = found
+        ? deck.cards.filter((_, i) => i !== position)
+        : deck.cards
+      const rng = SeededRng.fromState(this.props.rngState)
+      const cards = shuffle(remaining, rng)
+      this.props.rngState = rng.state()
+      this.props.rewardDecks = this.props.rewardDecks.map((d, i) =>
+        i === deckIndex ? { zoneType: d.zoneType, cards } : d
+      )
+    }
+
+    this.spendActionPoint()
+    this.replaceActor(index, {
+      ...player,
+      inventory: found ? withCard : player.inventory,
+      lastScavenge: { cardId, found },
+    })
+    this.props.savedAt = at
+    this.addDomainEvent({
+      type: 'Scavenged',
+      memberId: actor.id,
+      zoneId: player.zoneId,
+      cardId,
+      found,
+      occurredAt: at,
+      aggregateId: this.id,
+    })
     return right(undefined)
   }
 

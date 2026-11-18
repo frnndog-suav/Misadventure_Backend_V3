@@ -31,6 +31,8 @@ export type TPlayerState = Readonly<{
   equipment: Readonly<Record<TEquipmentSlot, string | null>>
   /** Cofre (README 6.4; REQ-83, D-83): começa vazio. */
   vault: TVault
+  /** Resultado do último Vasculhar aceito (REQ-96); `null` até o primeiro. */
+  lastScavenge: Readonly<{ cardId: string; found: boolean }> | null
   /** Ids em ordem; o topo é o índice 0. */
   deck: readonly string[]
   /** Na ordem em que foram compradas. */

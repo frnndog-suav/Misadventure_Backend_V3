@@ -27,6 +27,7 @@ export type TActionNotAllowedReason =
   | 'notAttribute'
   | 'deckSlotsFull'
   | 'deckNotFound'
+  | 'notScavengeable'
 
 export class ActionNotAllowedError extends DomainError {
   readonly code = 'ACTION_NOT_ALLOWED'

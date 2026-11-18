@@ -87,6 +87,7 @@ export function createStartingPlayer({
     inventory: [],
     equipment: emptyEquipment(),
     vault: emptyVault(),
+    lastScavenge: null,
     deck,
     hand,
     discard: [],

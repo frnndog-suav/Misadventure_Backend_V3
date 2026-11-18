@@ -12,7 +12,9 @@ import type {
   TAttributeCard,
   TCard,
   TClassDefinition,
+  TDimensionCard,
   TZoneAction,
+  TZoneCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
 
 import { ActionInvalidError } from '../_errors/action-invalid-error'
@@ -185,6 +187,30 @@ export class TakePartyActionUseCase {
         }
         break
       }
+      case 'scavenge': {
+        const scavenged = party.scavenge(
+          action.cardId,
+          await this.findScavengeCatalog(party),
+          this.clock.now()
+        )
+        if (scavenged.isLeft()) {
+          const refusal = scavenged.value
+          switch (refusal) {
+            case 'sessionNotActive':
+              return left(new PartySessionNotActiveError())
+            case 'noActionPoints':
+            case 'zoneActionUnavailable':
+            case 'notScavengeable':
+            case 'inventoryFull':
+              return left(new ActionNotAllowedError(refusal))
+            default: {
+              const _exhaustive: never = refusal
+              return _exhaustive
+            }
+          }
+        }
+        break
+      }
       case 'endTurn': {
         const ended = party.endTurn(this.clock.now())
         if (ended.isLeft()) {
@@ -235,6 +261,45 @@ export class TakePartyActionUseCase {
       if (card) cards.push(card)
     }
     return cards
+  }
+
+  /**
+   * O que o Vasculhar precisa do catálogo (REQ-90, D-87): a zona atual do
+   * membro da vez, a Carta de Dimensão do grupo, as cartas do inventário e as
+   * citadas pela entrada de `rewardDecks` do tipo da zona. O que o catálogo
+   * não tem fica `null` ou de fora (sem alvos).
+   */
+  private async findScavengeCatalog(party: Party): Promise<{
+    zone: TZoneCard | null
+    dimension: TDimensionCard | null
+    cards: TCard[]
+  }> {
+    const actor = party.members.find((member) =>
+      member.id.equals(party.turn.memberId)
+    )
+    const found = actor
+      ? await this.cardCatalog.findCard(actor.player.zoneId)
+      : null
+    const zone = found?.type === 'zone' ? found : null
+    const foundDimension = await this.cardCatalog.findCard(
+      party.dimension.dimensionCardId
+    )
+    const dimension =
+      foundDimension?.type === 'dimension' ? foundDimension : null
+
+    const cardIds = new Set(
+      (actor?.player.inventory ?? []).map(({ cardId }) => cardId)
+    )
+    const entry = dimension?.rewardDecks.find(
+      (deck) => deck.zoneType === zone?.zoneType
+    )
+    entry?.cards.forEach(({ cardId }) => cardIds.add(cardId))
+    const cards: TCard[] = []
+    for (const cardId of cardIds) {
+      const card = await this.cardCatalog.findCard(cardId)
+      if (card) cards.push(card)
+    }
+    return { zone, dimension, cards }
   }
 
   /**
