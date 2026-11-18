@@ -12,6 +12,7 @@ import type { TDimensionCard } from '@/domain/catalog/enterprise/value-objects/c
 import {
   makeDimensionCard,
   makeItemCard,
+  makeZoneCard,
   toCardInput,
 } from '../../../../../../test/factories/make-card'
 import { FakeCardInputParser } from '../../../../../../test/fakes/fake-card-input-parser'
@@ -130,6 +131,57 @@ describe('REQ-82: decks de recompensas no editor', () => {
       store,
       new FakeCardInputParser()
     ).execute({ cardId: ore.id, body: toCardInput(ore, 'ore') })
+    expect(result.value).toBeInstanceOf(ContentReferencedError)
+  })
+
+  it('D-91: editar carta citada mudando o tipo para fora do deck → CONTENT_REFERENCED; mantendo um tipo do deck → aceito', async () => {
+    store.cards.push({ status: 'draft', card: dimension(ore.id) })
+    const sut = new ReplaceCardUseCase(store, new FakeCardInputParser())
+
+    const toZone = await sut.execute({
+      cardId: ore.id,
+      body: toCardInput(
+        makeZoneCard({
+          id: ore.id,
+          collectionId: 'other',
+          title: 'Veio de Ferro',
+        })
+      ),
+    })
+    expect(toZone.value).toBeInstanceOf(ContentReferencedError)
+    expect(store.cards[0].card.type).toBe('item')
+
+    const sameType = await sut.execute({
+      cardId: ore.id,
+      body: toCardInput({ ...ore, name: 'Minério Bruto' }),
+    })
+    expect(sameType.isRight()).toBe(true)
+  })
+
+  it('D-91: import com replace mantendo o id de carta citada e mudando o tipo para fora do deck → CONTENT_REFERENCED', async () => {
+    store.cards.push({ status: 'draft', card: dimension(ore.id) })
+    const result = await new ImportCollectionUseCase(
+      store,
+      new FakeCardInputParser(),
+      new FakeClassInputParser(),
+      parties
+    ).execute({
+      body: {
+        formatVersion: 1,
+        collection: { id: 'other', name: 'Outra', description: '' },
+        cards: [
+          {
+            status: 'draft',
+            card: makeZoneCard({
+              id: ore.id,
+              collectionId: 'other',
+              title: 'Veio de Ferro',
+            }),
+          },
+        ],
+      },
+      replace: 'true',
+    })
     expect(result.value).toBeInstanceOf(ContentReferencedError)
   })
 

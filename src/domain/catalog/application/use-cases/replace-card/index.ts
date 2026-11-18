@@ -19,6 +19,7 @@ import {
   rewardDeckPublicationIssues,
   validateCandidate,
 } from '@/domain/catalog/enterprise/card-validation'
+import { isRewardCard } from '@/domain/catalog/enterprise/catalog-integrity'
 import type { TEditorCard } from '@/domain/catalog/enterprise/value-objects/content'
 
 export type TReplaceCardUseCaseRequest = { cardId: string; body: unknown }
@@ -37,7 +38,8 @@ export type TReplaceCardUseCaseResponse = Either<
  * REQ-43, REQ-44. Ordem: carta (404), formato e regras (400), `slug` novo de
  * carta publicada (409 `CONTENT_LOCKED`), carta do `starterDeck` de classe
  * (409 `CONTENT_REFERENCED`, REQ-40), id novo já usado (409). Mantém o
- * status; rascunho com outro `slug` é renomeado.
+ * status; rascunho com outro `slug` é renomeado. Carta citada em
+ * `rewardDecks` não é renomeada nem muda para tipo fora do deck (409, D-91).
  */
 export class ReplaceCardUseCase {
   constructor(
@@ -64,7 +66,21 @@ export class ReplaceCardUseCase {
       .map((entry) => entry.card)
       .filter((other) => other.id !== cardId)
 
-    const allCards = await loadAllCards(this.contentStore)
+    const renamed = card.id !== cardId
+    // D-91: carta citada em `rewardDecks` não muda para tipo que não entra no deck.
+    const leavesRewardTypes = isRewardCard(current.card) && !isRewardCard(card)
+    const allCards =
+      card.type === 'dimension' ||
+      current.status === 'published' ||
+      renamed ||
+      leavesRewardTypes
+        ? await loadAllCards(this.contentStore)
+        : []
+    const cited = () =>
+      isCitedInRewardDeck(
+        allCards.map((entry) => entry.card),
+        new Set([cardId])
+      )
     const issues = [
       ...validateCandidate(
         collection,
@@ -80,7 +96,10 @@ export class ReplaceCardUseCase {
     ]
     if (issues.length > 0) return left(new ContentInvalidError(issues))
 
-    const renamed = card.id !== cardId
+    if (!renamed && leavesRewardTypes && cited()) {
+      return left(new ContentReferencedError('rewardDeck'))
+    }
+
     if (renamed) {
       if (current.status === 'published') return left(new ContentLockedError())
       const classes = await this.contentStore.listEditorClasses()
@@ -91,14 +110,7 @@ export class ReplaceCardUseCase {
       ) {
         return left(new ContentReferencedError())
       }
-      if (
-        isCitedInRewardDeck(
-          allCards.map((entry) => entry.card),
-          new Set([cardId])
-        )
-      ) {
-        return left(new ContentReferencedError('rewardDeck'))
-      }
+      if (cited()) return left(new ContentReferencedError('rewardDeck'))
       if (await this.contentStore.findEditorCard(card.id)) {
         return left(
           new ContentIdTakenError([{ path: 'slug', reason: 'idTaken' }])

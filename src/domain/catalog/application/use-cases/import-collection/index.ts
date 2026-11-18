@@ -7,9 +7,11 @@ import { ContentIdTakenError } from '@/domain/catalog/application/use-cases/_err
 import { ContentInUseError } from '@/domain/catalog/application/use-cases/_errors/content-in-use-error'
 import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_errors/content-invalid-error'
 import { ContentReferencedError } from '@/domain/catalog/application/use-cases/_errors/content-referenced-error'
-import { checkCatalogIntegrity } from '@/domain/catalog/enterprise/catalog-integrity'
 import {
-  cardsOutside,
+  checkCatalogIntegrity,
+  isRewardCard,
+} from '@/domain/catalog/enterprise/catalog-integrity'
+import {
   loadAllCards,
   statusById,
 } from '@/domain/catalog/application/use-cases/_shared/all-cards'
@@ -111,7 +113,7 @@ export class ImportCollectionUseCase {
         body.cards,
         collection,
         issues,
-        cardsOutside(outside, collection?.id ?? '')
+        outside.map(({ card }) => card)
       )
       const statuses = statusById([
         ...outside,
@@ -191,7 +193,7 @@ export class ImportCollectionUseCase {
     ) {
       const blocked = await this.checkReplacement(
         collection.id,
-        parsedCards.map(({ card }) => card.id),
+        parsedCards.map(({ card }) => card),
         otherClasses,
         outside.map(({ card }) => card)
       )
@@ -230,7 +232,7 @@ export class ImportCollectionUseCase {
    */
   private async checkReplacement(
     collectionId: string,
-    keptCardIds: readonly string[],
+    keptCards: readonly TCard[],
     otherClasses: readonly TEditorClass[],
     outsideCards: readonly TCard[]
   ): Promise<ContentInUseError | ContentReferencedError | null> {
@@ -250,7 +252,7 @@ export class ImportCollectionUseCase {
       return new ContentInUseError()
     }
 
-    const kept = new Set(keptCardIds)
+    const kept = new Set(keptCards.map((card) => card.id))
     const removed = new Set(oldCardIds.filter((id) => !kept.has(id)))
     if (
       otherClasses.some(({ classDefinition }) =>
@@ -259,8 +261,13 @@ export class ImportCollectionUseCase {
     ) {
       return new ContentReferencedError()
     }
-    // REQ-82: carta que some e é citada por dimensão de outra coleção.
-    if (isCitedInRewardDeck(outsideCards, removed)) {
+    // REQ-82, D-91: carta que some, ou que fica com tipo fora do deck de
+    // recompensas, e é citada por dimensão de outra coleção.
+    const leaving = new Set([
+      ...removed,
+      ...keptCards.filter((card) => !isRewardCard(card)).map((card) => card.id),
+    ])
+    if (isCitedInRewardDeck(outsideCards, leaving)) {
       return new ContentReferencedError('rewardDeck')
     }
     return null

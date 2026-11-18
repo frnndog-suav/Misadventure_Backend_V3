@@ -34,3 +34,10 @@ Nada a levar agora: o contrato v0.46 já tem os campos. O aviso vem quando a FEA
 
 ## Commit sugerido
 `feat/feat-32 content tools and reward decks (t-30, spec v0.44)`
+
+## Revisão (spec-reviewer, 2026-11-18)
+Aprovada sem bloqueantes. Opção (a) do autor aplicada:
+- **Troca de tipo de carta citada:** `PUT` mantendo o id ou import com `replace` que leva uma carta citada para tipo fora do deck de recompensas → `CONTENT_REFERENCED`. Registrado em D-91, com 2 testes novos em `_shared/req-82.test.ts`. A mesma brecha do deck pré-pronto (REQ-40) fica para outra tarefa.
+- **Rascunho citado no import:** aceito sem conferir (registrado em D-91).
+- `replace-card` só lê todas as coleções quando precisa; filtro duplicado do import removido.
+- `_shared/req-82.test.ts` cobre vários casos de uso num arquivo só, porque o REQ atravessa o editor inteiro. Aceito.
