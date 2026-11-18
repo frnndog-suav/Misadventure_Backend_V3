@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.44 · **Data:** 2026-11-18
+> **Versão do contrato:** 0.46 · **Data:** 2026-11-18
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -274,6 +274,7 @@ Base dos nomes no código dos dois lados e dos termos com destaque e tooltip (RE
 | Limbo | `limbo` (não trafega) |
 | Ferramenta (tipo) / zonas onde vasculha / ferramenta que coleta a carta | `toolKind` / `scavengeZoneTypes` / `scavengeTool` |
 | Cartas que se pode pedir no Vasculhar | `scavengeTargets` |
+| Resultado do último Vasculhar | `lastScavenge` |
 
 *(Cofre = `vault`, §2.3; Usar cofre = `useVault` e Vasculhar = `scavenge`, §2.5; deck de recompensas = `rewardDeck`, §2.2.)*
 
@@ -1498,7 +1499,7 @@ Contra a `fixture` (com as cartas que o backend acrescenta nesta FEAT), laborat�
 
 Só nos e2e do backend: leitura de saves antigos e o Pico abaixo do requisito com o equipamento já em uso (o Pico ainda não muda no jogo).
 
-### FEAT-32 — Cofre, limbo, deck de recompensas e Vasculhar — `proposto (BE)`
+### FEAT-32 — Cofre, limbo, deck de recompensas e Vasculhar — `acordado`
 
 Regras: README 3.4 (deck de recompensas por tipo de zona; Vasculhar não usa o deck de reserva; toda Urbana tem Usar cofre), 4.4 (passos ao mexer na build), 6.4 (cofre: slots, slots de decks com a build em uso, ouro, cópias físicas, Descartar), 6.5 (limbo: nada volta), 8.2, 12.2 (Usar cofre e Vasculhar: 1 ponto, repetíveis) e 12.6 (Vasculhar), B 12 e B 35.
 
@@ -1507,14 +1508,14 @@ Regras: README 3.4 (deck de recompensas por tipo de zona; Vasculhar não usa o d
 **Decisões que o frontend precisa saber:**
 - **Usar cofre é um lote:** um pedido com a lista de operações, aplicadas em ordem e de uma vez, por 1 ponto de ação. Se uma falha, nada muda e o erro diz qual (`operationIndex`). O frontend monta o lote na tela do cofre e envia ao confirmar.
 - **O limbo não é guardado nem exibido** (README 6.5): descartar do cofre só remove a carta.
-- **Vasculhar numa etapa só:** o jogador escolhe uma carta de `scavengeTargets` (o que a ferramenta dele coleta naquela zona, segundo a Carta de Dimensão) **sem ver o deck**. Se a carta não está mais no deck, o ponto é gasto e nada vem (`found: false` não trafega; o frontend compara o `inventory`).
+- **Vasculhar numa etapa só:** o jogador escolhe uma carta de `scavengeTargets` (o que a ferramenta dele coleta naquela zona, segundo a Carta de Dimensão) **sem ver o deck**. Se a carta não está mais no deck, o ponto é gasto e nada vem. O resultado vem pronto em `PlayerState.lastScavenge` (v0.45, pedido do FE).
 - **Vasculhar com o inventário cheio é recusado** (`inventoryFull`), sem gastar o ponto, até a FEAT-12 trazer a escolha de README 6.6.
 - **Mover ouro nunca perde ouro:** o que não cabe na bolsa ou no cofre é recusado.
 
 **Mudanças em outras seções:**
 - **FEAT-03 (`validado`):** `GameConfigValues` ganha `vaultCapacity`, `vaultDeckSlots`, `vaultGoldCapacity` (tabela de limites atualizada lá).
 - **FEAT-04 (`validado`):** `ItemCard` ganha `toolKind`, `scavengeZoneTypes`, `scavengeTool`; `EquipmentCard` ganha `scavengeTool`; `DimensionCard` ganha `rewardDecks`. A `fixture` muda (abaixo).
-- **FEAT-06/07/08/09/10 (`validado`):** `PlayerState` ganha `vault`, `vaultCapacity`, `vaultDeckSlots`, `vaultGoldCapacity`, `scavengeTargets`; `PartyAction` ganha `UseVaultAction` e `ScavengeAction`; `availableActions` ganha `scavenge` e `useVault` (ordem nova); motivos novos em `ActionInvalidDetails` e `ActionNotAllowedDetails`. Saves de antes desta versão continuam: cofre vazio, valores novos nos padrões do laboratório e **sem deck de recompensas** (ali o Vasculhar nunca acha nada). **Cenários antigos mudam:** a cidade inicial da `fixture` (e toda Urbana) tem `useVault`, então o `availableActions` esperado na cidade nos cenários das FEATs 08, 09 e 10 ganha `useVault` antes de `endTurn` (com `actionPoints ≥ 1`), e `scavenge` quando houver vara de pesca no inventário.
+- **FEAT-06/07/08/09/10 (`validado`):** `PlayerState` ganha `vault`, `vaultCapacity`, `vaultDeckSlots`, `vaultGoldCapacity`, `scavengeTargets`, `lastScavenge`; `PartyAction` ganha `UseVaultAction` e `ScavengeAction`; `availableActions` ganha `scavenge` e `useVault` (ordem nova); motivos novos em `ActionInvalidDetails` e `ActionNotAllowedDetails`. Saves de antes desta versão continuam: cofre vazio, valores novos nos padrões do laboratório, `lastScavenge: null` e **sem deck de recompensas** (ali o Vasculhar nunca acha nada). **Cenários antigos mudam:** a cidade inicial da `fixture` (e toda Urbana) tem `useVault`, então o `availableActions` esperado na cidade nos cenários das FEATs 08, 09 e 10 ganha `useVault` antes de `endTurn` (com `actionPoints ≥ 1`), e `scavenge` quando houver vara de pesca no inventário.
 - **FEAT-31 (`validado`):** o editor valida os campos novos (`CONTENT_INVALID`, `path` no campo); carta citada em `rewardDecks` → `CONTENT_REFERENCED` ao excluir ou renomear; cartas do cofre e dos decks de recompensas de um save estão **em uso** (`CONTENT_IN_USE`).
 
 #### Endpoints
@@ -1579,6 +1580,11 @@ interface PlayerState {
    */
   scavengeTargets: string[]
   /**
+   * FEAT-32 (v0.45). Resultado do Vasculhar aceito mais recente deste jogador: a carta pedida e se veio para o `inventory`.
+   * `null` na criação e em saves antigos. Cada `scavenge` aceito o substitui; as demais ações não mexem nele.
+   */
+  lastScavenge: { cardId: string; found: boolean } | null
+  /**
    * Ordem fixa: `move`, `recover`, `prepare`, `adjustDeck`, `scavenge`, `useVault`, `endTurn`.
    * FEAT-32, para o membro da vez com `actionPoints ≥ 1`: `scavenge` se `scavengeTargets` não é vazio;
    * `useVault` se a zona atual tem `useVault` em `zoneActions`.
@@ -1627,7 +1633,7 @@ type VaultOperation =
 // mão e descarte voltam ao deck, embaralha e compra tantas cartas quantas havia na mão; travas e modificadores recalculados.
 // Quantidades, `amount` e `copies`: inteiros ≥ 1. `deckIndex`: inteiro ≥ 0.
 
-/** Vasculhar (README 12.6). 1 ponto; repetível. Achando, a carta vai para o `inventory`; com ou sem achado, o deck é embaralhado. */
+/** Vasculhar (README 12.6). 1 ponto; repetível. Achando, a carta vai para o `inventory`; com ou sem achado, o deck é embaralhado e `lastScavenge` é atualizado. */
 interface ScavengeAction {
   type: 'scavenge'
   cardId: string // um de `scavengeTargets`
@@ -1683,9 +1689,9 @@ Contra a `fixture` com as mudanças desta FEAT, laboratório no padrão:
 
 Seja `G` criado com `{ "name": "Os Teimosos", "characterName": "Lia", "playerClass": "warrior" }` (build `fixture.endurance-basic` 30 + `fixture.strength-basic` 30) e posto em sessão, `M` o membro e `/grants` a rota de doação (FEAT-10). `F` = `fixture.fishing-rod`, `K` = `fixture.pickaxe`, `S` = `fixture.silver-fish`, `I` = `fixture.iron-ore`, `P` = `fixture.healing-potion`, `STR` = `fixture.strength-basic`.
 
-- Quando `POST /parties`, então `player` traz `vault = { "slots": [], "decks": [], "gold": 0 }`, `vaultCapacity: 30`, `vaultDeckSlots: 10`, `vaultGoldCapacity: 2000`, `scavengeTargets: []` e `availableActions = ["move", "recover", "adjustDeck", "useVault", "endTurn"]`.
+- Quando `POST /parties`, então `player` traz `vault = { "slots": [], "decks": [], "gold": 0 }`, `vaultCapacity: 30`, `vaultDeckSlots: 10`, `vaultGoldCapacity: 2000`, `scavengeTargets: []`, `lastScavenge: null` e `availableActions = ["move", "recover", "adjustDeck", "useVault", "endTurn"]`.
 - Com `K` doado: `scavengeTargets` continua `[]` (a picareta não vasculha `urban`). Com `F` doado: `scavengeTargets = ["fixture.silver-fish"]` e `availableActions` com `scavenge` antes de `useVault`.
-- Quando `{ "type": "scavenge", "cardId": S }`, então `200` com `S` no fim do `inventory` e `actionPoints: 2`; um segundo `scavenge` de `S` → `200`, `actionPoints: 1` e o `inventory` sem outro `S` (nada achado). `{ "type": "scavenge", "cardId": I }` → `409` `ACTION_NOT_ALLOWED` `{ "reason": "notScavengeable" }`.
+- Quando `{ "type": "scavenge", "cardId": S }`, então `200` com `S` no fim do `inventory`, `lastScavenge = { "cardId": S, "found": true }` e `actionPoints: 2`; um segundo `scavenge` de `S` → `200`, `actionPoints: 1`, o `inventory` sem outro `S` e `lastScavenge = { "cardId": S, "found": false }` (nada achado). `{ "type": "scavenge", "cardId": I }` → `409` `ACTION_NOT_ALLOWED` `{ "reason": "notScavengeable" }` e `lastScavenge` sem mudança.
 - Com o inventário cheio (10 slots, nenhum de `S`) num grupo novo com `F`, `scavenge` de `S` → `409` `{ "reason": "inventoryFull" }` e `actionPoints` sem mudança.
 - Com `P` ×3 e `gold: 100` (doações), quando `{ "type": "useVault", "operations": [{ "operation": "store", "cardId": P, "quantity": 2 }, { "operation": "storeGold", "amount": 60 }, { "operation": "discard", "cardId": P, "quantity": 1 }] }`, então `200` com `inventory` com `P` ×1, `vault = { "slots": [{ "cardId": P, "quantity": 1 }], "decks": [], "gold": 60 }`, `gold: 40` e `actionPoints: 2`.
 - Em seguida, `{ "type": "useVault", "operations": [{ "operation": "takeGold", "amount": 10 }, { "operation": "take", "cardId": P, "quantity": 5 }] }` → `409` `{ "reason": "notInVault", "operationIndex": 1 }` e nada muda (`gold` continua 40).
@@ -1772,3 +1778,5 @@ Só nos e2e do backend: ordem exata dos decks de recompensas (sorteio), saves an
 | 0.42 | 2026-11-18 | FE | FEAT-10 `validado` (sem mudança de formato): 26 conferências passaram contra o backend real (`http://localhost:3333`, conteúdo `base`: `base.wooden-shield` no lugar de `B`/`W`/`D` e `base.healing-herb` no de `P`/`K`): criação, empilhamento, ouro com perda, pasta, `prepare` em `availableActions`, equip e troca, unequip, `notEquipment`, `notInInventory`, `slotEmpty`, `inventoryFull` (doação e unequip), 0 pontos, `unknownOperation`, `unknownSlot`, sem sessão, `notGrantable`, `CARD_NOT_FOUND`, `MEMBER_NOT_FOUND`, `notPositiveInteger`. Sem carta que bloqueie escudo, com requisito de Pico ou com restrição de classe na `base`: `shieldBlocked`, `peakRequirementNotMet`, `classRestricted` e os valores da arma ficam com os e2e do backend (decisão do autor). `CONTENT_IN_USE` não rodado (apagaria conteúdo se falhasse). Tela com o MSW desligado: doação, `notPositiveInteger`, Equipar e Guardar. |
 | 0.43 | 2026-11-18 | BE | Título da seção FEAT-10 corrigido para `validado` (a v0.42 registrou a validação no histórico, mas não mudou o título). Sem mudança de formato. |
 | 0.44 | 2026-11-18 | BE | FEAT-32 proposta (`proposto (BE)`): `PlayerState.vault` (`Vault`), `vaultCapacity`, `vaultDeckSlots`, `vaultGoldCapacity`, `scavengeTargets` (altera FEAT-06); `PartyAction` ganha `UseVaultAction` (lote de 1 a 50 `VaultOperation`: `store`, `take`, `storeGold`, `takeGold`, `discard`, `saveDeck`, `unpackDeck`, `swapBuild`, `editBuild`) e `ScavengeAction`; `availableActions` ganha `scavenge` e `useVault` (ordem nova); motivos novos em `ActionInvalidDetails` (`invalidLength`, `notNonNegativeInteger`) e `ActionNotAllowedDetails` (13 motivos e o campo `operationIndex`); 3 chaves novas em `GameConfigValues` (altera FEAT-03); `ItemCard.toolKind`/`scavengeZoneTypes`/`scavengeTool`, `EquipmentCard.scavengeTool`, `DimensionCard.rewardDecks` (altera FEAT-04/06) e a `fixture` com 3 itens novos; `CONTENT_REFERENCED` também por deck de recompensas e "em uso" estendido (altera FEAT-31); glossário §2.15. Sem rota nem código de erro novos. |
+| 0.45 | 2026-11-18 | FE | FEAT-32 → `proposto (FE)`, um pedido de mudança: o resultado do Vasculhar vem pronto em `PlayerState.lastScavenge` (`{ cardId, found }` ou `null`), em vez de o frontend comparar o inventário (princípio "o backend decide"; com carta que empilha, a comparação depende de regra de empilhamento). Cenários do Vasculhar atualizados. O resto da proposta aceito sem mudanças. |
+| 0.46 | 2026-11-18 | BE | FEAT-32 `acordado`: `lastScavenge` aceito sem mudanças (o caso de uso já sabe se a carta estava no deck; saves antigos lidos com `null`). Sem outras mudanças de formato. |
