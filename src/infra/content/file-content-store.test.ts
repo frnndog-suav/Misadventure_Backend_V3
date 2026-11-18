@@ -212,23 +212,24 @@ describe('FileContentStore', () => {
 
   it('REQ-49: renomear para outro tipo apaga o arquivo de tipo que fica vazio', async () => {
     const store = await open()
-    const item = makeItemCard({ id: 'fixture.blade-of-dusk' })
-    await store.saveCard(item, 'draft', 'fixture.blade-of-dusk')
+    const item = makeItemCard({ id: 'fixture.howling-wolves' })
+    await store.saveCard(item, 'draft', 'fixture.howling-wolves')
 
-    expect(await exists('fixture/equipment.json')).toBe(false)
+    expect(await exists('fixture/combatEvent.json')).toBe(false)
     const items = (await readJson('fixture/item.json')) as { id: string }[]
     expect(items.map((card) => card.id)).toEqual([
-      'fixture.blade-of-dusk',
       'fixture.healing-potion',
+      'fixture.howling-wolves',
+      'fixture.pickaxe',
     ])
   })
 
   it('REQ-49: excluir a última carta de um tipo apaga o arquivo', async () => {
     const store = await open()
-    await store.deleteCard('fixture.blade-of-dusk')
+    await store.deleteCard('fixture.howling-wolves')
 
-    expect(await exists('fixture/equipment.json')).toBe(false)
-    expect(await store.findEditorCard('fixture.blade-of-dusk')).toBeNull()
+    expect(await exists('fixture/combatEvent.json')).toBe(false)
+    expect(await store.findEditorCard('fixture.howling-wolves')).toBeNull()
   })
 
   it('REQ-49: excluir a coleção apaga a pasta', async () => {

@@ -32,13 +32,15 @@ type TParty = {
 
 const CITY = 'fixture.gray-harbor'
 
-// Chaves da FEAT-09 (REQ-60): um save v2 não as tem.
+// Chaves das FEATs 09 e 10 (REQ-60, REQ-69): um save v2 não as tem.
 const V4_KEYS = [
   'maxCopiesPerCard',
   'tcgFolderCapacity',
   'recoverHealthPercent',
   'recoverVigorPercent',
   'recoverHandSize',
+  'inventoryCapacity',
+  'purseCapacity',
 ]
 
 function neighbours(party: TParty, zoneId: string): string[] {
@@ -336,7 +338,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
     expect(ended.body.turn.actionPoints).toBe(3)
   })
 
-  it('REQ-59/D-64/D-70: save v2 inserido à mão é lido com turn na rodada 1 e regravado como v4', async () => {
+  it('REQ-59/D-64/D-70/D-79: save v2 inserido à mão é lido com turn na rodada 1 e regravado como v5', async () => {
     const party = await startedParty()
     const db = app.get<Database>(DRIZZLE)
     const [row] = await db
@@ -349,6 +351,8 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
       (m) => {
         const player = { ...m.player }
         delete player.tcgFolder
+        delete player.inventory
+        delete player.equipment
         return { ...m, player }
       }
     )
@@ -377,7 +381,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
       .from(parties)
       .where(eq(parties.id, party.id))
     expect(saved.state).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 5,
       turn: { round: 2, memberId: party.members[0].id, actionPoints: 4 },
     })
   })

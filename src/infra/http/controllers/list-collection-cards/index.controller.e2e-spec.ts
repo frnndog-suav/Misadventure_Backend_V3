@@ -38,13 +38,18 @@ describe('GET /catalog/collections/:collectionId/cards (e2e)', () => {
         type,
       ])
     ).toEqual([
+      ['fixture.arcane-wand', 'equipment'],
       ['fixture.blade-of-dusk', 'equipment'],
       ['fixture.dexterity-basic', 'attribute'],
       ['fixture.endurance-basic', 'attribute'],
       ['fixture.gray-harbor', 'zone'],
       ['fixture.healing-potion', 'item'],
       ['fixture.howling-wolves', 'combatEvent'],
+      ['fixture.iron-helm', 'equipment'],
+      ['fixture.oak-shield', 'equipment'],
       ['fixture.old-mine', 'zone'],
+      ['fixture.pickaxe', 'item'],
+      ['fixture.short-sword', 'equipment'],
       ['fixture.stone-bend', 'zone'],
       ['fixture.strength-basic', 'attribute'],
       ['fixture.test-dimension', 'dimension'],

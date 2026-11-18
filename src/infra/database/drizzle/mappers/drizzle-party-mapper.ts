@@ -236,6 +236,10 @@ export class DrizzlePartyMapper {
     const status = statusSchema.parse(row.status)
     const state = stateSchema.parse(row.state)
     const turnOrder = state.turnOrder.map((m) => new UniqueEntityID(m))
+    const config: TGameConfigValues =
+      state.schemaVersion === SCHEMA_VERSION
+        ? state.config
+        : { ...V4_CONFIG_DEFAULTS, ...state.config, ...V5_CONFIG_DEFAULTS }
 
     return Party.restore(
       {
@@ -245,21 +249,14 @@ export class DrizzlePartyMapper {
             {
               characterName: m.characterName,
               kind: m.kind,
-              player: upgradePlayer(m.player),
+              player: upgradePlayer(m.player, config.purseCapacity),
             },
             new UniqueEntityID(m.id)
           )
         ),
         hostMemberId: new UniqueEntityID(state.hostMemberId),
         status,
-        config:
-          state.schemaVersion === SCHEMA_VERSION
-            ? (state.config satisfies TGameConfigValues)
-            : {
-                ...V4_CONFIG_DEFAULTS,
-                ...state.config,
-                ...V5_CONFIG_DEFAULTS,
-              },
+        config,
         rngState: state.rngState satisfies RngState,
         dimension: state.dimension,
         turnOrder,
@@ -340,11 +337,16 @@ type TStoredPlayer = z.infer<typeof legacyPlayerSchema> &
 
 /**
  * D-70: antes da FEAT-09 não havia pasta; a build vai em ordem de cardId
- * (REQ-62). D-79: antes da FEAT-10, inventário vazio e nada equipado.
+ * (REQ-62). D-79: antes da FEAT-10, inventário vazio e nada equipado, e o
+ * ouro limitado à `purseCapacity` (REQ-70).
  */
-function upgradePlayer(player: TStoredPlayer): TPlayerState {
+function upgradePlayer(
+  player: TStoredPlayer,
+  purseCapacity: number
+): TPlayerState {
   return {
     ...player,
+    gold: Math.min(player.gold, purseCapacity),
     build:
       player.tcgFolder === undefined
         ? sortedByCardId(player.build)

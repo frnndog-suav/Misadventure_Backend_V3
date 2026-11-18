@@ -8,12 +8,20 @@ import type {
 } from '@/domain/campaign/enterprise/entities/party-member'
 import { availableActions } from '@/domain/campaign/enterprise/available-actions'
 import { connectedZones } from '@/domain/campaign/enterprise/connected-zones'
+import { effectiveModifiers } from '@/domain/campaign/enterprise/effective-modifiers'
 import type { TPartyActionType } from '@/domain/campaign/enterprise/party-action'
 import type { TDirection } from '@/domain/campaign/enterprise/map-assembly'
+import type { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import type {
+  TCard,
+  TEquipmentCard,
+  TEquipmentSlot,
   TModifier,
   TPlayerClass,
 } from '@/domain/catalog/enterprise/value-objects/card'
+
+/** Cartas do catálogo que o presenter precisa (D-80 b), por id. */
+export type TPartyCards = ReadonlyMap<string, TCard>
 
 /** CONTRATO FEAT-09, tipo `CardCopies`. */
 export interface TCardCopiesHttp {
@@ -44,6 +52,12 @@ export interface TPlayerStateHttp {
   buildSize: number
   tcgFolder: TCardCopiesHttp[]
   tcgFolderCapacity: number
+  /** FEAT-10 (REQ-70, REQ-71). */
+  inventory: { cardId: string; quantity: number }[]
+  inventoryCapacity: number
+  equipment: Record<TEquipmentSlot, string | null>
+  purseCapacity: number
+  effectiveModifiers: Record<TModifier, number>
 }
 
 const copiesToHTTP = (
@@ -89,9 +103,21 @@ export interface TPartyHttp {
   savedAt: string
 }
 
-function playerToHTTP(party: Party, member: PartyMember): TPlayerStateHttp {
+function playerToHTTP(
+  party: Party,
+  member: PartyMember,
+  cards: TPartyCards
+): TPlayerStateHttp {
   const player = member.player
   const { map } = party.dimension
+  const equipmentCards = Object.values(player.equipment)
+    .map((cardId) => (cardId === null ? undefined : cards.get(cardId)))
+    .filter((card): card is TEquipmentCard => card?.type === 'equipment')
+  const equipmentCardIds = new Set(
+    player.inventory
+      .map(({ cardId }) => cardId)
+      .filter((cardId) => cards.get(cardId)?.type === 'equipment')
+  )
   return {
     playerClasses: player.playerClasses.map(({ playerClass, deckLockMet }) => ({
       playerClass,
@@ -110,17 +136,52 @@ function playerToHTTP(party: Party, member: PartyMember): TPlayerStateHttp {
     zoneId: player.zoneId,
     respawnZoneId: player.respawnZoneId,
     moveTargets: connectedZones(map, player.zoneId),
-    // T-29: os ids de equipamento do inventário vêm do catálogo (REQ-75).
-    availableActions: availableActions(party, member.id, new Set()),
+    availableActions: availableActions(party, member.id, equipmentCardIds),
     build: copiesToHTTP(player.build),
     buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),
     tcgFolder: copiesToHTTP(player.tcgFolder),
     tcgFolderCapacity: party.config.tcgFolderCapacity,
+    inventory: player.inventory.map(({ cardId, quantity }) => ({
+      cardId,
+      quantity,
+    })),
+    inventoryCapacity: party.config.inventoryCapacity,
+    equipment: { ...player.equipment },
+    purseCapacity: party.config.purseCapacity,
+    effectiveModifiers: effectiveModifiers({
+      modifiers: player.modifiers,
+      peak: player.peak,
+      equipment: equipmentCards,
+    }),
   }
 }
 
+/**
+ * Lê no catálogo as cartas do inventário e dos equipamentos em uso de todos os
+ * membros (D-80 b). A que o catálogo não tem fica de fora: não conta como
+ * equipamento nem soma modificador.
+ */
+export async function findPartyCards(
+  catalog: CardCatalog,
+  party: Party
+): Promise<TPartyCards> {
+  const cardIds = new Set<string>()
+  for (const { player } of party.members) {
+    for (const { cardId } of player.inventory) cardIds.add(cardId)
+    for (const cardId of Object.values(player.equipment)) {
+      if (cardId !== null) cardIds.add(cardId)
+    }
+  }
+  const cards = new Map<string, TCard>()
+  for (const cardId of cardIds) {
+    const card = await catalog.findCard(cardId)
+    if (card) cards.set(cardId, card)
+  }
+  return cards
+}
+
 export class PartyPresenter {
-  static toHTTP(party: Party): TPartyHttp {
+  static toHTTP(party: Party, cards: TPartyCards): TPartyHttp {
     const { dimensionCardId, startingCityZoneId, map } = party.dimension
     return {
       id: party.id.toString(),
@@ -131,7 +192,7 @@ export class PartyPresenter {
         characterName: member.characterName,
         kind: member.kind,
         isHost: party.isHost(member),
-        player: playerToHTTP(party, member),
+        player: playerToHTTP(party, member, cards),
       })),
       dimension: {
         dimensionCardId,

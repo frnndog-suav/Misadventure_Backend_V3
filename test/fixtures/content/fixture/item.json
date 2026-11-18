@@ -7,5 +7,14 @@
     "itemCategory": "consumable",
     "tags": ["poção"],
     "effects": [{ "text": "Recupera 5 de vida." }]
+  },
+  {
+    "id": "fixture.pickaxe",
+    "name": "Picareta",
+    "flavorText": null,
+    "rarity": "common",
+    "itemCategory": "tool",
+    "tags": ["ferramenta"],
+    "effects": [{ "text": "Permite minerar." }]
   }
 ]

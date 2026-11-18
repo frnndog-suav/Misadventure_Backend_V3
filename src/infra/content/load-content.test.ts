@@ -172,7 +172,7 @@ describe('loadContent', () => {
     }
   })
 
-  it('REQ-10: a fixture de teste carrega com as 12 cartas e as 2 classes do contrato', async () => {
+  it('REQ-10: a fixture de teste carrega com as 17 cartas e as 2 classes do contrato', async () => {
     const result = await loadContent('test/fixtures/content')
 
     expect(result.ok).toBe(true)
@@ -186,13 +186,18 @@ describe('loadContent', () => {
     expect(
       result.content.cards.map(({ card: { id, type } }) => [id, type]).sort()
     ).toEqual([
+      ['fixture.arcane-wand', 'equipment'],
       ['fixture.blade-of-dusk', 'equipment'],
       ['fixture.dexterity-basic', 'attribute'],
       ['fixture.endurance-basic', 'attribute'],
       ['fixture.gray-harbor', 'zone'],
       ['fixture.healing-potion', 'item'],
       ['fixture.howling-wolves', 'combatEvent'],
+      ['fixture.iron-helm', 'equipment'],
+      ['fixture.oak-shield', 'equipment'],
       ['fixture.old-mine', 'zone'],
+      ['fixture.pickaxe', 'item'],
+      ['fixture.short-sword', 'equipment'],
       ['fixture.stone-bend', 'zone'],
       ['fixture.strength-basic', 'attribute'],
       ['fixture.test-dimension', 'dimension'],

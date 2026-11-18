@@ -28,6 +28,8 @@ const DEFAULTS = {
   recoverHealthPercent: 15,
   recoverVigorPercent: 5,
   recoverHandSize: 7,
+  inventoryCapacity: 10,
+  purseCapacity: 300,
 }
 
 const LIMITS = {
@@ -55,6 +57,8 @@ const LIMITS = {
   recoverHealthPercent: { min: 0, max: 100 },
   recoverVigorPercent: { min: 0, max: 100 },
   recoverHandSize: { min: 0, max: 200 },
+  inventoryCapacity: { min: 0, max: 100 },
+  purseCapacity: { min: 0, max: 1000000 },
 }
 
 describe('GET /lab/config (e2e)', () => {

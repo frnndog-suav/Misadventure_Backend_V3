@@ -29,6 +29,8 @@ const DEFAULTS = {
   recoverHealthPercent: 15,
   recoverVigorPercent: 5,
   recoverHandSize: 7,
+  inventoryCapacity: 10,
+  purseCapacity: 300,
 }
 
 function invalid(fields: { field: string | null; reason: string }[]) {

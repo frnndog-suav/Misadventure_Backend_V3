@@ -290,3 +290,51 @@ POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
 Content-Type: application/json
 
 { "type": "adjustDeck", "build": [{ "cardId": "fixture.endurance-basic", "copies": 30 }, { "cardId": "fixture.strength-basic", "copies": 30 }, { "cardId": "fixture.dexterity-basic", "copies": 1 }] }
+
+### FEAT-10 — doar 2 poções (200 Party; inventory [{ healing-potion, 2 }]; vale sem sessão; 404 com LAB_ENABLED=false)
+POST {{baseUrl}}/lab/parties/{{createParty.response.body.id}}/members/{{createParty.response.body.members[0].id}}/grants
+Content-Type: application/json
+
+{ "type": "card", "cardId": "fixture.healing-potion", "quantity": 2 }
+
+### FEAT-10 — doar ouro acima da bolsa (200; gold 300, o resto é perdido)
+POST {{baseUrl}}/lab/parties/{{createParty.response.body.id}}/members/{{createParty.response.body.members[0].id}}/grants
+Content-Type: application/json
+
+{ "type": "gold", "amount": 1000 }
+
+### FEAT-10 — doar a Lâmina do Crepúsculo (200; availableActions ganha prepare)
+POST {{baseUrl}}/lab/parties/{{createParty.response.body.id}}/members/{{createParty.response.body.members[0].id}}/grants
+Content-Type: application/json
+
+{ "type": "card", "cardId": "fixture.blade-of-dusk", "quantity": 1 }
+
+### FEAT-10 — doar zona (400 LAB_GRANT_INVALID notGrantable)
+POST {{baseUrl}}/lab/parties/{{createParty.response.body.id}}/members/{{createParty.response.body.members[0].id}}/grants
+Content-Type: application/json
+
+{ "type": "card", "cardId": "fixture.gray-harbor", "quantity": 1 }
+
+### FEAT-10 — Preparar: equipar (200; equipment.weapon, effectiveModifiers.attack 9, actionPoints iguais)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "prepare", "operation": "equip", "cardId": "fixture.blade-of-dusk" }
+
+### FEAT-10 — Preparar: equipar a poção (409 ACTION_NOT_ALLOWED notEquipment)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "prepare", "operation": "equip", "cardId": "fixture.healing-potion" }
+
+### FEAT-10 — Preparar: guardar a arma (200; a arma no fim do inventory)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "prepare", "operation": "unequip", "slot": "weapon" }
+
+### FEAT-10 — Preparar: guardar slot vazio (409 slotEmpty)
+POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
+Content-Type: application/json
+
+{ "type": "prepare", "operation": "unequip", "slot": "head" }

@@ -29,7 +29,7 @@ A D-80 (nova) registra:
 
 O presenter passa `new Set()` para `availableActions` até a T-29.
 
-**Ponto aberto** (revisão): ao ler um save antigo, `gold` não é limitado a `purseCapacity`. Com `initialGold` acima de 300, a invariante de REQ-70 não vale nesse save. O autor decide.
+**Ponto aberto** (revisão): ao ler um save antigo, `gold` não era limitado a `purseCapacity`. **Resolvido em 2026-11-17:** o autor decidiu limitar na leitura (D-79, REQ-79); o mapper aplica `min(gold, purseCapacity)` e há teste do caso.
 
 ## Passos e comandos
 1. Testes primeiro. `npx vitest run src/domain` (PowerShell) deu 162 falhas e 4 suítes sem módulo, todas pelo motivo certo.

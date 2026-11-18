@@ -18,4 +18,7 @@ export const DOMAIN_ERROR_STATUS: Readonly<Record<string, HttpStatus>> = {
   CONTENT_IN_USE: HttpStatus.CONFLICT,
   CONTENT_REFERENCED: HttpStatus.CONFLICT,
   CLASS_NOT_FOUND: HttpStatus.NOT_FOUND,
+  LAB_GRANT_INVALID: HttpStatus.BAD_REQUEST,
+  MEMBER_NOT_FOUND: HttpStatus.NOT_FOUND,
+  LAB_GRANT_NO_SPACE: HttpStatus.CONFLICT,
 }

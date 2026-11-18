@@ -225,6 +225,15 @@ describe('DrizzlePartyMapper', () => {
     expect(rewritten.members[0].player.inventory).toEqual([])
   })
 
+  it('REQ-79/D-79: save v4 com ouro acima de purseCapacity é lido com o ouro limitado', () => {
+    const { row } = legacyRow(4)
+    row.state.members[0].player.gold = 450
+
+    const restored = DrizzlePartyMapper.toDomain(row)
+
+    expect(restored.members[0].player.gold).toBe(300)
+  })
+
   it('REQ-79: ida e volta preserva inventário (com a ordem), equipamentos e ouro', () => {
     const base = makeParty({ status: 'inSession' })
     const member = base.members[0]
