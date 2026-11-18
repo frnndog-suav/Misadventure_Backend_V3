@@ -13,6 +13,7 @@ import type {
   TEquipmentCard,
   TItemCard,
   TStarterDeckEntry,
+  TZoneAction,
   TZoneCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
@@ -21,7 +22,11 @@ import { connectedZones } from '../../connected-zones'
 import type { TPartyEvent } from '../../events/party-events'
 import { addToInventory, type TInventorySlot } from '../../inventory'
 import { assembleMap, type TPartyMap } from '../../map-assembly'
-import type { TPrepareOperation, TRecoverOption } from '../../party-action'
+import type {
+  TPrepareOperation,
+  TRecoverOption,
+  TVaultOperation,
+} from '../../party-action'
 import type { TPartyTurn } from '../../party-turn'
 import { shuffle } from '../../shuffle'
 import {
@@ -30,6 +35,7 @@ import {
   sortedByCardId,
 } from '../../starting-player'
 import { rollTurnOrder } from '../../turn-order'
+import { applyVaultOperations, type TVaultRefusal } from '../../vault'
 import { maxHealthOf, PartyMember, type TPlayerState } from '../party-member'
 
 /** Limites de CONTRATO FEAT-05 (`CreatePartyRequest`, D-30). */
@@ -79,6 +85,13 @@ export type TPrepareRefusal =
         | 'inventoryFull'
         | 'slotEmpty'
     }
+
+/** Por que o Usar cofre foi recusado (REQ-88; D-82). */
+export type TUseVaultRefusal =
+  | 'sessionNotActive'
+  | 'noActionPoints'
+  | 'zoneActionUnavailable'
+  | TVaultRefusal
 
 /** Doação do laboratório já resolvida no catálogo (REQ-77; D-78, D-79). */
 export type TLabGrant =
@@ -183,8 +196,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 
   /**
    * Conteúdo que este save usa (REQ-39, REQ-78): a Carta de Dimensão, as zonas
-   * do mapa, as cartas da build, da pasta, do inventário e dos equipamentos em
-   * uso de cada jogador e as classes deles.
+   * do mapa, as cartas da build, da pasta, do inventário, do cofre (slots e
+   * decks, REQ-94) e dos equipamentos em uso de cada jogador e as classes deles.
    */
   contentInUse(): { cardIds: string[]; playerClasses: string[] } {
     const cardIds = new Set<string>([
@@ -193,8 +206,14 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     ])
     const playerClasses = new Set<string>()
     for (const member of this.props.members) {
-      const { build, tcgFolder, inventory, equipment } = member.player
-      for (const entry of [...build, ...tcgFolder, ...inventory]) {
+      const { build, tcgFolder, inventory, equipment, vault } = member.player
+      for (const entry of [
+        ...build,
+        ...tcgFolder,
+        ...inventory,
+        ...vault.slots,
+        ...vault.decks.flat(),
+      ]) {
         cardIds.add(entry.cardId)
       }
       for (const cardId of Object.values(equipment)) {
@@ -675,77 +694,132 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       build.map(({ cardId, copies }) => ({ cardId, copies }))
     )
     const rng = SeededRng.fromState(this.props.rngState)
-    const shuffled = shuffle(
-      newBuild.flatMap(({ cardId, copies }) =>
-        Array.from({ length: copies }, () => cardId)
-      ),
-      rng
-    )
-    const hand = shuffled.slice(0, player.hand.length)
-    const deck = shuffled.slice(hand.length)
-
-    const lockEntries = newBuild.flatMap(({ cardId, copies }) => {
-      const card = catalog.cards.find((c) => c.id === cardId)
-      return card ? [{ card, copies }] : []
-    })
-    const playerClasses = player.playerClasses.map((entry) => {
-      const definition = catalog.classes.find(
-        (c) => c.playerClass === entry.playerClass
-      )
-      if (!definition) return entry
-      return {
-        playerClass: entry.playerClass,
-        deckLockMet: isClassActive({
-          build: lockEntries,
-          essentialAttributes: definition.essentialAttributes,
-          lockOneEssential: config.lockOneEssential,
-          lockTwoEssentials: config.lockTwoEssentials,
-        }),
-      }
-    })
-    // Os modificadores seguem a 1ª classe, como na preparação (REQ-34).
-    const firstDefinition = catalog.classes.find(
-      (c) => c.playerClass === player.playerClasses[0]?.playerClass
-    )
-    const modifiers = firstDefinition
-      ? playerClasses[0].deckLockMet
-        ? { ...firstDefinition.baseModifiers }
-        : defaultModifiers(config)
-      : player.modifiers
+    const rebuilt = rebuildPlayerDeck(player, newBuild, catalog, config, rng)
 
     this.props.rngState = rng.state()
     this.spendActionPoint()
     this.replaceActor(index, {
       ...player,
-      playerClasses,
+      ...rebuilt,
       build: newBuild,
       tcgFolder,
-      deck,
-      hand,
-      discard: [],
-      modifiers,
     })
     this.props.savedAt = at
+    this.addDeckEvents(actor.id, player, rebuilt, buildSize, at)
+    return right(undefined)
+  }
+
+  /**
+   * Usar cofre (README 6.4, 6.5, 12.2; REQ-84 a REQ-88; D-82). Quem age é o
+   * membro da vez; gasta 1 ponto. `catalog.zoneActions` são as ações da zona
+   * atual; `cards` as cartas que as operações, o cofre, a build e a pasta
+   * citam; `classes`, as do jogador. Ordem das recusas: fora de sessão, sem
+   * pontos, zona sem `useVault`, a primeira operação que falha (simulando em
+   * ordem, com `operationIndex`). Recusado, nada muda. Com `swapBuild` ou
+   * `editBuild` no lote, no fim acontecem uma vez os passos de 4.4 (RNG); sem
+   * eles o RNG não é usado. Eventos: `VaultUsed`, `SentToLimbo` por
+   * Descartar, e `DeckAdjusted`/`DeckLockChanged` se a build mudou.
+   */
+  useVault(
+    operations: readonly TVaultOperation[],
+    catalog: {
+      cards: readonly TCard[]
+      classes: readonly TClassDefinition[]
+      zoneActions: readonly TZoneAction[]
+    },
+    at: Date
+  ): Either<TUseVaultRefusal, void> {
+    switch (this.props.status) {
+      case 'idle':
+        return left('sessionNotActive')
+      case 'inSession':
+        break
+      default: {
+        const _exhaustive: never = this.props.status
+        return _exhaustive
+      }
+    }
+
+    if (this.props.turn.actionPoints < 1) {
+      return left('noActionPoints')
+    }
+    if (!catalog.zoneActions.includes('useVault')) {
+      return left('zoneActionUnavailable')
+    }
+
+    const { config } = this.props
+    const index = this.actorIndex()
+    const actor = this.props.members[index]
+    const applied = applyVaultOperations({
+      player: actor.player,
+      config,
+      cards: catalog.cards,
+      operations,
+    })
+    if (applied.isLeft()) return left(applied.value)
+    const { player: changed, limbo, buildChanged } = applied.value
+
+    let next = changed
+    let rebuilt: ReturnType<typeof rebuildPlayerDeck> | null = null
+    if (buildChanged) {
+      const rng = SeededRng.fromState(this.props.rngState)
+      rebuilt = rebuildPlayerDeck(changed, changed.build, catalog, config, rng)
+      next = { ...changed, ...rebuilt }
+      this.props.rngState = rng.state()
+    }
+
+    this.spendActionPoint()
+    this.replaceActor(index, next)
+    this.props.savedAt = at
+    const base = { memberId: actor.id, occurredAt: at, aggregateId: this.id }
+    this.addDomainEvent({
+      type: 'VaultUsed',
+      operationCount: operations.length,
+      ...base,
+    })
+    for (const { cardId, quantity } of limbo) {
+      this.addDomainEvent({
+        type: 'SentToLimbo',
+        cardId,
+        quantity,
+        from: 'vault',
+        ...base,
+      })
+    }
+    if (rebuilt !== null) {
+      const buildSize = changed.build.reduce((sum, e) => sum + e.copies, 0)
+      this.addDeckEvents(actor.id, actor.player, rebuilt, buildSize, at)
+    }
+    return right(undefined)
+  }
+
+  /** `DeckAdjusted` e, para cada classe cuja trava mudou, `DeckLockChanged` (REQ-65, REQ-87). */
+  private addDeckEvents(
+    memberId: UniqueEntityID,
+    before: TPlayerState,
+    rebuilt: ReturnType<typeof rebuildPlayerDeck>,
+    buildSize: number,
+    at: Date
+  ): void {
     const base = { occurredAt: at, aggregateId: this.id }
     this.addDomainEvent({
       type: 'DeckAdjusted',
-      memberId: actor.id,
+      memberId,
       buildSize,
-      handSize: hand.length,
+      handSize: rebuilt.hand.length,
       ...base,
     })
-    playerClasses.forEach((entry, i) => {
-      if (entry.deckLockMet !== player.playerClasses[i].deckLockMet) {
+    rebuilt.playerClasses.forEach((entry, i) => {
+      if (entry.deckLockMet !== before.playerClasses[i].deckLockMet) {
         this.addDomainEvent({
           type: 'DeckLockChanged',
-          memberId: actor.id,
+          memberId,
           playerClass: entry.playerClass,
           deckLockMet: entry.deckLockMet,
           ...base,
         })
       }
     })
-    return right(undefined)
   }
 
   /**
@@ -1015,6 +1089,65 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       aggregateId: this.id,
     })
   }
+}
+
+/**
+ * README 4.4 passos 1 a 4 (REQ-65, REQ-87): a build nova, embaralhada pelo RNG,
+ * vira o deck; a mão volta com o mesmo tamanho que tinha, o descarte esvazia; a
+ * trava de cada classe e os modificadores (da 1ª classe, REQ-34) são refeitos.
+ * A carta ou a classe que o catálogo não tem: sem trava recalculada.
+ */
+function rebuildPlayerDeck(
+  player: TPlayerState,
+  newBuild: readonly TStarterDeckEntry[],
+  catalog: {
+    cards: readonly TCard[]
+    classes: readonly TClassDefinition[]
+  },
+  config: TGameConfigValues,
+  rng: SeededRng
+): Pick<
+  TPlayerState,
+  'playerClasses' | 'deck' | 'hand' | 'discard' | 'modifiers'
+> {
+  const shuffled = shuffle(
+    newBuild.flatMap(({ cardId, copies }) =>
+      Array.from({ length: copies }, () => cardId)
+    ),
+    rng
+  )
+  const hand = shuffled.slice(0, player.hand.length)
+  const deck = shuffled.slice(hand.length)
+
+  const lockEntries = newBuild.flatMap(({ cardId, copies }) => {
+    const card = catalog.cards.find((c) => c.id === cardId)
+    return card?.type === 'attribute' ? [{ card, copies }] : []
+  })
+  const playerClasses = player.playerClasses.map((entry) => {
+    const definition = catalog.classes.find(
+      (c) => c.playerClass === entry.playerClass
+    )
+    if (!definition) return entry
+    return {
+      playerClass: entry.playerClass,
+      deckLockMet: isClassActive({
+        build: lockEntries,
+        essentialAttributes: definition.essentialAttributes,
+        lockOneEssential: config.lockOneEssential,
+        lockTwoEssentials: config.lockTwoEssentials,
+      }),
+    }
+  })
+  // Os modificadores seguem a 1ª classe, como na preparação (REQ-34).
+  const firstDefinition = catalog.classes.find(
+    (c) => c.playerClass === player.playerClasses[0]?.playerClass
+  )
+  const modifiers = firstDefinition
+    ? playerClasses[0].deckLockMet
+      ? { ...firstDefinition.baseModifiers }
+      : defaultModifiers(config)
+    : player.modifiers
+  return { playerClasses, deck, hand, discard: [], modifiers }
 }
 
 /** REQ-35: `unknownClass` quando o texto não tem classe publicada. */

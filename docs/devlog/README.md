@@ -52,8 +52,9 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 032 | T-26 | Domínio do deck (FEAT-09): config REQ-60, `starterDeckCopyLimit`, pasta, `Party.recover`/`adjustDeck`; mapper v4 adiantado | concluída |
 | 033 | T-27 | Rota do deck (FEAT-09): presenter com build e pasta, e2e de REQ-60 a REQ-68, `client.http`, `implementado (BE)`; FEAT-09 `validado` | concluída |
 | 034 | T-28 | Domínio de inventário, equipar e bolsa (FEAT-10): config REQ-69, inventário e equipamentos, `effectiveModifiers`, `Party.prepare`/`grant`, doação; mapper v5 adiantado | concluída |
-| 035 | T-29 | Save v5, rotas e conteúdo de teste (FEAT-10): presenter com inventário/equipamentos/efetivos (D-81), rota de doação, 5 cartas na fixture, e2e; ouro de save antigo limitado (D-79); FEAT-10 `implementado (BE)`; FEAT-10 `validado` | aguardando revisão |
-| 036 | T-30 | Conteúdo da FEAT-32: ferramentas (`toolKind`, `scavengeZoneTypes`), coletáveis (`scavengeTool`), `rewardDecks` na Carta de Dimensão, validação no boot e no editor, `CONTENT_REFERENCED` por deck de recompensas (D-91); fixture com 3 itens novos | aguardando revisão |
+| 035 | T-29 | Save v5, rotas e conteúdo de teste (FEAT-10): presenter com inventário/equipamentos/efetivos (D-81), rota de doação, 5 cartas na fixture, e2e; ouro de save antigo limitado (D-79); FEAT-10 `implementado (BE)`; FEAT-10 `validado` | concluída |
+| 036 | T-30 | Conteúdo da FEAT-32: ferramentas (`toolKind`, `scavengeZoneTypes`), coletáveis (`scavengeTool`), `rewardDecks` na Carta de Dimensão, validação no boot e no editor, `CONTENT_REFERENCED` por deck de recompensas (D-91); fixture com 3 itens novos | concluída |
+| 037 | T-31 | Domínio do cofre e do limbo (FEAT-32): config REQ-80, `Party.useVault` com 9 operações, `applyVaultOperations`, parser, eventos, `availableActions`; mapper v6 adiantado (D-92) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

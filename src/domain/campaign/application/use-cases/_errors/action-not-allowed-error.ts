@@ -15,6 +15,18 @@ export type TActionNotAllowedReason =
   | 'shieldBlocked'
   | 'inventoryFull'
   | 'slotEmpty'
+  | 'zoneActionUnavailable'
+  | 'notInTcgFolder'
+  | 'notStorable'
+  | 'notInVault'
+  | 'vaultFull'
+  | 'notEnoughGold'
+  | 'vaultGoldFull'
+  | 'notEnoughVaultGold'
+  | 'purseFull'
+  | 'notAttribute'
+  | 'deckSlotsFull'
+  | 'deckNotFound'
 
 export class ActionNotAllowedError extends DomainError {
   readonly code = 'ACTION_NOT_ALLOWED'
@@ -22,11 +34,23 @@ export class ActionNotAllowedError extends DomainError {
   override readonly details: {
     reason: TActionNotAllowedReason
     cardId?: string
+    operationIndex?: number
   }
 
-  /** `cardId` só em `notOwned` e `copyLimitExceeded` (CONTRATO FEAT-09). */
-  constructor(reason: TActionNotAllowedReason, cardId?: string) {
+  /**
+   * `cardId` só em `notOwned` e `copyLimitExceeded` (CONTRATO FEAT-09);
+   * `operationIndex` só no `useVault` (CONTRATO FEAT-32).
+   */
+  constructor(
+    reason: TActionNotAllowedReason,
+    cardId?: string,
+    operationIndex?: number
+  ) {
     super()
-    this.details = cardId === undefined ? { reason } : { reason, cardId }
+    this.details = {
+      reason,
+      ...(cardId === undefined ? {} : { cardId }),
+      ...(operationIndex === undefined ? {} : { operationIndex }),
+    }
   }
 }

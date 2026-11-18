@@ -39,6 +39,14 @@ function input(
 }
 
 describe('createStartingPlayer', () => {
+  it('REQ-83: o cofre nasce vazio (slots, decks e ouro)', () => {
+    expect(createStartingPlayer(input()).vault).toEqual({
+      slots: [],
+      decks: [],
+      gold: 0,
+    })
+  })
+
   it('REQ-34: valores iniciais dos padrões, na cidade inicial, com a classe ativa', () => {
     const player = createStartingPlayer(input())
 

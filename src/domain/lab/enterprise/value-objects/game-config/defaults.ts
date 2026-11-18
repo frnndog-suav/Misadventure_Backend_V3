@@ -28,6 +28,9 @@ export interface TGameConfigValues {
   recoverHandSize: number // README 12.5
   inventoryCapacity: number // README 6.2 (D-73)
   purseCapacity: number // README 5.3 (D-73)
+  vaultCapacity: number // README 6.4 (D-89)
+  vaultDeckSlots: number // README 6.4 (D-89)
+  vaultGoldCapacity: number // README 6.4 (D-89)
 }
 
 export type TGameConfigKey = keyof TGameConfigValues
@@ -64,6 +67,9 @@ export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
   recoverHandSize: 7,
   inventoryCapacity: 10,
   purseCapacity: 300,
+  vaultCapacity: 30,
+  vaultDeckSlots: 10,
+  vaultGoldCapacity: 2000,
 })
 
 /** Inteiros, inclusivos. Além deles, `minPlayers ≤ maxPlayers`. */
@@ -96,4 +102,7 @@ export const GAME_CONFIG_LIMITS: Readonly<
   recoverHandSize: { min: 0, max: 200 },
   inventoryCapacity: { min: 0, max: 100 },
   purseCapacity: { min: 0, max: 1000000 },
+  vaultCapacity: { min: 0, max: 1000 },
+  vaultDeckSlots: { min: 1, max: 100 },
+  vaultGoldCapacity: { min: 0, max: 10000000 },
 })

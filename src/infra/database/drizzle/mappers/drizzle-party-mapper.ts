@@ -5,6 +5,7 @@ import { Party } from '@/domain/campaign/enterprise/entities/party'
 import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
 import { DIRECTIONS } from '@/domain/campaign/enterprise/map-assembly'
 import { sortedByCardId } from '@/domain/campaign/enterprise/starting-player'
+import { emptyVault } from '@/domain/campaign/enterprise/vault'
 import {
   emptyEquipment,
   type TPlayerState,
@@ -22,9 +23,9 @@ import {
   type TGameConfigValues,
 } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
-// D-79: save v5 (FEAT-10). Os v4 (D-70), v3 (D-64) e v2 (D-43) são lidos e
-// atualizados em memória; os saves v1 são apagados pela migração 0002 (T-17).
-const SCHEMA_VERSION = 5
+// D-87: save v6 (FEAT-32). Os v5 (D-79), v4 (D-70), v3 (D-64) e v2 (D-43) são
+// lidos e atualizados em memória; os saves v1 são apagados pela migração 0002 (T-17).
+const SCHEMA_VERSION = 6
 
 const uint32 = z
   .number()
@@ -49,10 +50,20 @@ const V5_CONFIG_KEYS = [
 ] as const satisfies readonly TGameConfigKey[]
 type TV5ConfigKey = (typeof V5_CONFIG_KEYS)[number]
 
+// As chaves que a FEAT-32 acrescentou (REQ-80): saves v2 a v5 não as têm.
+const V6_CONFIG_KEYS = [
+  'vaultCapacity',
+  'vaultDeckSlots',
+  'vaultGoldCapacity',
+] as const satisfies readonly TGameConfigKey[]
+type TV6ConfigKey = (typeof V6_CONFIG_KEYS)[number]
+
 const isV4ConfigKey = (key: TGameConfigKey): key is TV4ConfigKey =>
   (V4_CONFIG_KEYS as readonly string[]).includes(key)
 const isV5ConfigKey = (key: TGameConfigKey): key is TV5ConfigKey =>
   (V5_CONFIG_KEYS as readonly string[]).includes(key)
+const isV6ConfigKey = (key: TGameConfigKey): key is TV6ConfigKey =>
+  (V6_CONFIG_KEYS as readonly string[]).includes(key)
 
 const configKeys = Object.keys(GAME_CONFIG_DEFAULTS) as TGameConfigKey[]
 
@@ -62,20 +73,34 @@ const configSchema = z.strictObject(
   ) as Record<TGameConfigKey, z.ZodNumber>
 )
 
+const v5ConfigSchema = z.strictObject(
+  Object.fromEntries(
+    configKeys
+      .filter((key) => !isV6ConfigKey(key))
+      .map((key) => [key, z.number().int()])
+  ) as Record<Exclude<TGameConfigKey, TV6ConfigKey>, z.ZodNumber>
+)
+
 const v4ConfigSchema = z.strictObject(
   Object.fromEntries(
     configKeys
-      .filter((key) => !isV5ConfigKey(key))
+      .filter((key) => !isV5ConfigKey(key) && !isV6ConfigKey(key))
       .map((key) => [key, z.number().int()])
-  ) as Record<Exclude<TGameConfigKey, TV5ConfigKey>, z.ZodNumber>
+  ) as Record<Exclude<TGameConfigKey, TV5ConfigKey | TV6ConfigKey>, z.ZodNumber>
 )
 
 const legacyConfigSchema = z.strictObject(
   Object.fromEntries(
     configKeys
-      .filter((key) => !isV4ConfigKey(key) && !isV5ConfigKey(key))
+      .filter(
+        (key) =>
+          !isV4ConfigKey(key) && !isV5ConfigKey(key) && !isV6ConfigKey(key)
+      )
       .map((key) => [key, z.number().int()])
-  ) as Record<Exclude<TGameConfigKey, TV4ConfigKey | TV5ConfigKey>, z.ZodNumber>
+  ) as Record<
+    Exclude<TGameConfigKey, TV4ConfigKey | TV5ConfigKey | TV6ConfigKey>,
+    z.ZodNumber
+  >
 )
 
 /** D-70, D-79: o grupo antigo não tinha cópia destas chaves; valem os padrões. */
@@ -85,6 +110,9 @@ const V4_CONFIG_DEFAULTS = Object.fromEntries(
 const V5_CONFIG_DEFAULTS = Object.fromEntries(
   V5_CONFIG_KEYS.map((key) => [key, GAME_CONFIG_DEFAULTS[key]])
 ) as Record<TV5ConfigKey, number>
+const V6_CONFIG_DEFAULTS = Object.fromEntries(
+  V6_CONFIG_KEYS.map((key) => [key, GAME_CONFIG_DEFAULTS[key]])
+) as Record<TV6ConfigKey, number>
 
 const modifiersSchema = z.strictObject(
   Object.fromEntries(MODIFIERS.map((m) => [m, z.number().int()])) as Record<
@@ -125,17 +153,27 @@ const v4PlayerSchema = z.strictObject({
   ...playerFields,
   tcgFolder: cardCopies,
 })
-const playerSchema = z.strictObject({
+const slotQuantities = z.array(
+  z.strictObject({ cardId: id, quantity: z.number().int().min(1) })
+)
+const v5PlayerFields = {
   ...playerFields,
   tcgFolder: cardCopies,
-  inventory: z.array(
-    z.strictObject({ cardId: id, quantity: z.number().int().min(1) })
-  ),
+  inventory: slotQuantities,
   equipment: z.strictObject(
     Object.fromEntries(
       EQUIPMENT_SLOTS.map((slot) => [slot, id.nullable()])
     ) as Record<TEquipmentSlot, z.ZodNullable<typeof id>>
   ),
+}
+const v5PlayerSchema = z.strictObject(v5PlayerFields)
+const playerSchema = z.strictObject({
+  ...v5PlayerFields,
+  vault: z.strictObject({
+    slots: slotQuantities,
+    decks: z.array(cardCopies),
+    gold: z.number().int().min(0),
+  }),
 })
 
 const dimensionSchema = z.strictObject({
@@ -199,6 +237,11 @@ const stateSchema = z
       turn: turnSchema,
     }),
     z.strictObject({
+      schemaVersion: z.literal(5),
+      ...stateFields(v5ConfigSchema, v5PlayerSchema),
+      turn: turnSchema,
+    }),
+    z.strictObject({
       schemaVersion: z.literal(SCHEMA_VERSION),
       ...stateFields(configSchema, playerSchema),
       turn: turnSchema,
@@ -239,7 +282,14 @@ export class DrizzlePartyMapper {
     const config: TGameConfigValues =
       state.schemaVersion === SCHEMA_VERSION
         ? state.config
-        : { ...V4_CONFIG_DEFAULTS, ...state.config, ...V5_CONFIG_DEFAULTS }
+        : state.schemaVersion === 5
+          ? { ...state.config, ...V6_CONFIG_DEFAULTS }
+          : {
+              ...V4_CONFIG_DEFAULTS,
+              ...state.config,
+              ...V5_CONFIG_DEFAULTS,
+              ...V6_CONFIG_DEFAULTS,
+            }
 
     return Party.restore(
       {
@@ -301,6 +351,13 @@ export class DrizzlePartyMapper {
             build: m.player.build.map((e) => ({ ...e })),
             tcgFolder: m.player.tcgFolder.map((e) => ({ ...e })),
             inventory: m.player.inventory.map((e) => ({ ...e })),
+            vault: {
+              slots: m.player.vault.slots.map((e) => ({ ...e })),
+              decks: m.player.vault.decks.map((deck) =>
+                deck.map((e) => ({ ...e }))
+              ),
+              gold: m.player.vault.gold,
+            },
             equipment: { ...m.player.equipment },
             deck: [...m.player.deck],
             hand: [...m.player.hand],
@@ -333,12 +390,12 @@ export class DrizzlePartyMapper {
 }
 
 type TStoredPlayer = z.infer<typeof legacyPlayerSchema> &
-  Partial<Pick<TPlayerState, 'tcgFolder' | 'inventory' | 'equipment'>>
+  Partial<Pick<TPlayerState, 'tcgFolder' | 'inventory' | 'equipment' | 'vault'>>
 
 /**
  * D-70: antes da FEAT-09 não havia pasta; a build vai em ordem de cardId
  * (REQ-62). D-79: antes da FEAT-10, inventário vazio e nada equipado, e o
- * ouro limitado à `purseCapacity` (REQ-70).
+ * ouro limitado à `purseCapacity` (REQ-70). D-87: antes da FEAT-32, cofre vazio.
  */
 function upgradePlayer(
   player: TStoredPlayer,
@@ -354,5 +411,6 @@ function upgradePlayer(
     tcgFolder: player.tcgFolder ?? [],
     inventory: player.inventory ?? [],
     equipment: player.equipment ?? emptyEquipment(),
+    vault: player.vault ?? emptyVault(),
   }
 }

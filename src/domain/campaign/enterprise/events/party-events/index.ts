@@ -115,6 +115,22 @@ export interface LabGrantAppliedEvent extends DomainEvent {
     | { type: 'gold'; amount: number; received: number; lost: number }
 }
 
+/** Usar cofre aceito (README 12.2; REQ-84); as operações vêm nos eventos seguintes. */
+export interface VaultUsedEvent extends DomainEvent {
+  readonly type: 'VaultUsed'
+  readonly memberId: UniqueEntityID
+  readonly operationCount: number
+}
+
+/** Carta destruída pelo Descartar do cofre (README 6.5; REQ-86); nada volta do limbo. */
+export interface SentToLimboEvent extends DomainEvent {
+  readonly type: 'SentToLimbo'
+  readonly memberId: UniqueEntityID
+  readonly cardId: string
+  readonly quantity: number
+  readonly from: 'vault'
+}
+
 /** Registrado antes de apagar o save, para o despacho. */
 export interface PartyAbandonedEvent extends DomainEvent {
   readonly type: 'PartyAbandoned'
@@ -137,4 +153,6 @@ export type TPartyEvent =
   | EquipmentUnequippedEvent
   | EquipmentEquippedEvent
   | LabGrantAppliedEvent
+  | VaultUsedEvent
+  | SentToLimboEvent
   | PartyAbandonedEvent

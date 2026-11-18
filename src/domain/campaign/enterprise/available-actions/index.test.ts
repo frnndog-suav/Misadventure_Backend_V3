@@ -141,3 +141,39 @@ describe('availableActions', () => {
     })
   })
 })
+
+describe('availableActions — useVault (REQ-93)', () => {
+  const memberId = new UniqueEntityID('member-1')
+  const inSession = () => makeParty({ status: 'inSession' })
+
+  it('REQ-93: zona com useVault e pontos → useVault entra antes de endTurn, depois de adjustDeck', () => {
+    expect(
+      availableActions(inSession(), memberId, new Set(), ['useVault'])
+    ).toEqual(['move', 'recover', 'adjustDeck', 'useVault', 'endTurn'])
+  })
+
+  it('REQ-93: zona sem useVault → não entra', () => {
+    expect(
+      availableActions(inSession(), memberId, new Set(), ['startEvent'])
+    ).not.toContain('useVault')
+  })
+
+  it('REQ-93: com 0 pontos → useVault não entra (custa 1 ponto)', () => {
+    const party = inSession()
+    party.move(MINE, party.savedAt)
+    party.move(HARBOR, party.savedAt)
+    party.move(MINE, party.savedAt)
+
+    expect(availableActions(party, memberId, new Set(), ['useVault'])).toEqual([
+      'endTurn',
+    ])
+  })
+
+  it('REQ-93: quem não é da vez não tem nada', () => {
+    expect(
+      availableActions(inSession(), new UniqueEntityID('outro'), new Set(), [
+        'useVault',
+      ])
+    ).toEqual([])
+  })
+})

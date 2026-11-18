@@ -503,11 +503,15 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
     for (const key of Object.keys(NEW_KEYS)) delete config[key]
     delete config.inventoryCapacity
     delete config.purseCapacity
+    delete config.vaultCapacity
+    delete config.vaultDeckSlots
+    delete config.vaultGoldCapacity
     const members = state.members.map((m) => {
       const player = { ...m.player }
       delete player.tcgFolder
       delete player.inventory
       delete player.equipment
+      delete player.vault
       return { ...m, player }
     })
     await db
@@ -535,7 +539,7 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
       .from(parties)
       .where(eq(parties.id, party.id))
     expect(saved.state).toMatchObject({
-      schemaVersion: 5,
+      schemaVersion: 6,
       config: NEW_KEYS,
       members: [{ player: { tcgFolder: [] } }],
     })

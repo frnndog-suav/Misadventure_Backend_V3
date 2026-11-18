@@ -30,6 +30,9 @@ const DEFAULTS = {
   recoverHandSize: 7,
   inventoryCapacity: 10,
   purseCapacity: 300,
+  vaultCapacity: 30,
+  vaultDeckSlots: 10,
+  vaultGoldCapacity: 2000,
 }
 
 const LIMITS = {
@@ -59,6 +62,9 @@ const LIMITS = {
   recoverHandSize: { min: 0, max: 200 },
   inventoryCapacity: { min: 0, max: 100 },
   purseCapacity: { min: 0, max: 1000000 },
+  vaultCapacity: { min: 0, max: 1000 },
+  vaultDeckSlots: { min: 1, max: 100 },
+  vaultGoldCapacity: { min: 0, max: 10000000 },
 }
 
 describe('GET /lab/config (e2e)', () => {

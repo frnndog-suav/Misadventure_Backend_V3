@@ -9,6 +9,7 @@ import {
 } from '@/domain/catalog/enterprise/value-objects/card'
 
 import type { TInventorySlot } from '../../inventory'
+import type { TVault } from '../../vault'
 
 /** Na FEAT-20 entra o ajudante de IA. */
 export type TPartyMemberKind = 'human'
@@ -28,6 +29,8 @@ export type TPlayerState = Readonly<{
   inventory: readonly TInventorySlot[]
   /** Equipamento em uso por categoria (README 5.1; REQ-70). */
   equipment: Readonly<Record<TEquipmentSlot, string | null>>
+  /** Cofre (README 6.4; REQ-83, D-83): começa vazio. */
+  vault: TVault
   /** Ids em ordem; o topo é o índice 0. */
   deck: readonly string[]
   /** Na ordem em que foram compradas. */

@@ -26,6 +26,7 @@ export function makePlayerState(
     tcgFolder: [],
     inventory: [],
     equipment: emptyEquipment(),
+    vault: { slots: [], decks: [], gold: 0 },
     deck: [
       ...Array.from({ length: 27 }, () => 'fixture.endurance-basic'),
       ...Array.from({ length: 26 }, () => 'fixture.strength-basic'),

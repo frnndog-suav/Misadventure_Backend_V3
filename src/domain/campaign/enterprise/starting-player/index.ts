@@ -13,6 +13,7 @@ import {
   type TPlayerState,
 } from '../entities/party-member'
 import { shuffle } from '../shuffle'
+import { emptyVault } from '../vault'
 
 export type TStartingPlayerInput = Readonly<{
   config: TGameConfigValues
@@ -85,6 +86,7 @@ export function createStartingPlayer({
     // README 9.1: primeira aventura sem equipamentos nem recursos (REQ-70).
     inventory: [],
     equipment: emptyEquipment(),
+    vault: emptyVault(),
     deck,
     hand,
     discard: [],

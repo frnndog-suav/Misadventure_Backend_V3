@@ -17,6 +17,18 @@ export type TPrepareOperation =
   | { operation: 'equip'; cardId: string }
   | { operation: 'unequip'; slot: TEquipmentSlot }
 
+/** Uma operação do Usar cofre (README 6.4; REQ-84 a REQ-87). */
+export type TVaultOperation =
+  | { operation: 'store'; cardId: string; quantity: number }
+  | { operation: 'take'; cardId: string; quantity: number }
+  | { operation: 'storeGold'; amount: number }
+  | { operation: 'takeGold'; amount: number }
+  | { operation: 'discard'; cardId: string; quantity: number }
+  | { operation: 'saveDeck'; cards: { cardId: string; copies: number }[] }
+  | { operation: 'unpackDeck'; deckIndex: number }
+  | { operation: 'swapBuild'; deckIndex: number }
+  | { operation: 'editBuild'; build: { cardId: string; copies: number }[] }
+
 /** Intenção de jogo (CONTRATO §1.6). União por `type`; as FEATs 10+ acrescentam variantes. */
 export type TPartyAction =
   | { type: 'move'; zoneId: string }
@@ -24,6 +36,7 @@ export type TPartyAction =
   | { type: 'recover'; option: TRecoverOption }
   | { type: 'adjustDeck'; build: { cardId: string; copies: number }[] }
   | ({ type: 'prepare' } & TPrepareOperation)
+  | { type: 'useVault'; operations: TVaultOperation[] }
 
 /** Os `type` possíveis, para `availableActions` (REQ-58). */
 export type TPartyActionType = TPartyAction['type']
@@ -41,15 +54,19 @@ export type TActionIssue =
     }
   | { field: 'slot'; reason: 'required' | 'notString' | 'unknownSlot' }
   | {
-      /** `build.i`, `build.i.cardId`, `build.i.copies` ou o campo a mais. */
+      /** `build.i`, `operations.i.cards.j.copies`, o campo a mais etc. */
       field: string
       reason:
         | 'unknownKey'
         | 'invalidItem'
         | 'required'
         | 'notString'
+        | 'notArray'
         | 'notPositiveInteger'
+        | 'notNonNegativeInteger'
         | 'duplicateCard'
+        | 'unknownOperation'
+        | 'invalidLength'
     }
 
 /**
@@ -83,6 +100,8 @@ export function parsePartyAction(
       return parseAdjustDeck(body)
     case 'prepare':
       return parsePrepare(body)
+    case 'useVault':
+      return parseUseVault(body)
     default:
       return left([{ field: 'type', reason: 'unknownAction' }])
   }
@@ -114,24 +133,24 @@ function parseRecover(
 }
 
 /**
- * Problemas na ordem de índice da build; por item: `cardId`, `copies`, campos a
- * mais do item; depois os campos a mais da ação (REQ-66 item 1).
+ * Lê uma lista `{ cardId, copies }` (build, `cards` do saveDeck). Problemas na
+ * ordem de índice; por item: `cardId`, `copies`, campos a mais do item
+ * (REQ-66 item 1).
  */
-function parseAdjustDeck(
-  body: Record<string, unknown>
-): Either<TActionIssue[], TPartyAction> {
-  const { build } = body
-  const issues: TActionIssue[] = []
+function parseCardCopies(
+  list: unknown,
+  field: string,
+  issues: TActionIssue[]
+): { cardId: string; copies: number }[] {
   const items: { cardId: string; copies: number }[] = []
-
-  if (build === undefined) {
-    issues.push({ field: 'build', reason: 'required' })
-  } else if (!Array.isArray(build)) {
-    issues.push({ field: 'build', reason: 'notArray' })
+  if (list === undefined) {
+    issues.push({ field, reason: 'required' })
+  } else if (!Array.isArray(list)) {
+    issues.push({ field, reason: 'notArray' })
   } else {
     const seen = new Set<string>()
-    build.forEach((item: unknown, index) => {
-      const path = `build.${index}`
+    list.forEach((item: unknown, index) => {
+      const path = `${field}.${index}`
       if (typeof item !== 'object' || item === null || Array.isArray(item)) {
         issues.push({ field: path, reason: 'invalidItem' })
         return
@@ -149,11 +168,7 @@ function parseAdjustDeck(
       }
       if (copies === undefined) {
         issues.push({ field: `${path}.copies`, reason: 'required' })
-      } else if (
-        typeof copies !== 'number' ||
-        !Number.isInteger(copies) ||
-        copies < 1
-      ) {
+      } else if (!isPositiveInteger(copies)) {
         issues.push({
           field: `${path}.copies`,
           reason: 'notPositiveInteger',
@@ -165,6 +180,19 @@ function parseAdjustDeck(
       }
     })
   }
+  return items
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1
+}
+
+/** Problemas da build (REQ-66 item 1), depois os campos a mais da ação. */
+function parseAdjustDeck(
+  body: Record<string, unknown>
+): Either<TActionIssue[], TPartyAction> {
+  const issues: TActionIssue[] = []
+  const items = parseCardCopies(body.build, 'build', issues)
   issues.push(...extraKeys(body, ['type', 'build']))
   if (issues.length > 0) return left(issues)
   return right({ type: 'adjustDeck', build: items })
@@ -223,6 +251,149 @@ function parsePrepare(
     }
     default:
       return left([{ field: 'operation', reason: 'unknownOperation' }])
+  }
+}
+
+/** Máximo de operações por Usar cofre (REQ-88). */
+const VAULT_MAX_OPERATIONS = 50
+
+/**
+ * REQ-88 item 1. Problemas de `operations` (ausente, não lista, tamanho) vêm
+ * sozinhos; senão, os de cada operação em ordem de índice (problema em
+ * `operation` vem sozinho no item); no fim, os campos a mais da ação.
+ */
+function parseUseVault(
+  body: Record<string, unknown>
+): Either<TActionIssue[], TPartyAction> {
+  const { operations } = body
+  const issues: TActionIssue[] = []
+  const parsed: TVaultOperation[] = []
+
+  if (operations === undefined) {
+    issues.push({ field: 'operations', reason: 'required' })
+  } else if (!Array.isArray(operations)) {
+    issues.push({ field: 'operations', reason: 'notArray' })
+  } else if (
+    operations.length < 1 ||
+    operations.length > VAULT_MAX_OPERATIONS
+  ) {
+    issues.push({ field: 'operations', reason: 'invalidLength' })
+  } else {
+    operations.forEach((item: unknown, index) => {
+      const operation = parseVaultOperation(item, `operations.${index}`, issues)
+      if (operation !== null) parsed.push(operation)
+    })
+  }
+  issues.push(...extraKeys(body, ['type', 'operations']))
+  if (issues.length > 0) return left(issues)
+  return right({ type: 'useVault', operations: parsed })
+}
+
+function parseVaultOperation(
+  item: unknown,
+  path: string,
+  issues: TActionIssue[]
+): TVaultOperation | null {
+  if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+    issues.push({ field: path, reason: 'invalidItem' })
+    return null
+  }
+  const entry = item as Record<string, unknown>
+  const { operation } = entry
+  if (operation === undefined) {
+    issues.push({ field: `${path}.operation`, reason: 'required' })
+    return null
+  }
+  if (typeof operation !== 'string') {
+    issues.push({ field: `${path}.operation`, reason: 'notString' })
+    return null
+  }
+
+  const before = issues.length
+  const text = (key: string): string | null => {
+    const value = entry[key]
+    if (value === undefined) {
+      issues.push({ field: `${path}.${key}`, reason: 'required' })
+    } else if (typeof value !== 'string') {
+      issues.push({ field: `${path}.${key}`, reason: 'notString' })
+    } else {
+      return value
+    }
+    return null
+  }
+  const positive = (key: string): number | null => {
+    const value = entry[key]
+    if (value === undefined) {
+      issues.push({ field: `${path}.${key}`, reason: 'required' })
+    } else if (!isPositiveInteger(value)) {
+      issues.push({ field: `${path}.${key}`, reason: 'notPositiveInteger' })
+    } else {
+      return value
+    }
+    return null
+  }
+  const deckIndex = (): number | null => {
+    const value = entry.deckIndex
+    if (value === undefined) {
+      issues.push({ field: `${path}.deckIndex`, reason: 'required' })
+    } else if (
+      typeof value !== 'number' ||
+      !Number.isInteger(value) ||
+      value < 0
+    ) {
+      issues.push({
+        field: `${path}.deckIndex`,
+        reason: 'notNonNegativeInteger',
+      })
+    } else {
+      return value
+    }
+    return null
+  }
+  const extras = (allowed: readonly string[]) =>
+    issues.push(...extraKeys(entry, ['operation', ...allowed], `${path}.`))
+
+  switch (operation) {
+    case 'store':
+    case 'take':
+    case 'discard': {
+      const cardId = text('cardId')
+      const quantity = positive('quantity')
+      extras(['cardId', 'quantity'])
+      if (issues.length > before || cardId === null || quantity === null) {
+        return null
+      }
+      return { operation, cardId, quantity }
+    }
+    case 'storeGold':
+    case 'takeGold': {
+      const amount = positive('amount')
+      extras(['amount'])
+      if (issues.length > before || amount === null) return null
+      return { operation, amount }
+    }
+    case 'saveDeck': {
+      const cards = parseCardCopies(entry.cards, `${path}.cards`, issues)
+      extras(['cards'])
+      if (issues.length > before) return null
+      return { operation, cards }
+    }
+    case 'editBuild': {
+      const build = parseCardCopies(entry.build, `${path}.build`, issues)
+      extras(['build'])
+      if (issues.length > before) return null
+      return { operation, build }
+    }
+    case 'unpackDeck':
+    case 'swapBuild': {
+      const index = deckIndex()
+      extras(['deckIndex'])
+      if (issues.length > before || index === null) return null
+      return { operation, deckIndex: index }
+    }
+    default:
+      issues.push({ field: `${path}.operation`, reason: 'unknownOperation' })
+      return null
   }
 }
 

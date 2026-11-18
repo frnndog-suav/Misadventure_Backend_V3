@@ -31,6 +31,9 @@ const DEFAULTS = {
   recoverHandSize: 7,
   inventoryCapacity: 10,
   purseCapacity: 300,
+  vaultCapacity: 30,
+  vaultDeckSlots: 10,
+  vaultGoldCapacity: 2000,
 }
 
 function invalid(fields: { field: string | null; reason: string }[]) {

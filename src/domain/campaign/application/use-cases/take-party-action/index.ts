@@ -5,12 +5,14 @@ import type { Party } from '@/domain/campaign/enterprise/entities/party'
 import {
   parsePartyAction,
   type TPrepareOperation,
+  type TVaultOperation,
 } from '@/domain/campaign/enterprise/party-action'
 import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import type {
   TAttributeCard,
   TCard,
   TClassDefinition,
+  TZoneAction,
 } from '@/domain/catalog/enterprise/value-objects/card'
 
 import { ActionInvalidError } from '../_errors/action-invalid-error'
@@ -152,6 +154,37 @@ export class TakePartyActionUseCase {
         }
         break
       }
+      case 'useVault': {
+        const used = party.useVault(
+          action.operations,
+          await this.findVaultCatalog(party, action.operations),
+          this.clock.now()
+        )
+        if (used.isLeft()) {
+          const refusal = used.value
+          if (typeof refusal === 'object') {
+            return left(
+              new ActionNotAllowedError(
+                refusal.reason,
+                refusal.cardId,
+                refusal.operationIndex
+              )
+            )
+          }
+          switch (refusal) {
+            case 'sessionNotActive':
+              return left(new PartySessionNotActiveError())
+            case 'noActionPoints':
+            case 'zoneActionUnavailable':
+              return left(new ActionNotAllowedError(refusal))
+            default: {
+              const _exhaustive: never = refusal
+              return _exhaustive
+            }
+          }
+        }
+        break
+      }
       case 'endTurn': {
         const ended = party.endTurn(this.clock.now())
         if (ended.isLeft()) {
@@ -202,6 +235,76 @@ export class TakePartyActionUseCase {
       if (card) cards.push(card)
     }
     return cards
+  }
+
+  /**
+   * O que o Usar cofre precisa do catálogo (D-82): as ações da zona atual do
+   * membro da vez, as cartas que as operações, a build, a pasta e o cofre
+   * citam, e as classes do jogador. O que o catálogo não tem fica de fora (o
+   * agregado trata a carta como inexistente e a classe como sem trava).
+   */
+  private async findVaultCatalog(
+    party: Party,
+    operations: readonly TVaultOperation[]
+  ): Promise<{
+    cards: TCard[]
+    classes: TClassDefinition[]
+    zoneActions: TZoneAction[]
+  }> {
+    const actor = party.members.find((member) =>
+      member.id.equals(party.turn.memberId)
+    )
+    const player = actor?.player
+    const zone = player ? await this.cardCatalog.findCard(player.zoneId) : null
+
+    const cardIds = new Set<string>()
+    for (const operation of operations) {
+      switch (operation.operation) {
+        case 'store':
+        case 'take':
+        case 'discard':
+          cardIds.add(operation.cardId)
+          break
+        case 'saveDeck':
+          operation.cards.forEach(({ cardId }) => cardIds.add(cardId))
+          break
+        case 'editBuild':
+          operation.build.forEach(({ cardId }) => cardIds.add(cardId))
+          break
+        case 'storeGold':
+        case 'takeGold':
+        case 'unpackDeck':
+        case 'swapBuild':
+          break
+        default: {
+          const _exhaustive: never = operation
+          return _exhaustive
+        }
+      }
+    }
+    for (const { cardId } of [
+      ...(player?.build ?? []),
+      ...(player?.tcgFolder ?? []),
+      ...(player?.vault.slots ?? []),
+      ...(player?.vault.decks.flat() ?? []),
+    ]) {
+      cardIds.add(cardId)
+    }
+    const cards: TCard[] = []
+    for (const cardId of cardIds) {
+      const card = await this.cardCatalog.findCard(cardId)
+      if (card) cards.push(card)
+    }
+    const classes: TClassDefinition[] = []
+    for (const { playerClass } of player?.playerClasses ?? []) {
+      const definition = await this.cardCatalog.findClass(playerClass)
+      if (definition) classes.push(definition)
+    }
+    return {
+      cards,
+      classes,
+      zoneActions: zone?.type === 'zone' ? [...zone.zoneActions] : [],
+    }
   }
 
   /**

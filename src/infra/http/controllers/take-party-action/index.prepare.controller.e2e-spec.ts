@@ -333,7 +333,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
     expect(player.availableActions).toContain('prepare')
   })
 
-  it('REQ-79/D-79: save v4 inserido à mão é lido como v5 (vazio, padrões, ouro limitado) e regravado como v5', async () => {
+  it('REQ-79/D-79: save v4 inserido à mão é lido como v6 (vazio, padrões, ouro limitado) e regravado como v6', async () => {
     const party = await startedParty()
     await give(party, B)
     const state = (await rawState(party.id)) as {
@@ -343,10 +343,14 @@ describe('Preparar — equip e unequip (e2e)', () => {
     const config = { ...state.config }
     delete config.inventoryCapacity
     delete config.purseCapacity
+    delete config.vaultCapacity
+    delete config.vaultDeckSlots
+    delete config.vaultGoldCapacity
     const members = state.members.map((m) => {
       const player: Record<string, unknown> = { ...m.player, gold: 450 }
       delete player.inventory
       delete player.equipment
+      delete player.vault
       return { ...m, player }
     })
     await writeState(party.id, {
@@ -364,7 +368,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
 
     await act(party.id, { type: 'endTurn' }).expect(200)
     expect(await rawState(party.id)).toMatchObject({
-      schemaVersion: 5,
+      schemaVersion: 6,
       config: { inventoryCapacity: 10, purseCapacity: 300 },
       members: [{ player: { inventory: [], gold: 300 } }],
     })

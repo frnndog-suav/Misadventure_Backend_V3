@@ -32,8 +32,32 @@ describe('GameConfig', () => {
       recoverHandSize: 7,
       inventoryCapacity: 10,
       purseCapacity: 300,
+      vaultCapacity: 30,
+      vaultDeckSlots: 10,
+      vaultGoldCapacity: 2000,
     })
     expect(GameConfig.withDefaults().values).toEqual(GAME_CONFIG_DEFAULTS)
+  })
+
+  it('REQ-80: vaultCapacity, vaultDeckSlots e vaultGoldCapacity com padrão e limites de D-89', () => {
+    expect(GAME_CONFIG_DEFAULTS).toMatchObject({
+      vaultCapacity: 30,
+      vaultDeckSlots: 10,
+      vaultGoldCapacity: 2000,
+    })
+    expect(GAME_CONFIG_LIMITS).toMatchObject({
+      vaultCapacity: { min: 0, max: 1000 },
+      vaultDeckSlots: { min: 1, max: 100 },
+      vaultGoldCapacity: { min: 0, max: 10000000 },
+    })
+
+    const ok = GameConfig.withDefaults().applyPatch({ vaultGoldCapacity: 5000 })
+    expect(ok.isRight() && ok.value.values.vaultGoldCapacity).toBe(5000)
+
+    const bad = GameConfig.withDefaults().applyPatch({ vaultDeckSlots: 0 })
+    expect(bad.isLeft() && bad.value).toEqual([
+      { field: 'vaultDeckSlots', reason: 'outOfRange' },
+    ])
   })
 
   it('REQ-29: chaves novas com os limites de D-41', () => {
