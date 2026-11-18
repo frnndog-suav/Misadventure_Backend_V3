@@ -18,7 +18,10 @@
     "arrowLayout": "straight",
     "zoneActions": ["startEvent"],
     "effects": [
-      { "text": "A névoa dificulta a visão.", "polarity": "negative" }
+      {
+        "text": "A névoa dificulta a visão.",
+        "polarity": "negative"
+      }
     ]
   }
 ]

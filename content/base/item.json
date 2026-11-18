@@ -6,7 +6,11 @@
     "rarity": "common",
     "itemCategory": "consumable",
     "tags": ["erva"],
-    "effects": [{ "text": "Recupera 3 de vida." }],
+    "effects": [
+      {
+        "text": "Recupera 3 de vida."
+      }
+    ],
     "toolKind": null,
     "scavengeZoneTypes": [],
     "scavengeTool": null
