@@ -484,7 +484,7 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
     expect(response.body).toEqual(notAllowed({ reason: 'tcgFolderFull' }))
   })
 
-  it('REQ-68/D-70/D-79: save v3 inserido à mão é lido como v5 (pasta vazia, chaves novas nos padrões) e regravado como v5', async () => {
+  it('REQ-68/D-70/D-79: save v3 inserido à mão é lido como v7 (pasta vazia, chaves novas nos padrões) e regravado como v7', async () => {
     await request(server())
       .patch('/lab/config')
       .send({ recoverHandSize: 10, tcgFolderCapacity: 50 })
@@ -511,6 +511,7 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
       delete player.tcgFolder
       delete player.inventory
       delete player.equipment
+      delete player.statuses
       delete player.vault
       delete player.lastScavenge
       return { ...m, player }
@@ -548,7 +549,7 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
       .from(parties)
       .where(eq(parties.id, party.id))
     expect(saved.state).toMatchObject({
-      schemaVersion: 6,
+      schemaVersion: 7,
       config: NEW_KEYS,
       members: [{ player: { tcgFolder: [] } }],
     })

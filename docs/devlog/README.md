@@ -63,7 +63,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 043 | T-35 | Domínio do modelo de efeitos (FEAT-11): tipos por `kind`, regras de REQ-99 em `checkCatalogIntegrity`, citação ao publicar, D-103; infra de conteúdo vermelha até a T-36 | concluída |
 | 044 | T-36 | Conteúdo, schema e exibição (FEAT-11): `effect-schemas.ts` (espelho das 4 uniões), conversão de `content/` e da fixture (24 cartas, D-101), e2e do catálogo e do editor; D-104; reescrita de `base.misty-forest` pelo autor | concluída |
 | 045 | T-37 | Passivos e status em `effectiveModifiers`, expiração por vez, rodada e movimento (REQ-102, REQ-103, D-105) | concluída |
-| 046 | T-38 | Preparar: ativação, pagamento atômico, efeitos e ações disponíveis, status em memória (REQ-101, REQ-104 a REQ-107, D-106) | aguardando revisão |
+| 046 | T-38 | Preparar: ativação, pagamento atômico, efeitos e ações disponíveis, status em memória (REQ-101, REQ-104 a REQ-107, D-106) | concluída |
+| 047 | T-39 | FEAT-11 ponta a ponta: ativação HTTP, save v7, projeção de efeitos e status, Supertest, CONTRATO v0.52 e ROADMAP v0.54 | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

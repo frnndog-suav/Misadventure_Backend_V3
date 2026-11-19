@@ -165,6 +165,98 @@ describe('POST /lab/content/collections/:collectionId/cards (e2e)', () => {
     })
   })
 
+  it('REQ-99: o editor aponta estrutura, faixa, marca e citações inválidas', async () => {
+    const server = ctx.app.getHttpServer()
+    const create = (card: object) =>
+      request(server).post('/lab/content/collections/bosque/cards').send(card)
+    const item = {
+      slug: 'efeito-validacao',
+      type: 'item',
+      name: 'Frasco de Teste',
+      flavorText: null,
+      rarity: 'common',
+      itemCategory: 'treasure',
+      tags: [],
+      toolKind: null,
+      scavengeZoneTypes: [],
+      scavengeTool: null,
+    }
+    const effect = {
+      text: 'Recupera 5 de vida.',
+      trigger: null,
+      cost: [],
+      activation: [{ kind: 'heal', amount: 5 }],
+      duration: { kind: 'immediate' },
+      mark: null,
+    }
+    const cases = [
+      [{ activation: [{ kind: 'unknown' }] }, 'activation.0.kind'],
+      [{ activation: [{ kind: 'heal', amount: -1 }] }, 'activation.0.amount'],
+      [{ activation: [] }, 'activation'],
+      [{ mark: 'buff' }, 'mark'],
+      [{ duration: { kind: 'infinite' } }, 'mark'],
+      [
+        {
+          cost: [
+            {
+              kind: 'offerResources',
+              requirements: [{ resource: 'qualquer texto', count: 1 }],
+              constraint: 'none',
+              exclude: [],
+            },
+          ],
+        },
+        'cost.0.requirements.0.resource',
+      ],
+    ] as const
+    for (const [override, path] of cases) {
+      const result = await create({
+        ...item,
+        effects: [{ ...effect, ...override }],
+      }).expect(400)
+      expect(result.body.error.code).toBe('CONTENT_INVALID')
+      expect(result.body.error.details.fields).toContainEqual({
+        path: `effects.0.${path}`,
+        message: expect.stringMatching(/\S/),
+      })
+    }
+    const invalidAttribute = await create({
+      ...FORCA_INPUT,
+      slug: 'forca-custo-invalido',
+      attributeKind: 'enhanced',
+      effects: [{ ...effect, cost: [{ kind: 'consumeSelf' }] }],
+    }).expect(400)
+    expect(invalidAttribute.body.error).toMatchObject({
+      code: 'CONTENT_INVALID',
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: 'effects.0.cost.0' }),
+        ]),
+      },
+    })
+
+    const draft = await create({
+      ...item,
+      effects: [
+        {
+          ...effect,
+          trigger: { kind: 'onEnterZoneTitle', zoneTitle: 'Forte Perdido' },
+        },
+      ],
+    }).expect(201)
+    const published = await request(server)
+      .post(`/lab/content/cards/${draft.body.card.id as string}/publish`)
+      .expect(400)
+    expect(published.body.error).toMatchObject({
+      code: 'CONTENT_INVALID',
+      details: {
+        fields: [
+          expect.objectContaining({ path: 'effects.0.trigger.zoneTitle' }),
+        ],
+      },
+    })
+  })
+
   it('REQ-98/REQ-101: cria item com efeito estruturado (201) e o editor o devolve igual', async () => {
     const effect = {
       text: '+3 de Ataque durante 2 vezes suas.',

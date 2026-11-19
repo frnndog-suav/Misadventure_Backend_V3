@@ -234,7 +234,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     ])
     const playerClasses = new Set<string>()
     for (const member of this.props.members) {
-      const { build, tcgFolder, inventory, equipment, vault } = member.player
+      const { build, tcgFolder, inventory, equipment, vault, statuses } =
+        member.player
       for (const entry of [
         ...build,
         ...tcgFolder,
@@ -247,6 +248,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       for (const cardId of Object.values(equipment)) {
         if (cardId !== null) cardIds.add(cardId)
       }
+      for (const { sourceCardId } of statuses) cardIds.add(sourceCardId)
       for (const { playerClass } of member.player.playerClasses) {
         playerClasses.add(playerClass)
       }

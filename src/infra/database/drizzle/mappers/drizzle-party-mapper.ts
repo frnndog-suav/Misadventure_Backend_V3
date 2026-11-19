@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { activationSchema } from '@/infra/content/effect-schemas'
+import { EFFECT_MARKS } from '@/domain/catalog/enterprise/value-objects/effect'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { RngState } from '@/core/rng/seeded-rng'
 import { Party } from '@/domain/campaign/enterprise/entities/party'
@@ -24,9 +26,8 @@ import {
   type TGameConfigValues,
 } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
-// D-87: save v6 (FEAT-32). Os v5 (D-79), v4 (D-70), v3 (D-64) e v2 (D-43) são
-// lidos e atualizados em memória; os saves v1 são apagados pela migração 0002 (T-17).
-const SCHEMA_VERSION = 6
+// REQ-107: saves v2 a v6 ganham a lista de status na leitura.
+const SCHEMA_VERSION = 7
 
 const uint32 = z
   .number()
@@ -168,7 +169,7 @@ const v5PlayerFields = {
   ),
 }
 const v5PlayerSchema = z.strictObject(v5PlayerFields)
-const playerSchema = z.strictObject({
+const v6PlayerFields = {
   ...v5PlayerFields,
   vault: z.strictObject({
     slots: slotQuantities,
@@ -181,6 +182,40 @@ const playerSchema = z.strictObject({
     .strictObject({ cardId: id, found: z.boolean() })
     .nullable()
     .optional(),
+}
+const v6PlayerSchema = z.strictObject(v6PlayerFields)
+const statusSchema = z.strictObject({
+  statusId: id,
+  sourceCardId: id,
+  effectIndex: z.number().int().nonnegative(),
+  text: z.string().min(1),
+  mark: z.enum(EFFECT_MARKS),
+  activation: z.array(activationSchema).min(1),
+  duration: z.discriminatedUnion('kind', [
+    z.strictObject({
+      kind: z.enum([
+        'untilEndOfTurn',
+        'untilStartOfNextTurn',
+        'untilEndOfRound',
+        'untilLeaveZone',
+        'infinite',
+        'untilPartyEnd',
+      ]),
+    }),
+    z.strictObject({
+      kind: z.literal('forOwnTurns'),
+      turns: z.number().int().positive(),
+    }),
+    z.strictObject({
+      kind: z.literal('forRounds'),
+      rounds: z.number().int().positive(),
+    }),
+  ]),
+  remaining: z.number().int().positive().nullable(),
+})
+const playerSchema = z.strictObject({
+  ...v6PlayerFields,
+  statuses: z.array(statusSchema),
 })
 
 const rewardDecksSchema = z.array(
@@ -253,6 +288,12 @@ const stateSchema = z
       turn: turnSchema,
     }),
     z.strictObject({
+      schemaVersion: z.literal(6),
+      ...stateFields(configSchema, v6PlayerSchema),
+      turn: turnSchema,
+      rewardDecks: rewardDecksSchema.optional(),
+    }),
+    z.strictObject({
       schemaVersion: z.literal(SCHEMA_VERSION),
       ...stateFields(configSchema, playerSchema),
       turn: turnSchema,
@@ -269,7 +310,7 @@ const stateSchema = z
     { message: 'turn.memberId fora de turnOrder' }
   )
 
-const statusSchema = z.enum(['idle', 'inSession'])
+const partyStatusSchema = z.enum(['idle', 'inSession'])
 
 type TPartyState = Extract<
   z.infer<typeof stateSchema>,
@@ -288,11 +329,11 @@ export interface TPartyRow {
 export class DrizzlePartyMapper {
   /** Save corrompido lança: é falha de infraestrutura, não regra do jogo. */
   static toDomain(row: TPartyRow): Party {
-    const status = statusSchema.parse(row.status)
+    const status = partyStatusSchema.parse(row.status)
     const state = stateSchema.parse(row.state)
     const turnOrder = state.turnOrder.map((m) => new UniqueEntityID(m))
     const config: TGameConfigValues =
-      state.schemaVersion === SCHEMA_VERSION
+      state.schemaVersion === 6 || state.schemaVersion === SCHEMA_VERSION
         ? state.config
         : state.schemaVersion === 5
           ? { ...state.config, ...V6_CONFIG_DEFAULTS }
@@ -323,7 +364,7 @@ export class DrizzlePartyMapper {
         dimension: state.dimension,
         // D-87: save antigo fica sem decks de recompensas.
         rewardDecks:
-          state.schemaVersion === SCHEMA_VERSION
+          state.schemaVersion === 6 || state.schemaVersion === SCHEMA_VERSION
             ? (state.rewardDecks ?? [])
             : [],
         turnOrder,
@@ -363,7 +404,9 @@ export class DrizzlePartyMapper {
           characterName: m.characterName,
           kind: m.kind,
           player: {
-            // O save v6 não guarda status (o formato v7 chega na T-39).
+            statuses: m.player.statuses.map((status) =>
+              statusSchema.parse(status)
+            ),
             gold: m.player.gold,
             baseHealth: m.player.baseHealth,
             health: m.player.health,
@@ -425,7 +468,12 @@ type TStoredPlayer = z.infer<typeof legacyPlayerSchema> &
   Partial<
     Pick<
       TPlayerState,
-      'tcgFolder' | 'inventory' | 'equipment' | 'vault' | 'lastScavenge'
+      | 'tcgFolder'
+      | 'inventory'
+      | 'equipment'
+      | 'vault'
+      | 'lastScavenge'
+      | 'statuses'
     >
   >
 
@@ -450,6 +498,6 @@ function upgradePlayer(
     equipment: player.equipment ?? emptyEquipment(),
     vault: player.vault ?? emptyVault(),
     lastScavenge: player.lastScavenge ?? null,
-    statuses: [],
+    statuses: player.statuses ?? [],
   }
 }

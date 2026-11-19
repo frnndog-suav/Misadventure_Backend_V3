@@ -18,13 +18,13 @@ function usedRngParty() {
 }
 
 describe('DrizzlePartyMapper', () => {
-  it('D-31/D-87/REQ-103: guarda o state v6 sem a lista de status do domínio', () => {
+  it('D-31/D-87/REQ-103: guarda o state v7 com a lista de status', () => {
     const party = usedRngParty()
-    const { statuses, ...storedPlayer } = party.members[0].player
+    const storedPlayer = party.members[0].player
 
     const row = DrizzlePartyMapper.toDrizzle(party)
 
-    expect(statuses).toEqual([])
+    expect(storedPlayer.statuses).toEqual([])
     expect(row).toEqual({
       id: 'party-1',
       name: 'Os Teimosos',
@@ -32,7 +32,7 @@ describe('DrizzlePartyMapper', () => {
       createdAt: party.createdAt,
       savedAt: party.savedAt,
       state: {
-        schemaVersion: 6,
+        schemaVersion: 7,
         members: [
           {
             id: 'member-1',
@@ -50,6 +50,25 @@ describe('DrizzlePartyMapper', () => {
         turn: { round: 1, memberId: 'member-1', actionPoints: 3 },
       },
     })
+  })
+
+  it('REQ-107: save v6 preserva os decks e inicia sem status', () => {
+    const party = makeParty({
+      rewardDecks: [{ zoneType: 'urban', cards: ['fixture.healing-potion'] }],
+    })
+    const row = DrizzlePartyMapper.toDrizzle(party)
+    const v6 = {
+      ...row.state,
+      schemaVersion: 6,
+      members: row.state.members.map(({ player, ...member }) => {
+        const legacyPlayer: Partial<typeof player> = { ...player }
+        delete legacyPlayer.statuses
+        return { ...member, player: legacyPlayer }
+      }),
+    }
+    const upgraded = DrizzlePartyMapper.toDomain({ ...row, state: v6 })
+    expect(upgraded.members[0].player.statuses).toEqual([])
+    expect(upgraded.rewardDecks).toEqual(party.rewardDecks)
   })
 
   it('REQ-22: ida e volta preserva o agregado e o próximo sorteio', () => {
@@ -142,6 +161,7 @@ describe('DrizzlePartyMapper', () => {
     }
     for (const key of removedKeys) delete config[key]
     for (const member of row.state.members) {
+      delete member.player.statuses
       delete member.player.vault
       delete member.player.lastScavenge
       if (version < 5) {
@@ -163,7 +183,7 @@ describe('DrizzlePartyMapper', () => {
     }
   }
 
-  it('REQ-59/D-64: save v2 é lido como v6 (rodada 1, 1º de turnOrder, pontos do config) e regravado como v6', () => {
+  it('REQ-59/D-64: save v2 é lido como v7 (rodada 1, 1º de turnOrder, pontos do config) e regravado como v7', () => {
     const { row } = legacyRow(2, 5)
 
     const restored = DrizzlePartyMapper.toDomain(row)
@@ -173,7 +193,7 @@ describe('DrizzlePartyMapper', () => {
     expect(restored.turn.actionPoints).toBe(5)
     expect(restored.pullDomainEvents()).toEqual([])
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(6)
+    expect(rewritten.schemaVersion).toBe(7)
     expect(rewritten.turn).toEqual({
       round: 1,
       memberId: 'member-1',
@@ -181,7 +201,7 @@ describe('DrizzlePartyMapper', () => {
     })
   })
 
-  it('REQ-68/D-70: save v3 é lido como v6 com a pasta vazia, a vez intacta e as chaves novas nos padrões; regravado como v6', () => {
+  it('REQ-68/D-70: save v3 é lido como v7 com a pasta vazia, a vez intacta e as chaves novas nos padrões; regravado como v7', () => {
     const { party, row } = legacyRow(3)
 
     const restored = DrizzlePartyMapper.toDomain(row)
@@ -202,11 +222,11 @@ describe('DrizzlePartyMapper', () => {
     })
     expect(restored.pullDomainEvents()).toEqual([])
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(6)
+    expect(rewritten.schemaVersion).toBe(7)
     expect(rewritten.members[0].player.tcgFolder).toEqual([])
   })
 
-  it('REQ-79/D-79: save v4 é lido como v6 com inventário vazio, nada equipado e as chaves de REQ-69 nos padrões; regravado como v6', () => {
+  it('REQ-79/D-79: save v4 é lido como v7 com inventário vazio, nada equipado e as chaves de REQ-69 nos padrões; regravado como v7', () => {
     const { party, row } = legacyRow(4)
 
     const restored = DrizzlePartyMapper.toDomain(row)
@@ -232,11 +252,11 @@ describe('DrizzlePartyMapper', () => {
     })
     expect(restored.turn).toEqual(party.turn)
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(6)
+    expect(rewritten.schemaVersion).toBe(7)
     expect(rewritten.members[0].player.inventory).toEqual([])
   })
 
-  it('REQ-95/D-87: save v5 é lido como v6 com cofre vazio e as chaves de REQ-80 nos padrões; regravado como v6', () => {
+  it('REQ-95/D-87: save v5 é lido como v7 com cofre vazio e as chaves de REQ-80 nos padrões; regravado como v7', () => {
     const { party, row } = legacyRow(5)
     row.state.config.inventoryCapacity = 12
 
@@ -258,7 +278,7 @@ describe('DrizzlePartyMapper', () => {
     expect(restored.turn).toEqual(party.turn)
     expect(restored.pullDomainEvents()).toEqual([])
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(6)
+    expect(rewritten.schemaVersion).toBe(7)
     expect(rewritten.members[0].player.vault).toEqual({
       slots: [],
       decks: [],
@@ -491,7 +511,7 @@ describe('DrizzlePartyMapper', () => {
       'host fora dos membros',
       (r: ReturnType<typeof validRow>) => (r.state.hostMemberId = 'x'),
     ],
-    ['v6 sem turn', (r: ReturnType<typeof validRow>) => delete r.state.turn],
+    ['v7 sem turn', (r: ReturnType<typeof validRow>) => delete r.state.turn],
     [
       'turn com membro fora de turnOrder',
       (r: ReturnType<typeof validRow>) =>

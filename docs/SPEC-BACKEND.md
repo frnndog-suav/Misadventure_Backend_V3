@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.55 · **Data:** 2026-11-19
+> **Versão da spec:** 0.56 · **Data:** 2026-11-19
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -482,6 +482,7 @@ Regras de README 27 (criação de conteúdo), II.6 (editor no laboratório), 3.5
 
 - **D-105 — Pipeline e expiração (T-37, 2026-11-19):** REQ-102 aplica a escala do Pico e o fator percentual com divisão única antes do piso, para evitar arredondamento intermediário. Conforme D-100, um passivo com qualquer ativação ainda não executada fica fora do pipeline. No REQ-103, a troca de vez e a virada da rodada são uma única transição: `StatusExpired` vem após `TurnEnded` e `TurnStarted`, na ordem de aplicação por membro. No movimento, vem após `PlayerMoved`. Encerrar a sessão preserva a partida e os status. A leitura do save v6 inicializa a lista vazia. A gravação dos status e sua exposição via HTTP entram na T-39.
 - **D-106 — Pagamento e ativação em memória (T-38, 2026-11-19):** custos sequenciais são simulados antes de alterar o agregado. Cada cópia descartada atende a um requisito de carta, inclusive quando tem dois atributos possíveis. O sorteio com semente escolhe uma combinação que permite pagar os custos restantes e só publica o estado final do RNG em caso de sucesso. O custo percentual de Pico arredonda a redução para baixo, de acordo com o arredondamento de perda de Pico em README 7.3, e recalcula os tetos de Vigor e vida. O status de equipamento em uso fica suspenso abaixo do requisito de Pico e pode voltar a valer enquanto sua duração permitir (README 7.3 item 8). Os eventos internos entre `EffectActivated` e `SentToLimbo`/`StatusApplied` são `EffectCostPaid` e `EffectActivationApplied`, um por entrada na ordem de resolução. O caso de uso habilita a operação quando recebe `IdGenerator`. Na T-39, ligar a porta no Nest junto com o mapper v7 e a projeção HTTP, e proteger a referência de origem dos status persistidos na consulta de conteúdo em uso.
+- **D-107 — Save e projeção de efeitos (T-39, 2026-11-19):** o save v7 grava os status no JSONB, com a ordem e a cópia de ativação, duração e texto. Saves v2 a v6 ganham `statuses: []` em memória, preservando dados de recompensas do v6. A projeção consulta também as cartas da mão do membro da vez para avaliar custos de descarte. A consulta de conteúdo em uso inclui a origem dos status ativos mesmo quando o recurso já foi consumido.
 
 ## 4. Tarefas
 
@@ -582,7 +583,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 - [x] **T-36 — Conteúdo, schema e exibição (REQ-99 a REQ-101 no disco e nas rotas do catálogo/editor).** Schemas Zod, leitor, `ZodCardInputParser`, presenters do catálogo e do editor; conversão de `content/` e da fixture (via `content-author`, `/validar-cartas`) com a fixture de D-101; problemas não expressáveis levados ao autor (REQ-100). e2e do catálogo e do editor afetados. **Verificação:** `validate:content` limpo nos dois diretórios; `npm run test:e2e` dos controllers do catálogo e do editor.
 - [x] **T-37 — Domínio do pipeline e dos status (REQ-102, REQ-103).** TDD unitário: `effectiveModifiers` com passivos e status (exemplos 19 e 5 de REQ-102, fator mínimo ×0, piso 0); `statuses` vazio na criação; vencimento no `endTurn`, na virada da rodada e no `move` (exemplo de REQ-103), `StatusExpired` em ordem. **Verificação:** `npx vitest related --run` verde (testes de REQ-71 continuam verdes); guarda do domínio.
 - [x] **T-38 — Domínio do Preparar: ativar (REQ-101, REQ-104 a REQ-106; REQ-107 em memória).** TDD unitário: `Party.prepare` com `activate` (pagamento na ordem, cada ativação executada, tetos, limbo do consumível, status criado com cópia), recusas na ordem de REQ-105, `activatableEffects` com `handPayment` (função pura; textos da D-102, um `it` por forma), status com `text` copiado, parser, `availableActions`, eventos em ordem, RNG só quando usado. **Verificação:** `npx vitest related --run` verde; guarda do domínio.
-- [ ] **T-39 — Save v7, rotas e e2e (REQ-97 a REQ-107 de ponta a ponta).** Mapper Drizzle v7 com `statuses` (lê v6 a v2 com `[]`), sem migração SQL (conferir `drizzle-kit` sem diferença); `PartyPresenter` com `statuses` (com `text`) e `activatableEffects` (com `handPayment`); e2e Supertest (um `it` por REQ, estados montados pela doação do laboratório); `client.http`. **Verificação:** `npm run test:e2e` verde; `curl` dos cenários. Ao final: `/contrato` marca FEAT-11 `implementado (BE)` e gera o AVISO DE FRONTEND.
+- [x] **T-39 — Save v7, rotas e e2e (REQ-97 a REQ-107 de ponta a ponta).** Mapper Drizzle v7 com `statuses` (lê v6 a v2 com `[]`), sem migração SQL (conferir `drizzle-kit` sem diferença); `PartyPresenter` com `statuses` (com `text`) e `activatableEffects` (com `handPayment`); e2e Supertest (um `it` por REQ, estados montados pela doação do laboratório); `client.http`. **Verificação:** `npm run test:e2e` verde; `curl` dos cenários. Ao final: `/contrato` marca FEAT-11 `implementado (BE)` e gera o AVISO DE FRONTEND.
 
 ## 8. Histórico
 
@@ -643,6 +644,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.53 | 2026-11-18 | T-36 concluída: schemas Zod das quatro uniões de efeito (`effect-schemas.ts`, espelho do domínio), conversão de `content/` e da fixture para o formato de REQ-98 (24 cartas, 4 novas pela D-101), e2e do catálogo e do editor; D-104 (split estrutura/faixa, reescrita de `base.misty-forest` decidida pelo autor). Presenters sem mudança (D-25). |
 | 0.54 | 2026-11-19 | T-37 concluída: passivos e status em `effectiveModifiers` (REQ-102), estado inicial e expiração por vez, rodada e movimento (REQ-103), ordenação dos eventos e compatibilidade com save v6 (D-105). |
 | 0.55 | 2026-11-19 | T-38 concluída: parser, ativação e recusas de Preparar, projeção de efeitos ativáveis e ações disponíveis no domínio, ida e volta dos status em memória e integração HTTP reservada ao save v7 (D-106). |
+| 0.56 | 2026-11-19 | T-39 concluída: ativação via HTTP, projeção de efeitos e status, save v7, compatibilidade v2 a v6, proteção de conteúdo em uso (D-107), Supertest e roteiro em `client.http`. |
 
 ## Apêndice A — Conteúdo de teste
 

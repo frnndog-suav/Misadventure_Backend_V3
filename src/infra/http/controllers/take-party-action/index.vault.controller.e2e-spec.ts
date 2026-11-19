@@ -481,7 +481,7 @@ describe('Cofre e Vasculhar (e2e)', () => {
     expect(referenced.body.error.code).toBe('CONTENT_REFERENCED')
   })
 
-  it('REQ-95/REQ-96/D-87: save v5 inserido à mão é lido com cofre vazio, lastScavenge null, sem deck (Vasculhar não acha) e regravado como v6', async () => {
+  it('REQ-95/REQ-96/D-87: save v5 inserido à mão é lido com cofre vazio, lastScavenge null, sem deck (Vasculhar não acha) e regravado como v7', async () => {
     const party = await startedParty()
     await give(party, F)
     const state = (await rawState(party.id)) as {
@@ -495,6 +495,7 @@ describe('Cofre e Vasculhar (e2e)', () => {
     delete config.vaultGoldCapacity
     const members = state.members.map((m) => {
       const playerState = { ...m.player }
+      delete playerState.statuses
       delete playerState.vault
       delete playerState.lastScavenge
       return { ...m, player: playerState }
@@ -516,7 +517,7 @@ describe('Cofre e Vasculhar (e2e)', () => {
       found: false,
     })
     const rewritten = await rawState(party.id)
-    expect(rewritten.schemaVersion).toBe(6)
+    expect(rewritten.schemaVersion).toBe(7)
     expect(rewritten.rewardDecks).toEqual([])
   })
 })

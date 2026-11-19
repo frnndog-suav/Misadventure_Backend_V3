@@ -6,6 +6,11 @@ import type {
   PartyMember,
   TPartyMemberKind,
 } from '@/domain/campaign/enterprise/entities/party-member'
+import {
+  activatableEffects,
+  type TActivatableEffect,
+} from '@/domain/campaign/enterprise/activatable-effects'
+import type { TPlayerStatus } from '@/domain/campaign/enterprise/player-status'
 import { availableActions } from '@/domain/campaign/enterprise/available-actions'
 import { connectedZones } from '@/domain/campaign/enterprise/connected-zones'
 import { effectiveModifiers } from '@/domain/campaign/enterprise/effective-modifiers'
@@ -59,6 +64,8 @@ export interface TPlayerStateHttp {
   equipment: Record<TEquipmentSlot, string | null>
   purseCapacity: number
   effectiveModifiers: Record<TModifier, number>
+  statuses: readonly TPlayerStatus[]
+  activatableEffects: TActivatableEffect[]
   /** FEAT-32 (REQ-83, REQ-90, REQ-96). */
   vault: {
     slots: { cardId: string; quantity: number }[]
@@ -135,11 +142,15 @@ function playerToHTTP(
   const zone = zoneCard?.type === 'zone' ? zoneCard : null
   const dimensionCard = cards.get(party.dimension.dimensionCardId)
   const dimension = dimensionCard?.type === 'dimension' ? dimensionCard : null
+  const catalogCards = [...cards.values()]
+  const effects = party.turn.memberId.equals(member.id)
+    ? activatableEffects(player, catalogCards)
+    : []
   const targets = scavengeTargets({
     player,
     zone,
     dimension,
-    cards: [...cards.values()],
+    cards: catalogCards,
   })
   return {
     playerClasses: player.playerClasses.map(({ playerClass, deckLockMet }) => ({
@@ -164,7 +175,8 @@ function playerToHTTP(
       member.id,
       equipmentCardIds,
       zone?.zoneActions ?? [],
-      targets
+      targets,
+      effects
     ),
     build: copiesToHTTP(player.build),
     buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),
@@ -174,6 +186,8 @@ function playerToHTTP(
       cardId,
       quantity,
     })),
+    statuses: player.statuses,
+    activatableEffects: effects,
     inventoryCapacity: party.config.inventoryCapacity,
     equipment: { ...player.equipment },
     purseCapacity: party.config.purseCapacity,
@@ -217,7 +231,10 @@ export async function findPartyCards(
   party: Party
 ): Promise<TPartyCards> {
   const cardIds = new Set<string>()
-  for (const { player } of party.members) {
+  for (const { id, player } of party.members) {
+    if (party.turn.memberId.equals(id)) {
+      for (const cardId of player.hand) cardIds.add(cardId)
+    }
     for (const { cardId } of player.inventory) cardIds.add(cardId)
     for (const cardId of Object.values(player.equipment)) {
       if (cardId !== null) cardIds.add(cardId)

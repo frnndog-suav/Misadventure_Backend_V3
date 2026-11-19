@@ -374,3 +374,159 @@ POST {{baseUrl}}/parties/{{createParty.response.body.id}}/actions
 Content-Type: application/json
 
 { "type": "useVault", "operations": [] }
+
+# FEAT-11: backend com LAB_ENABLED=true, CONTENT_DIR=test/fixtures/content e laboratório nos valores padrão.
+
+### FEAT-11 — exibir efeito estruturado da Poção de Cura (200)
+GET {{baseUrl}}/catalog/cards/fixture.healing-potion
+
+### FEAT-11 — criar grupo (201; statuses e activatableEffects vazios)
+# @name effectsParty
+POST {{baseUrl}}/parties
+Content-Type: application/json
+
+{"name":"Os Teimosos","characterName":"Lia","playerClass":"warrior"}
+
+### FEAT-11 — ativar sem sessão (409 PARTY_SESSION_NOT_ACTIVE)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"activate","cardId":"fixture.healing-potion","effectIndex":0}
+
+### FEAT-11 — iniciar sessão (200)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/session
+
+### FEAT-11 — doar fixture.healing-potion (2)
+POST {{baseUrl}}/lab/parties/{{effectsParty.response.body.id}}/members/{{effectsParty.response.body.members[0].id}}/grants
+Content-Type: application/json
+
+{"type":"card","cardId":"fixture.healing-potion","quantity":2}
+
+### FEAT-11 — doar fixture.focus-amulet (1)
+POST {{baseUrl}}/lab/parties/{{effectsParty.response.body.id}}/members/{{effectsParty.response.body.members[0].id}}/grants
+Content-Type: application/json
+
+{"type":"card","cardId":"fixture.focus-amulet","quantity":1}
+
+### FEAT-11 — ativar amuleto no inventário (409 equipmentNotInUse)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"activate","cardId":"fixture.focus-amulet","effectIndex":0}
+
+### FEAT-11 — equipar amuleto (200; handPayment no efeito 2 se houver Força)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"equip","cardId":"fixture.focus-amulet"}
+
+### FEAT-11 — pagar Vigor (200; vigor 5, ouro +10, actionPoints 3)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"activate","cardId":"fixture.focus-amulet","effectIndex":0}
+
+### FEAT-11 — pagar Vigor novamente (200; vigor 0, ouro +10 novamente)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"activate","cardId":"fixture.focus-amulet","effectIndex":0}
+
+### FEAT-11 — ativar sem Vigor (409 notEnoughVigor)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"activate","cardId":"fixture.focus-amulet","effectIndex":0}
+
+### FEAT-11 — doar vida (200; health 17, vigor 5)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"activate","cardId":"fixture.focus-amulet","effectIndex":1}
+
+### FEAT-11 — usar poção (200; health 22, resta uma poção)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"activate","cardId":"fixture.healing-potion","effectIndex":0}
+
+### FEAT-11 — usar última poção com vida cheia (200; health 22, poção consumida)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"activate","cardId":"fixture.healing-potion","effectIndex":0}
+
+### FEAT-11 — pagar com Força, se estiver na mão (200; descarta 1 e compra 2)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"activate","cardId":"fixture.focus-amulet","effectIndex":2,"payment":{"handCards":["fixture.strength-basic"]}}
+
+### FEAT-11 — ativar sem a escolha (409 paymentInvalid)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"activate","cardId":"fixture.focus-amulet","effectIndex":2}
+
+### FEAT-11 — doar fixture.lucky-coin (1)
+POST {{baseUrl}}/lab/parties/{{effectsParty.response.body.id}}/members/{{effectsParty.response.body.members[0].id}}/grants
+Content-Type: application/json
+
+{"type":"card","cardId":"fixture.lucky-coin","quantity":1}
+
+### FEAT-11 — efeito ainda indisponível (409 notActivatableYet)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"activate","cardId":"fixture.lucky-coin","effectIndex":0}
+
+### FEAT-11 — doar fixture.guardian-armor (1)
+POST {{baseUrl}}/lab/parties/{{effectsParty.response.body.id}}/members/{{effectsParty.response.body.members[0].id}}/grants
+Content-Type: application/json
+
+{"type":"card","cardId":"fixture.guardian-armor","quantity":1}
+
+### FEAT-11 — equipar armadura (200; effectiveModifiers.defense 19)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"equip","cardId":"fixture.guardian-armor"}
+
+### FEAT-11 — tentar ativar passivo (409 notActivatable)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"activate","cardId":"fixture.guardian-armor","effectIndex":0}
+
+### FEAT-11 — doar fixture.strength-tonic (1)
+POST {{baseUrl}}/lab/parties/{{effectsParty.response.body.id}}/members/{{effectsParty.response.body.members[0].id}}/grants
+Content-Type: application/json
+
+{"type":"card","cardId":"fixture.strength-tonic","quantity":1}
+
+### FEAT-11 — índice inválido (400 ACTION_INVALID)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"activate","cardId":"fixture.strength-tonic","effectIndex":-1}
+
+### FEAT-11 — usar tônico (200; status com remaining 2, ataque efetivo 9)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"prepare","operation":"activate","cardId":"fixture.strength-tonic","effectIndex":0}
+
+### FEAT-11 — reler save (200; mesmo status ativo)
+GET {{baseUrl}}/parties/{{effectsParty.response.body.id}}
+
+### FEAT-11 — encerrar a primeira vez (200; remaining 1)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"endTurn"}
+
+### FEAT-11 — encerrar a segunda vez (200; status expira e ataque efetivo volta a 6)
+POST {{baseUrl}}/parties/{{effectsParty.response.body.id}}/actions
+Content-Type: application/json
+
+{"type":"endTurn"}

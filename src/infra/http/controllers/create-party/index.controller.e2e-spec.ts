@@ -119,6 +119,8 @@ describe('POST /parties (e2e)', () => {
             vaultGoldCapacity: 2000,
             scavengeTargets: [],
             lastScavenge: null,
+            statuses: [],
+            activatableEffects: [],
           },
         },
       ],

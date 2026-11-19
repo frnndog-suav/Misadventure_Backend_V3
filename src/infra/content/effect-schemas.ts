@@ -326,7 +326,7 @@ export const costSchema = z.discriminatedUnion('kind', [
   }),
 ])
 
-const amountOrWord = (word: 'halfHealth' | 'minusHandCount') =>
+const amountOrWord = <T extends 'halfHealth' | 'minusHandCount'>(word: T) =>
   z.union([z.number(), z.literal(word)])
 
 const changesAmount = z.array(z.strictObject({ modifier, amount: z.number() }))
