@@ -16,6 +16,14 @@ export type TRecoverOption = (typeof RECOVER_OPTIONS)[number]
 export type TPrepareOperation =
   | { operation: 'equip'; cardId: string }
   | { operation: 'unequip'; slot: TEquipmentSlot }
+  | TActivateOperation
+
+export type TActivateOperation = {
+  operation: 'activate'
+  cardId: string
+  effectIndex: number
+  payment?: { handCards: readonly string[] }
+}
 
 /** Uma operação do Usar cofre (README 6.4; REQ-84 a REQ-87). */
 export type TVaultOperation =
@@ -63,6 +71,7 @@ export type TActionIssue =
         | 'required'
         | 'notString'
         | 'notArray'
+        | 'notObject'
         | 'notPositiveInteger'
         | 'notNonNegativeInteger'
         | 'duplicateCard'
@@ -76,7 +85,8 @@ export type TActionIssue =
  * encerra a leitura: sem ação conhecida não há campos a conferir.
  */
 export function parsePartyAction(
-  input: unknown
+  input: unknown,
+  effectActivationEnabled = true
 ): Either<TActionIssue[], TPartyAction> {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     return left([{ field: null, reason: 'invalidBody' }])
@@ -100,7 +110,7 @@ export function parsePartyAction(
     case 'adjustDeck':
       return parseAdjustDeck(body)
     case 'prepare':
-      return parsePrepare(body)
+      return parsePrepare(body, effectActivationEnabled)
     case 'useVault':
       return parseUseVault(body)
     case 'scavenge':
@@ -226,7 +236,8 @@ function isEquipmentSlot(value: string): value is TEquipmentSlot {
  * operação (`cardId` ou `slot`) e os campos a mais, na ordem do pedido.
  */
 function parsePrepare(
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  effectActivationEnabled: boolean
 ): Either<TActionIssue[], TPartyAction> {
   const { operation } = body
   if (operation === undefined) {
@@ -268,9 +279,86 @@ function parsePrepare(
       }
       return right({ type: 'prepare', operation, slot })
     }
+    case 'activate':
+      if (effectActivationEnabled) return parseActivate(body)
+      return left([{ field: 'operation', reason: 'unknownOperation' }])
     default:
       return left([{ field: 'operation', reason: 'unknownOperation' }])
   }
+}
+
+function parseActivate(
+  body: Record<string, unknown>
+): Either<TActionIssue[], TPartyAction> {
+  const { cardId, effectIndex, payment } = body
+  const issues: TActionIssue[] = []
+  if (typeof cardId !== 'string') {
+    issues.push({
+      field: 'cardId',
+      reason: cardId === undefined ? 'required' : 'notString',
+    })
+  }
+  const validIndex =
+    typeof effectIndex === 'number' &&
+    Number.isInteger(effectIndex) &&
+    effectIndex >= 0
+  if (!validIndex) {
+    issues.push({
+      field: 'effectIndex',
+      reason: effectIndex === undefined ? 'required' : 'notNonNegativeInteger',
+    })
+  }
+  const handCards: string[] = []
+  if (payment !== undefined) {
+    if (
+      typeof payment !== 'object' ||
+      payment === null ||
+      Array.isArray(payment)
+    ) {
+      issues.push({ field: 'payment', reason: 'notObject' })
+    } else {
+      const value = payment as Record<string, unknown>
+      if (!Array.isArray(value.handCards)) {
+        issues.push({
+          field: 'payment.handCards',
+          reason: value.handCards === undefined ? 'required' : 'notArray',
+        })
+      } else {
+        for (const [i, id] of value.handCards.entries()) {
+          if (typeof id === 'string') handCards.push(id)
+          else
+            issues.push({
+              field: `payment.handCards.${i}`,
+              reason: 'invalidItem',
+            })
+        }
+      }
+      issues.push(
+        ...extraKeys(value, ['handCards']).map((issue) => ({
+          field: `payment.${issue.field}`,
+          reason: 'unknownKey' as const,
+        }))
+      )
+    }
+  }
+  issues.push(
+    ...extraKeys(body, [
+      'type',
+      'operation',
+      'cardId',
+      'effectIndex',
+      'payment',
+    ])
+  )
+  if (issues.length > 0 || typeof cardId !== 'string' || !validIndex)
+    return left(issues)
+  return right({
+    type: 'prepare',
+    operation: 'activate',
+    cardId,
+    effectIndex,
+    ...(payment === undefined ? {} : { payment: { handCards } }),
+  })
 }
 
 /** Máximo de operações por Usar cofre (REQ-88). */

@@ -1,5 +1,6 @@
 import { type Either, left, right } from '@/core/error/either'
 import type { Clock } from '@/core/ports/clock'
+import type { IdGenerator } from '@/core/ports/id-generator'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
 import {
@@ -45,7 +46,8 @@ export class TakePartyActionUseCase {
   constructor(
     private readonly partiesRepository: PartiesRepository,
     private readonly clock: Clock,
-    private readonly cardCatalog: CardCatalog
+    private readonly cardCatalog: CardCatalog,
+    private readonly ids?: IdGenerator
   ) {}
 
   async execute({
@@ -57,7 +59,8 @@ export class TakePartyActionUseCase {
       return left(new PartyNotFoundError())
     }
 
-    const parsed = parsePartyAction(body)
+    // A porta é ligada no Nest com o save v7, quando os status podem ser persistidos.
+    const parsed = parsePartyAction(body, this.ids !== undefined)
     if (parsed.isLeft()) {
       return left(new ActionInvalidError(parsed.value))
     }
@@ -135,15 +138,27 @@ export class TakePartyActionUseCase {
         break
       }
       case 'prepare': {
-        const prepared = party.prepare(
-          action,
-          { cards: await this.findPrepareCatalog(party, action) },
-          this.clock.now()
-        )
+        const catalog = { cards: await this.findPrepareCatalog(party, action) }
+        const at = this.clock.now()
+        let prepared: ReturnType<Party['prepare']>
+        if (action.operation === 'activate') {
+          if (!this.ids) {
+            return left(
+              new ActionInvalidError([
+                { field: 'operation', reason: 'unknownOperation' },
+              ])
+            )
+          }
+          prepared = party.prepare(action, catalog, at, this.ids)
+        } else {
+          prepared = party.prepare(action, catalog, at)
+        }
         if (prepared.isLeft()) {
           const refusal = prepared.value
           if (typeof refusal === 'object') {
-            return left(new ActionNotAllowedError(refusal.reason))
+            return left(
+              new ActionNotAllowedError(refusal.reason, refusal.cardId)
+            )
           }
           switch (refusal) {
             case 'sessionNotActive':
@@ -254,7 +269,11 @@ export class TakePartyActionUseCase {
         (cardId): cardId is string => cardId !== null
       )
     )
-    if (operation.operation === 'equip') cardIds.add(operation.cardId)
+    if (operation.operation !== 'unequip') cardIds.add(operation.cardId)
+    if (actor && operation.operation === 'activate') {
+      actor.player.inventory.forEach(({ cardId }) => cardIds.add(cardId))
+      actor.player.hand.forEach((cardId) => cardIds.add(cardId))
+    }
     const cards: TCard[] = []
     for (const cardId of cardIds) {
       const card = await this.cardCatalog.findCard(cardId)

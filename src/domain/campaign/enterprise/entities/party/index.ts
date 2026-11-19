@@ -18,11 +18,14 @@ import type {
 } from '@/domain/catalog/enterprise/value-objects/card'
 import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
+import { prepareEffect, type TActivateRefusal } from '../../activatable-effects'
 import { connectedZones } from '../../connected-zones'
+import { applyActivations } from '../../effect-activation'
 import type { TPartyEvent } from '../../events/party-events'
 import { addToInventory, type TInventorySlot } from '../../inventory'
 import { assembleMap, type TPartyMap } from '../../map-assembly'
 import type {
+  TActivateOperation,
   TPrepareOperation,
   TRecoverOption,
   TVaultOperation,
@@ -81,7 +84,9 @@ export type TAdjustDeckRefusal =
 /** Por que o Preparar foi recusado (REQ-74; D-79). */
 export type TPrepareRefusal =
   | 'sessionNotActive'
+  | TActivateRefusal
   | {
+      cardId?: never
       reason:
         | 'notInInventory'
         | 'notEquipment'
@@ -961,7 +966,19 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   prepare(
     operation: TPrepareOperation,
     catalog: { cards: readonly TCard[] },
+    at: Date,
+    ids: IdGenerator
+  ): Either<TPrepareRefusal, void>
+  prepare(
+    operation: Exclude<TPrepareOperation, TActivateOperation>,
+    catalog: { cards: readonly TCard[] },
     at: Date
+  ): Either<TPrepareRefusal, void>
+  prepare(
+    operation: TPrepareOperation,
+    catalog: { cards: readonly TCard[] },
+    at: Date,
+    ids?: IdGenerator
   ): Either<TPrepareRefusal, void> {
     switch (this.props.status) {
       case 'idle':
@@ -982,6 +999,84 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const asSlot = (cardId: string): TInventorySlot => ({ cardId, quantity: 1 })
 
     switch (operation.operation) {
+      case 'activate': {
+        if (!ids) throw new TypeError('An IdGenerator is required for activate')
+        const prepared = prepareEffect(
+          player,
+          operation,
+          catalog.cards,
+          this.props.rngState
+        )
+        if (prepared.isLeft()) return left(prepared.value)
+
+        const { effect, paid, consumed } = prepared.value
+        const { player: changed, applied } = applyActivations(
+          prepared.value.player,
+          effect.activation,
+          this.props.config.purseCapacity
+        )
+        const { cardId, effectIndex } = operation
+        const { duration, mark, text } = effect
+        const status: TPlayerStatus | null =
+          duration.kind !== 'immediate' && mark !== null
+            ? {
+                statusId: ids.next().toValue(),
+                sourceCardId: cardId,
+                effectIndex,
+                text,
+                mark,
+                activation: structuredClone(effect.activation),
+                duration: structuredClone(duration),
+                remaining:
+                  duration.kind === 'forOwnTurns'
+                    ? duration.turns
+                    : duration.kind === 'forRounds'
+                      ? duration.rounds
+                      : null,
+              }
+            : null
+
+        this.replaceActor(
+          index,
+          status === null
+            ? changed
+            : {
+                ...changed,
+                statuses: [...changed.statuses, status],
+              }
+        )
+        this.props.rngState = prepared.value.rngState ?? this.props.rngState
+        this.props.savedAt = at
+        this.addDomainEvent({
+          ...base,
+          type: 'EffectActivated',
+          cardId,
+          effectIndex,
+        })
+        for (const cost of paid)
+          this.addDomainEvent({ ...base, type: 'EffectCostPaid', ...cost })
+        for (const activation of applied)
+          this.addDomainEvent({
+            ...base,
+            type: 'EffectActivationApplied',
+            ...activation,
+          })
+        if (consumed)
+          this.addDomainEvent({
+            ...base,
+            type: 'SentToLimbo',
+            cardId,
+            quantity: 1,
+            from: 'inventory',
+          })
+        if (status)
+          this.addDomainEvent({
+            ...base,
+            type: 'StatusApplied',
+            statusId: status.statusId,
+          })
+        return right(undefined)
+      }
       case 'equip': {
         const { cardId } = operation
         const position = player.inventory.findIndex(

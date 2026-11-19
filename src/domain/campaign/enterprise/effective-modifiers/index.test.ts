@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { makeEquipmentCard } from '../../../../../test/factories/make-card'
 import type { TModifier } from '@/domain/catalog/enterprise/value-objects/card'
 import type { TEffect } from '@/domain/catalog/enterprise/value-objects/effect'
+
+import type { TPlayerStatus } from '../player-status'
 import { effectiveModifiers } from '.'
 
 const BASE: Record<TModifier, number> = {
@@ -77,6 +79,33 @@ describe('effectiveModifiers (REQ-102)', () => {
     })
     expect(result.defense).toBe(16)
     expect(result.attack).toBe(5)
+  })
+
+  it('REQ-102 (7.3 item 8): status do equipamento fica suspenso enquanto o Pico é insuficiente', () => {
+    const armor = makeEquipmentCard({ modifiers: [], peakRequirement: 10 })
+    const status: TPlayerStatus = {
+      statusId: 'armor-buff',
+      sourceCardId: armor.id,
+      effectIndex: 0,
+      text: '+5 de Defesa.',
+      mark: 'buff',
+      activation: [
+        { kind: 'modifierFlat', changes: [{ modifier: 'defense', amount: 5 }] },
+      ],
+      duration: { kind: 'infinite' },
+      remaining: null,
+    }
+    const input = {
+      equipment: [armor],
+      modifiers: BASE,
+      statuses: [
+        status,
+        { ...status, statusId: 'tonic-buff', sourceCardId: 'fixture.tonic' },
+      ],
+    }
+
+    expect(effectiveModifiers({ ...input, peak: 9 }).defense).toBe(8)
+    expect(effectiveModifiers({ ...input, peak: 10 }).defense).toBe(14)
   })
 
   it('REQ-102: resultado inteiro de Pico e percentual fica inteiro antes do piso', () => {

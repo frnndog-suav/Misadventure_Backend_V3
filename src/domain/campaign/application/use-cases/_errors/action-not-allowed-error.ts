@@ -28,6 +28,15 @@ export type TActionNotAllowedReason =
   | 'deckSlotsFull'
   | 'deckNotFound'
   | 'notScavengeable'
+  | 'equipmentNotInUse'
+  | 'effectNotFound'
+  | 'notActivatable'
+  | 'notActivatableYet'
+  | 'notEnoughVigor'
+  | 'notEnoughLife'
+  | 'notEnoughPeak'
+  | 'paymentInvalid'
+  | 'minimumNotMet'
 
 export class ActionNotAllowedError extends DomainError {
   readonly code = 'ACTION_NOT_ALLOWED'

@@ -1,6 +1,7 @@
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { TZoneAction } from '@/domain/catalog/enterprise/value-objects/card'
 
+import type { TActivatableEffect } from '../activatable-effects'
 import { connectedZones } from '../connected-zones'
 import type { Party } from '../entities/party'
 import type { TPartyActionType } from '../party-action'
@@ -21,7 +22,8 @@ export function availableActions(
   equipmentCardIds: ReadonlySet<string>,
   zoneActions: readonly TZoneAction[] = [],
   /** Os alvos do Vasculhar do membro (REQ-90; `scavengeTargets`). */
-  scavengeTargets: readonly string[] = []
+  scavengeTargets: readonly string[] = [],
+  activatableEffects: readonly TActivatableEffect[] = []
 ): TPartyActionType[] {
   const { turn } = party
   if (!turn.memberId.equals(memberId)) return []
@@ -39,9 +41,10 @@ export function availableActions(
   // Gratuita (K2, D-77): entra com qualquer quantidade de pontos.
   if (
     member &&
-    (member.player.inventory.some((slot) =>
-      equipmentCardIds.has(slot.cardId)
-    ) ||
+    (activatableEffects.length > 0 ||
+      member.player.inventory.some((slot) =>
+        equipmentCardIds.has(slot.cardId)
+      ) ||
       Object.values(member.player.equipment).some((cardId) => cardId !== null))
   ) {
     actions.push('prepare')

@@ -43,7 +43,13 @@ export function effectiveModifiers({
         )
     )
   )
-  const activations = [...passives, ...statuses].flatMap(
+  const disabledIds = new Set(
+    equipment.filter((card) => !equipmentWorks(card, peak)).map(({ id }) => id)
+  )
+  const activeStatuses = statuses.filter(
+    ({ sourceCardId }) => !disabledIds.has(sourceCardId)
+  )
+  const activations = [...passives, ...activeStatuses].flatMap(
     (effect) => effect.activation
   )
   const result = {} as Record<TModifier, number>

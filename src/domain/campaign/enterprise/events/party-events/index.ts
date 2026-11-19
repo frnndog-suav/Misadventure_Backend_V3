@@ -1,4 +1,6 @@
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
+import type { TActivationApplied } from '../../effect-activation'
+import type { TCostPaid } from '../../effect-payment'
 import type { DomainEvent } from '@/core/events/domain-event'
 import type {
   TEquipmentSlot,
@@ -128,7 +130,7 @@ export interface SentToLimboEvent extends DomainEvent {
   readonly memberId: UniqueEntityID
   readonly cardId: string
   readonly quantity: number
-  readonly from: 'vault'
+  readonly from: 'vault' | 'inventory'
 }
 
 /** Vasculhar aceito (README 12.6; REQ-91): `found` diz se a carta saiu do deck. */
@@ -151,6 +153,19 @@ export interface StatusExpiredEvent extends DomainEvent {
   readonly statusId: string
 }
 
+type TEffectEvent = DomainEvent & { readonly memberId: UniqueEntityID } & (
+    | {
+        readonly type: 'EffectActivated'
+        readonly cardId: string
+        readonly effectIndex: number
+      }
+    | ({ readonly type: 'EffectCostPaid' } & Readonly<TCostPaid>)
+    | ({
+        readonly type: 'EffectActivationApplied'
+      } & Readonly<TActivationApplied>)
+    | { readonly type: 'StatusApplied'; readonly statusId: string }
+  )
+
 export type TPartyEvent =
   | PartyCreatedEvent
   | MapAssembledEvent
@@ -172,4 +187,5 @@ export type TPartyEvent =
   | SentToLimboEvent
   | ScavengedEvent
   | StatusExpiredEvent
+  | TEffectEvent
   | PartyAbandonedEvent
