@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { makeEquipmentCard } from '../../../../../test/factories/make-card'
 import type { TModifier } from '@/domain/catalog/enterprise/value-objects/card'
+import type { TEffect } from '@/domain/catalog/enterprise/value-objects/effect'
 import { effectiveModifiers } from '.'
 
 const BASE: Record<TModifier, number> = {
@@ -13,6 +14,155 @@ const BASE: Record<TModifier, number> = {
   piercing: 0,
   reflection: 0,
 }
+
+describe('effectiveModifiers (REQ-102)', () => {
+  const passive: TEffect = {
+    text: '+20% de Defesa enquanto estiver em uso.',
+    trigger: null,
+    cost: [],
+    activation: [
+      {
+        kind: 'modifierPercent',
+        changes: [{ modifier: 'defense', percent: 20 }],
+      },
+    ],
+    duration: { kind: 'whileSourceActive' },
+    mark: 'buff',
+  }
+
+  it('REQ-102: Defesa 5 + armadura 10, Pico 10 e passivo de 20% resultam em 19', () => {
+    const armor = makeEquipmentCard({
+      modifiers: [{ modifier: 'defense', value: 10 }],
+      effects: [passive],
+    })
+    const input = { modifiers: { ...BASE, defense: 5 }, peak: 10 }
+    expect(effectiveModifiers({ ...input, equipment: [armor] }).defense).toBe(
+      19
+    )
+    expect(
+      effectiveModifiers({
+        ...input,
+        equipment: [{ ...armor, peakRequirement: 11 }],
+      }).defense
+    ).toBe(5)
+  })
+
+  it('REQ-102: aplica fixos antes do Pico e soma os percentuais de passivos e status', () => {
+    const armor = makeEquipmentCard({ modifiers: [], effects: [passive] })
+    const result = effectiveModifiers({
+      modifiers: BASE,
+      peak: 10,
+      equipment: [armor],
+      statuses: [
+        {
+          statusId: 'status-1',
+          sourceCardId: 'fixture.tonic',
+          effectIndex: 0,
+          text: 'Defesa reforçada.',
+          mark: 'buff',
+          duration: { kind: 'infinite' },
+          remaining: null,
+          activation: [
+            {
+              kind: 'modifierFlat',
+              changes: [{ modifier: 'defense', amount: 7 }],
+            },
+            {
+              kind: 'modifierPercent',
+              changes: [{ modifier: 'defense', percent: 30 }],
+            },
+          ],
+        },
+      ],
+    })
+    expect(result.defense).toBe(16)
+    expect(result.attack).toBe(5)
+  })
+
+  it('REQ-102: resultado inteiro de Pico e percentual fica inteiro antes do piso', () => {
+    const armor = makeEquipmentCard({
+      modifiers: [{ modifier: 'defense', value: 17 }],
+      effects: [
+        {
+          ...passive,
+          activation: [
+            {
+              kind: 'modifierPercent',
+              changes: [{ modifier: 'defense', percent: 16 }],
+            },
+          ],
+        },
+      ],
+    })
+    expect(
+      effectiveModifiers({ modifiers: BASE, peak: 25, equipment: [armor] })
+        .defense
+    ).toBe(29)
+  })
+
+  it('REQ-102: aplica fator mínimo zero e piso zero ao resultado', () => {
+    const armor = makeEquipmentCard({
+      modifiers: [],
+      effects: [
+        {
+          ...passive,
+          activation: [
+            {
+              kind: 'modifierPercent',
+              changes: [{ modifier: 'defense', percent: -70 }],
+            },
+            {
+              kind: 'modifierPercent',
+              changes: [{ modifier: 'defense', percent: -50 }],
+            },
+            {
+              kind: 'modifierFlat',
+              changes: [
+                { modifier: 'attack', amount: -10 },
+                { modifier: 'defense', amount: -10 },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+    const result = effectiveModifiers({
+      modifiers: BASE,
+      peak: 10,
+      equipment: [armor],
+    })
+    expect(result.defense).toBe(0)
+    expect(result.attack).toBe(0)
+  })
+
+  it('REQ-102: ignora efeitos com custo, gatilho, outra duração ou ativação fora do pipeline', () => {
+    const armor = makeEquipmentCard({
+      modifiers: [],
+      effects: [
+        { ...passive, cost: [{ kind: 'consumeSelf' }] },
+        {
+          ...passive,
+          trigger: { kind: 'onEnterZoneTitle', zoneTitle: 'Mina' },
+        },
+        { ...passive, duration: { kind: 'infinite' } },
+        {
+          ...passive,
+          activation: [
+            ...passive.activation,
+            { kind: 'zeroModifiers', modifiers: ['defense'] },
+          ],
+        },
+      ],
+    })
+    expect(
+      effectiveModifiers({
+        modifiers: { ...BASE, defense: 5 },
+        peak: 10,
+        equipment: [armor],
+      }).defense
+    ).toBe(5)
+  })
+})
 
 describe('effectiveModifiers (REQ-71)', () => {
   it('REQ-71: sem equipamentos, ⌊base × (100 + Pico) ÷ 100⌋ (Ataque 5, Pico 10 → 5)', () => {

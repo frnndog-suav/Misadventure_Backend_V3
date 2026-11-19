@@ -28,6 +28,7 @@ import type {
   TVaultOperation,
 } from '../../party-action'
 import type { TPartyTurn } from '../../party-turn'
+import { statusAfterTurn, type TPlayerStatus } from '../../player-status'
 import { shuffle } from '../../shuffle'
 import {
   createStartingPlayer,
@@ -485,18 +486,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       ...this.props.turn,
       actionPoints: this.props.turn.actionPoints - 1,
     }
-    this.props.members = this.props.members.map((member, i) =>
-      i === index
-        ? PartyMember.create(
-            {
-              characterName: member.characterName,
-              kind: member.kind,
-              player: { ...member.player, zoneId },
-            },
-            member.id
-          )
-        : member
-    )
+    this.replaceActor(index, { ...actor.player, zoneId })
     this.props.savedAt = at
     this.addDomainEvent({
       type: 'PlayerMoved',
@@ -506,6 +496,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       occurredAt: at,
       aggregateId: this.id,
     })
+    this.props.members[index] = this.updateStatuses(
+      this.props.members[index],
+      (status) => (status.duration.kind === 'untilLeaveZone' ? null : status),
+      at
+    )
     return right(undefined)
   }
 
@@ -548,6 +543,18 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       ...base,
     })
     this.addDomainEvent({ type: 'TurnStarted', memberId, round, ...base })
+    const roundEnded = round !== ended.round
+    this.props.members = this.props.members.map((member) => {
+      const ownTurnEnded = member.id.equals(ended.memberId)
+      const ownTurnStarted = member.id.equals(memberId)
+      if (!roundEnded && !ownTurnEnded && !ownTurnStarted) return member
+      return this.updateStatuses(
+        member,
+        (status) =>
+          statusAfterTurn(status, { ownTurnEnded, ownTurnStarted, roundEnded }),
+        at
+      )
+    })
     return right(undefined)
   }
 
@@ -1198,6 +1205,40 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             member.id
           )
         : member
+    )
+  }
+
+  private updateStatuses(
+    member: PartyMember,
+    update: (status: TPlayerStatus) => TPlayerStatus | null,
+    at: Date
+  ): PartyMember {
+    const active: TPlayerStatus[] = []
+    let changed = false
+    for (const status of member.player.statuses) {
+      const next = update(status)
+      if (next !== status) changed = true
+      if (next === null) {
+        this.addDomainEvent({
+          type: 'StatusExpired',
+          memberId: member.id,
+          statusId: status.statusId,
+          occurredAt: at,
+          aggregateId: this.id,
+        })
+      } else {
+        active.push(next)
+      }
+    }
+    if (!changed) return member
+
+    return PartyMember.create(
+      {
+        characterName: member.characterName,
+        kind: member.kind,
+        player: { ...member.player, statuses: active },
+      },
+      member.id
     )
   }
 

@@ -363,7 +363,14 @@ export class DrizzlePartyMapper {
           characterName: m.characterName,
           kind: m.kind,
           player: {
-            ...m.player,
+            // O save v6 não guarda status (o formato v7 chega na T-39).
+            gold: m.player.gold,
+            baseHealth: m.player.baseHealth,
+            health: m.player.health,
+            peak: m.player.peak,
+            vigor: m.player.vigor,
+            zoneId: m.player.zoneId,
+            respawnZoneId: m.player.respawnZoneId,
             playerClasses: m.player.playerClasses.map((c) => ({ ...c })),
             build: m.player.build.map((e) => ({ ...e })),
             tcgFolder: m.player.tcgFolder.map((e) => ({ ...e })),
@@ -443,5 +450,6 @@ function upgradePlayer(
     equipment: player.equipment ?? emptyEquipment(),
     vault: player.vault ?? emptyVault(),
     lastScavenge: player.lastScavenge ?? null,
+    statuses: [],
   }
 }

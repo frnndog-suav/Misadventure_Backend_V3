@@ -58,10 +58,11 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 038 | T-32 | Domínio do deck de recompensas e do Vasculhar (FEAT-32): `assembleRewardDecks`, `scavengeTargets`, `Party.scavenge`, `lastScavenge`, evento `Scavenged`, parser, `availableActions`; mapper v6 adiantado (D-93) | concluída |
 | 039 | T-33 | FEAT-32 ponta a ponta: `PartyPresenter` com cofre, capacidades, `scavengeTargets`, `lastScavenge` e ações de zona; e2e da FEAT-32; mapper v6 testado; CONTRATO v0.47 `implementado (BE)` (D-94) | concluída |
 | 040 | FEAT-32 | FEAT-32 validada pelo frontend: CONTRATO v0.48 `validado`, ROADMAP v0.53 | concluída |
-| 041 | T-34 | Catálogo de variações de efeitos (FEAT-11): `docs/EFEITOS-CATALOGO.md` v0.1, aguardando validação do autor | aguardando revisão |
-| 042 | FEAT-11 | Contrato da FEAT-11 proposto pelo backend: CONTRATO v0.49 `proposto (BE)` | aguardando frontend |
-| 043 | T-35 | Domínio do modelo de efeitos (FEAT-11): tipos por `kind`, regras de REQ-99 em `checkCatalogIntegrity`, citação ao publicar, D-103; infra de conteúdo vermelha até a T-36 | aguardando revisão |
-| 044 | T-36 | Conteúdo, schema e exibição (FEAT-11): `effect-schemas.ts` (espelho das 4 uniões), conversão de `content/` e da fixture (24 cartas, D-101), e2e do catálogo e do editor; D-104; reescrita de `base.misty-forest` pelo autor | aguardando revisão |
+| 041 | T-34 | Catálogo de variações de efeitos (FEAT-11): `docs/EFEITOS-CATALOGO.md` v0.1, validado provisoriamente pelo autor na v1.0 | concluída |
+| 042 | FEAT-11 | Contrato da FEAT-11 proposto na v0.49 e acordado na v0.51 | concluída |
+| 043 | T-35 | Domínio do modelo de efeitos (FEAT-11): tipos por `kind`, regras de REQ-99 em `checkCatalogIntegrity`, citação ao publicar, D-103; infra de conteúdo vermelha até a T-36 | concluída |
+| 044 | T-36 | Conteúdo, schema e exibição (FEAT-11): `effect-schemas.ts` (espelho das 4 uniões), conversão de `content/` e da fixture (24 cartas, D-101), e2e do catálogo e do editor; D-104; reescrita de `base.misty-forest` pelo autor | concluída |
+| 045 | T-37 | Passivos e status em `effectiveModifiers`, expiração por vez, rodada e movimento (REQ-102, REQ-103, D-105) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

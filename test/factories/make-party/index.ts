@@ -28,6 +28,7 @@ export function makePlayerState(
     equipment: emptyEquipment(),
     vault: { slots: [], decks: [], gold: 0 },
     lastScavenge: null,
+    statuses: [],
     deck: [
       ...Array.from({ length: 27 }, () => 'fixture.endurance-basic'),
       ...Array.from({ length: 26 }, () => 'fixture.strength-basic'),

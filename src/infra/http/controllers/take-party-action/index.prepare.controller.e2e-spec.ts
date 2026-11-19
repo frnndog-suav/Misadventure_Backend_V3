@@ -18,6 +18,7 @@ const H = 'fixture.iron-helm'
 const R = 'fixture.arcane-wand'
 const P = 'fixture.healing-potion'
 const K = 'fixture.pickaxe'
+const A = 'fixture.guardian-armor'
 
 const EMPTY_EQUIPMENT = {
   head: null,
@@ -146,6 +147,25 @@ describe('Preparar — equip e unequip (e2e)', () => {
       'useVault',
       'endTurn',
     ])
+  })
+
+  it('REQ-102: passivo da armadura entra no cálculo enquanto equipada', async () => {
+    const party = await startedParty()
+    await give(party, A)
+    expect(
+      (await get(party.id)).members[0].player.effectiveModifiers.defense
+    ).toBe(5)
+
+    const { body: equipped } = await act(party.id, equip(A)).expect(200)
+    expect(equipped.members[0].player.effectiveModifiers.defense).toBe(19)
+    expect(
+      (await get(party.id)).members[0].player.effectiveModifiers.defense
+    ).toBe(19)
+
+    const { body: unequipped } = await act(party.id, unequip('torso')).expect(
+      200
+    )
+    expect(unequipped.members[0].player.effectiveModifiers.defense).toBe(5)
   })
 
   it('REQ-72/REQ-71/REQ-75: equipar B é gratuito, soma os modificadores e grava', async () => {

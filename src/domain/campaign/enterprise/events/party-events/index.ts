@@ -145,6 +145,12 @@ export interface PartyAbandonedEvent extends DomainEvent {
   readonly type: 'PartyAbandoned'
 }
 
+export interface StatusExpiredEvent extends DomainEvent {
+  readonly type: 'StatusExpired'
+  readonly memberId: UniqueEntityID
+  readonly statusId: string
+}
+
 export type TPartyEvent =
   | PartyCreatedEvent
   | MapAssembledEvent
@@ -165,4 +171,5 @@ export type TPartyEvent =
   | VaultUsedEvent
   | SentToLimboEvent
   | ScavengedEvent
+  | StatusExpiredEvent
   | PartyAbandonedEvent

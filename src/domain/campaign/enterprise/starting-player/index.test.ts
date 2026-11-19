@@ -47,6 +47,10 @@ describe('createStartingPlayer', () => {
     })
   })
 
+  it('REQ-103: jogador recém-criado começa sem status', () => {
+    expect(createStartingPlayer(input()).statuses).toEqual([])
+  })
+
   it('REQ-34: valores iniciais dos padrões, na cidade inicial, com a classe ativa', () => {
     const player = createStartingPlayer(input())
 

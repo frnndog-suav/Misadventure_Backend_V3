@@ -18,11 +18,13 @@ function usedRngParty() {
 }
 
 describe('DrizzlePartyMapper', () => {
-  it('D-31/D-87: separa colunas consultáveis e o state com schemaVersion 6', () => {
+  it('D-31/D-87/REQ-103: guarda o state v6 sem a lista de status do domínio', () => {
     const party = usedRngParty()
+    const { statuses, ...storedPlayer } = party.members[0].player
 
     const row = DrizzlePartyMapper.toDrizzle(party)
 
+    expect(statuses).toEqual([])
     expect(row).toEqual({
       id: 'party-1',
       name: 'Os Teimosos',
@@ -36,7 +38,7 @@ describe('DrizzlePartyMapper', () => {
             id: 'member-1',
             characterName: 'Lia',
             kind: 'human',
-            player: party.members[0].player,
+            player: storedPlayer,
           },
         ],
         hostMemberId: 'member-1',

@@ -9,6 +9,7 @@ import {
 } from '@/domain/catalog/enterprise/value-objects/card'
 
 import type { TInventorySlot } from '../../inventory'
+import type { TPlayerStatus } from '../../player-status'
 import type { TVault } from '../../vault'
 
 /** Na FEAT-20 entra o ajudante de IA. */
@@ -33,6 +34,8 @@ export type TPlayerState = Readonly<{
   vault: TVault
   /** Resultado do último Vasculhar aceito (REQ-96); `null` até o primeiro. */
   lastScavenge: Readonly<{ cardId: string; found: boolean }> | null
+  /** Efeitos ativos, na ordem em que foram aplicados (REQ-103). */
+  statuses: readonly TPlayerStatus[]
   /** Ids em ordem; o topo é o índice 0. */
   deck: readonly string[]
   /** Na ordem em que foram compradas. */

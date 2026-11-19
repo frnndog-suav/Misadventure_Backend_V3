@@ -181,6 +181,7 @@ function playerToHTTP(
       modifiers: player.modifiers,
       peak: player.peak,
       equipment: equipmentCards,
+      statuses: player.statuses,
     }),
     vault: {
       slots: player.vault.slots.map(({ cardId, quantity }) => ({
