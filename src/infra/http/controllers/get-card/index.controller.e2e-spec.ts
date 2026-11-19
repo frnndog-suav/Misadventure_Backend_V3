@@ -14,6 +14,37 @@ describe('GET /catalog/cards/:cardId (e2e)', () => {
     await app.close()
   })
 
+  it('REQ-101/FEAT-11: item consumível traz os efeitos no formato estruturado', async () => {
+    const response = await request(app.getHttpServer()).get(
+      '/catalog/cards/fixture.healing-potion'
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.body).toEqual({
+      type: 'item',
+      id: 'fixture.healing-potion',
+      collectionId: 'fixture',
+      name: 'Poção de Cura',
+      flavorText: null,
+      rarity: 'common',
+      itemCategory: 'consumable',
+      tags: ['poção'],
+      effects: [
+        {
+          text: 'Recupera 5 de vida.',
+          trigger: null,
+          cost: [{ kind: 'consumeSelf' }],
+          activation: [{ kind: 'heal', amount: 5 }],
+          duration: { kind: 'immediate' },
+          mark: null,
+        },
+      ],
+      toolKind: null,
+      scavengeZoneTypes: [],
+      scavengeTool: null,
+    })
+  })
+
   it('REQ-14: carta existente responde 200 com a carta', async () => {
     const response = await request(app.getHttpServer()).get(
       '/catalog/cards/fixture.strength-basic'

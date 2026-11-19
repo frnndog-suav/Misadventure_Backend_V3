@@ -14,12 +14,13 @@ import {
   PLAYER_CLASSES,
   RARITIES,
   ZONE_ACTIONS,
-  ZONE_EFFECT_POLARITIES,
   ZONE_TYPES,
   type TCardType,
   type TModifier,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import { CONTENT_STATUSES } from '@/domain/catalog/enterprise/value-objects/content'
+
+import { effectSchema, zoneEffectSchema } from './effect-schemas'
 
 /**
  * Forma dos arquivos de `content/` (D-21). Cada `<tipo>.json` é um array de
@@ -67,9 +68,7 @@ const cardSchemas = {
     connectionArrows: z.number(),
     arrowLayout: z.enum(ARROW_LAYOUTS).nullable(),
     zoneActions: z.array(z.enum(ZONE_ACTIONS)),
-    effects: z.array(
-      z.strictObject({ text, polarity: z.enum(ZONE_EFFECT_POLARITIES) })
-    ),
+    effects: z.array(zoneEffectSchema),
   }),
   attribute: z.strictObject({
     id,
@@ -78,7 +77,7 @@ const cardSchemas = {
     rarity: z.enum(RARITIES),
     attributeKind: z.enum(ATTRIBUTE_KINDS),
     attributes: z.array(z.enum(ATTRIBUTES)),
-    effects: z.array(ruleText),
+    effects: z.array(effectSchema),
   }),
   equipment: z.strictObject({
     id,
@@ -94,7 +93,7 @@ const cardSchemas = {
     classRestriction: z.array(z.enum(PLAYER_CLASSES)),
     blocksShield: z.boolean(),
     abilities: z.array(ability),
-    effects: z.array(ruleText),
+    effects: z.array(effectSchema),
     refinement: z
       .strictObject({ maxLevel: z.number(), materials: ruleText })
       .nullable(),
@@ -109,7 +108,7 @@ const cardSchemas = {
     rarity: z.enum(RARITIES),
     itemCategory: z.enum(ITEM_CATEGORIES),
     tags: z.array(text),
-    effects: z.array(ruleText),
+    effects: z.array(effectSchema),
     toolKind: text.nullable(),
     scavengeZoneTypes: z.array(z.enum(ZONE_TYPES)),
     scavengeTool: text.nullable(),
@@ -138,7 +137,7 @@ const cardSchemas = {
     flavorText,
     releaseOrder: z.number(),
     arrivalZoneTitle: text.nullable(),
-    effects: z.array(ruleText),
+    effects: z.array(zoneEffectSchema),
     rewardDecks: z.array(
       z.strictObject({
         zoneType: z.enum(ZONE_TYPES),

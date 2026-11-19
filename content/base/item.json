@@ -8,7 +8,12 @@
     "tags": ["erva"],
     "effects": [
       {
-        "text": "Recupera 3 de vida."
+        "text": "Recupera 3 de vida.",
+        "trigger": null,
+        "cost": [{ "kind": "consumeSelf" }],
+        "activation": [{ "kind": "heal", "amount": 3 }],
+        "duration": { "kind": "immediate" },
+        "mark": null
       }
     ],
     "toolKind": null,

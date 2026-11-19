@@ -1,5 +1,23 @@
 [
   {
+    "id": "fixture.arcane-wand",
+    "name": "Varinha Arcana",
+    "flavorText": null,
+    "rarity": "uncommon",
+    "slot": "weapon",
+    "tags": ["varinha"],
+    "modifiers": [{ "modifier": "attack", "value": 1 }],
+    "peakRequirement": null,
+    "classRestriction": ["mage"],
+    "blocksShield": false,
+    "abilities": [],
+    "effects": [],
+    "refinement": null,
+    "enchantment": null,
+    "priceMultiplier": 1,
+    "scavengeTool": null
+  },
+  {
     "id": "fixture.blade-of-dusk",
     "name": "Lâmina do Crepúsculo",
     "flavorText": "Forjada na hora em que o dia cede à noite.",
@@ -24,14 +42,97 @@
     "scavengeTool": null
   },
   {
-    "id": "fixture.short-sword",
-    "name": "Espada Curta",
+    "id": "fixture.focus-amulet",
+    "name": "Amuleto do Foco",
     "flavorText": null,
-    "rarity": "common",
-    "slot": "weapon",
-    "tags": ["espada"],
-    "modifiers": [{ "modifier": "attack", "value": 2 }],
+    "rarity": "uncommon",
+    "slot": "accessory",
+    "tags": [],
+    "modifiers": [{ "modifier": "evasion", "value": 1 }],
     "peakRequirement": null,
+    "classRestriction": [],
+    "blocksShield": false,
+    "abilities": [],
+    "effects": [
+      {
+        "text": "Gaste 5 de Vigor: ganhe 10 moedas de ouro.",
+        "trigger": null,
+        "cost": [{ "kind": "spendVigor", "amount": 5 }],
+        "activation": [{ "kind": "gainGold", "amount": 10 }],
+        "duration": { "kind": "immediate" },
+        "mark": null
+      },
+      {
+        "text": "Doe 5 de vida: restaure 5 de Vigor.",
+        "trigger": null,
+        "cost": [{ "kind": "donateLife", "amount": 5 }],
+        "activation": [{ "kind": "restoreVigor", "amount": 5 }],
+        "duration": { "kind": "immediate" },
+        "mark": null
+      },
+      {
+        "text": "Pague um de Força: compre 2 cartas.",
+        "trigger": null,
+        "cost": [
+          {
+            "kind": "discardFromHand",
+            "requirements": [{ "attribute": "strength", "count": 1 }],
+            "excludeAttributes": [],
+            "constraint": "none",
+            "random": false
+          }
+        ],
+        "activation": [{ "kind": "drawCards", "count": 2 }],
+        "duration": { "kind": "immediate" },
+        "mark": null
+      }
+    ],
+    "refinement": null,
+    "enchantment": null,
+    "priceMultiplier": 1,
+    "scavengeTool": null
+  },
+  {
+    "id": "fixture.guardian-armor",
+    "name": "Armadura do Guardião",
+    "flavorText": null,
+    "rarity": "rare",
+    "slot": "torso",
+    "tags": [],
+    "modifiers": [{ "modifier": "defense", "value": 10 }],
+    "peakRequirement": null,
+    "classRestriction": [],
+    "blocksShield": false,
+    "abilities": [],
+    "effects": [
+      {
+        "text": "+20% de Defesa enquanto estiver em uso.",
+        "trigger": null,
+        "cost": [],
+        "activation": [
+          {
+            "kind": "modifierPercent",
+            "changes": [{ "modifier": "defense", "percent": 20 }]
+          }
+        ],
+        "duration": { "kind": "whileSourceActive" },
+        "mark": "buff"
+      }
+    ],
+    "refinement": null,
+    "enchantment": null,
+    "priceMultiplier": 1,
+    "scavengeTool": null
+  },
+  {
+    "id": "fixture.iron-helm",
+    "name": "Elmo de Ferro",
+    "flavorText": null,
+    "rarity": "uncommon",
+    "slot": "head",
+    "tags": ["elmo"],
+    "modifiers": [{ "modifier": "defense", "value": 1 }],
+    "peakRequirement": 50,
     "classRestriction": [],
     "blocksShield": false,
     "abilities": [],
@@ -60,33 +161,15 @@
     "scavengeTool": null
   },
   {
-    "id": "fixture.iron-helm",
-    "name": "Elmo de Ferro",
+    "id": "fixture.short-sword",
+    "name": "Espada Curta",
     "flavorText": null,
-    "rarity": "uncommon",
-    "slot": "head",
-    "tags": ["elmo"],
-    "modifiers": [{ "modifier": "defense", "value": 1 }],
-    "peakRequirement": 50,
-    "classRestriction": [],
-    "blocksShield": false,
-    "abilities": [],
-    "effects": [],
-    "refinement": null,
-    "enchantment": null,
-    "priceMultiplier": 1,
-    "scavengeTool": null
-  },
-  {
-    "id": "fixture.arcane-wand",
-    "name": "Varinha Arcana",
-    "flavorText": null,
-    "rarity": "uncommon",
+    "rarity": "common",
     "slot": "weapon",
-    "tags": ["varinha"],
-    "modifiers": [{ "modifier": "attack", "value": 1 }],
+    "tags": ["espada"],
+    "modifiers": [{ "modifier": "attack", "value": 2 }],
     "peakRequirement": null,
-    "classRestriction": ["mage"],
+    "classRestriction": [],
     "blocksShield": false,
     "abilities": [],
     "effects": [],

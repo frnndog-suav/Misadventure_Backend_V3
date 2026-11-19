@@ -41,7 +41,16 @@ describe('Catálogo só com publicadas (e2e)', () => {
           rarity: 'common',
           itemCategory: 'consumable',
           tags: [],
-          effects: [{ text: 'Cura 3.' }],
+          effects: [
+            {
+              text: 'Cura 3.',
+              trigger: null,
+              cost: [{ kind: 'consumeSelf' }],
+              activation: [{ kind: 'heal', amount: 3 }],
+              duration: { kind: 'immediate' },
+              mark: null,
+            },
+          ],
           toolKind: null,
           scavengeZoneTypes: [],
           scavengeTool: null,

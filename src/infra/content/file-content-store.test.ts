@@ -222,8 +222,10 @@ describe('FileContentStore', () => {
       'fixture.healing-potion',
       'fixture.howling-wolves',
       'fixture.iron-ore',
+      'fixture.lucky-coin',
       'fixture.pickaxe',
       'fixture.silver-fish',
+      'fixture.strength-tonic',
     ])
   })
 

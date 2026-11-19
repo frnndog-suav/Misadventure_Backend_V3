@@ -19,7 +19,16 @@
     "zoneActions": ["startEvent"],
     "effects": [
       {
-        "text": "A névoa dificulta a visão.",
+        "text": "A névoa dificulta a visão: -1 de Precisão enquanto você estiver nesta zona.",
+        "trigger": null,
+        "cost": [],
+        "activation": [
+          {
+            "kind": "modifierFlat",
+            "changes": [{ "modifier": "accuracy", "amount": -1 }]
+          }
+        ],
+        "duration": { "kind": "whileInThisZone" },
         "polarity": "negative"
       }
     ]

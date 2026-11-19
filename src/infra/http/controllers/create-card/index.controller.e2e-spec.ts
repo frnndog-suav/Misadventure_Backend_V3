@@ -122,6 +122,103 @@ describe('POST /lab/content/collections/:collectionId/cards (e2e)', () => {
     })
   })
 
+  it('REQ-99/FEAT-11: consumível com efeito sem consumeSelf → 400 CONTENT_INVALID em effects.0.cost', async () => {
+    const response = await request(ctx.app.getHttpServer())
+      .post('/lab/content/collections/bosque/cards')
+      .send({
+        slug: 'frasco',
+        type: 'item',
+        name: 'Frasco Quebrado',
+        flavorText: null,
+        rarity: 'common',
+        itemCategory: 'consumable',
+        tags: [],
+        effects: [
+          {
+            text: 'Recupera 5 de vida.',
+            trigger: null,
+            cost: [],
+            activation: [{ kind: 'heal', amount: 5 }],
+            duration: { kind: 'immediate' },
+            mark: null,
+          },
+        ],
+        toolKind: null,
+        scavengeZoneTypes: [],
+        scavengeTool: null,
+      })
+
+    expect(response.status).toBe(400)
+    expect(response.body).toEqual({
+      error: {
+        ...CONTENT_INVALID,
+        details: {
+          fields: [
+            {
+              path: 'effects.0.cost',
+              message:
+                'Consumível precisa ter o custo de usar a própria carta.',
+            },
+          ],
+        },
+      },
+    })
+  })
+
+  it('REQ-98/REQ-101: cria item com efeito estruturado (201) e o editor o devolve igual', async () => {
+    const effect = {
+      text: '+3 de Ataque durante 2 vezes suas.',
+      trigger: null,
+      cost: [{ kind: 'consumeSelf' }],
+      activation: [
+        { kind: 'modifierFlat', changes: [{ modifier: 'attack', amount: 3 }] },
+      ],
+      duration: { kind: 'forOwnTurns', turns: 2 },
+      mark: 'buff',
+    }
+    const server = ctx.app.getHttpServer()
+    const created = await request(server)
+      .post('/lab/content/collections/bosque/cards')
+      .send({
+        slug: 'tonico',
+        type: 'item',
+        name: 'Tônico de Força',
+        flavorText: null,
+        rarity: 'common',
+        itemCategory: 'consumable',
+        tags: [],
+        effects: [effect],
+        toolKind: null,
+        scavengeZoneTypes: [],
+        scavengeTool: null,
+      })
+
+    expect(created.status).toBe(201)
+    expect(created.body).toEqual({
+      status: 'draft',
+      card: {
+        type: 'item',
+        id: 'bosque.tonico',
+        collectionId: 'bosque',
+        name: 'Tônico de Força',
+        flavorText: null,
+        rarity: 'common',
+        itemCategory: 'consumable',
+        tags: [],
+        effects: [effect],
+        toolKind: null,
+        scavengeZoneTypes: [],
+        scavengeTool: null,
+      },
+    })
+
+    const fetched = await request(server).get(
+      '/lab/content/cards/bosque.tonico'
+    )
+    expect(fetched.status).toBe(200)
+    expect(fetched.body.card.effects).toEqual([effect])
+  })
+
   it('REQ-43: id de carta já usado → 409 CONTENT_ID_TAKEN no campo slug', async () => {
     const response = await request(ctx.app.getHttpServer())
       .post('/lab/content/collections/bosque/cards')

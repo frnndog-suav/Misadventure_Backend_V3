@@ -172,7 +172,7 @@ describe('loadContent', () => {
     }
   })
 
-  it('REQ-10: a fixture de teste carrega com as 20 cartas e as 2 classes do contrato', async () => {
+  it('REQ-10/REQ-100: a fixture de teste carrega com as 24 cartas e as 2 classes do contrato', async () => {
     const result = await loadContent('test/fixtures/content')
 
     expect(result.ok).toBe(true)
@@ -191,11 +191,14 @@ describe('loadContent', () => {
       ['fixture.dexterity-basic', 'attribute'],
       ['fixture.endurance-basic', 'attribute'],
       ['fixture.fishing-rod', 'item'],
+      ['fixture.focus-amulet', 'equipment'],
       ['fixture.gray-harbor', 'zone'],
+      ['fixture.guardian-armor', 'equipment'],
       ['fixture.healing-potion', 'item'],
       ['fixture.howling-wolves', 'combatEvent'],
       ['fixture.iron-helm', 'equipment'],
       ['fixture.iron-ore', 'item'],
+      ['fixture.lucky-coin', 'item'],
       ['fixture.oak-shield', 'equipment'],
       ['fixture.old-mine', 'zone'],
       ['fixture.pickaxe', 'item'],
@@ -203,6 +206,7 @@ describe('loadContent', () => {
       ['fixture.silver-fish', 'item'],
       ['fixture.stone-bend', 'zone'],
       ['fixture.strength-basic', 'attribute'],
+      ['fixture.strength-tonic', 'item'],
       ['fixture.test-dimension', 'dimension'],
       ['fixture.whispering-grove', 'zone'],
       ['fixture.wounded-traveler', 'randomEvent'],

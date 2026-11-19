@@ -61,6 +61,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 041 | T-34 | Catálogo de variações de efeitos (FEAT-11): `docs/EFEITOS-CATALOGO.md` v0.1, aguardando validação do autor | aguardando revisão |
 | 042 | FEAT-11 | Contrato da FEAT-11 proposto pelo backend: CONTRATO v0.49 `proposto (BE)` | aguardando frontend |
 | 043 | T-35 | Domínio do modelo de efeitos (FEAT-11): tipos por `kind`, regras de REQ-99 em `checkCatalogIntegrity`, citação ao publicar, D-103; infra de conteúdo vermelha até a T-36 | aguardando revisão |
+| 044 | T-36 | Conteúdo, schema e exibição (FEAT-11): `effect-schemas.ts` (espelho das 4 uniões), conversão de `content/` e da fixture (24 cartas, D-101), e2e do catálogo e do editor; D-104; reescrita de `base.misty-forest` pelo autor | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

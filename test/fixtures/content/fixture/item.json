@@ -6,7 +6,7 @@
     "rarity": "common",
     "itemCategory": "tool",
     "tags": ["ferramenta"],
-    "effects": [{ "text": "Permite pescar." }],
+    "effects": [],
     "toolKind": "fishing-rod",
     "scavengeZoneTypes": ["coastal", "fluvial", "lacustrine", "urban"],
     "scavengeTool": null
@@ -18,7 +18,16 @@
     "rarity": "common",
     "itemCategory": "consumable",
     "tags": ["poção"],
-    "effects": [{ "text": "Recupera 5 de vida." }],
+    "effects": [
+      {
+        "text": "Recupera 5 de vida.",
+        "trigger": null,
+        "cost": [{ "kind": "consumeSelf" }],
+        "activation": [{ "kind": "heal", "amount": 5 }],
+        "duration": { "kind": "immediate" },
+        "mark": null
+      }
+    ],
     "toolKind": null,
     "scavengeZoneTypes": [],
     "scavengeTool": null
@@ -36,13 +45,34 @@
     "scavengeTool": "pickaxe"
   },
   {
+    "id": "fixture.lucky-coin",
+    "name": "Moeda da Sorte",
+    "flavorText": null,
+    "rarity": "uncommon",
+    "itemCategory": "treasure",
+    "tags": [],
+    "effects": [
+      {
+        "text": "Pague 5 moedas: some 3 ao resultado do dado até o fim do evento.",
+        "trigger": null,
+        "cost": [{ "kind": "payGold", "amount": 5 }],
+        "activation": [{ "kind": "diceResultModifier", "amount": 3 }],
+        "duration": { "kind": "untilEventEnd" },
+        "mark": "buff"
+      }
+    ],
+    "toolKind": null,
+    "scavengeZoneTypes": [],
+    "scavengeTool": null
+  },
+  {
     "id": "fixture.pickaxe",
     "name": "Picareta",
     "flavorText": null,
     "rarity": "common",
     "itemCategory": "tool",
     "tags": ["ferramenta"],
-    "effects": [{ "text": "Permite minerar." }],
+    "effects": [],
     "toolKind": "pickaxe",
     "scavengeZoneTypes": ["underground", "mountainous"],
     "scavengeTool": null
@@ -58,5 +88,31 @@
     "toolKind": null,
     "scavengeZoneTypes": [],
     "scavengeTool": "fishing-rod"
+  },
+  {
+    "id": "fixture.strength-tonic",
+    "name": "Tônico de Força",
+    "flavorText": null,
+    "rarity": "common",
+    "itemCategory": "consumable",
+    "tags": [],
+    "effects": [
+      {
+        "text": "+3 de Ataque durante 2 vezes suas.",
+        "trigger": null,
+        "cost": [{ "kind": "consumeSelf" }],
+        "activation": [
+          {
+            "kind": "modifierFlat",
+            "changes": [{ "modifier": "attack", "amount": 3 }]
+          }
+        ],
+        "duration": { "kind": "forOwnTurns", "turns": 2 },
+        "mark": "buff"
+      }
+    ],
+    "toolKind": null,
+    "scavengeZoneTypes": [],
+    "scavengeTool": null
   }
 ]
