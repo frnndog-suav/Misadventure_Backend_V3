@@ -54,3 +54,7 @@ CONTRATO v0.52 marca FEAT-11 como `implementado (BE)`. ROADMAP v0.54 marca a col
 `feat/persist and expose player effects`
 
 <!-- tempo: a preencher pelo autor -->
+
+## Retorno do frontend — 2026-11-19
+
+O frontend informou que ainda precisa planejar e implementar a FEAT-11 antes de executar os cenários contra o backend real. O CONTRATO v0.52 mantém a seção como `implementado (BE)`, e o ROADMAP v0.54 mantém BE `pronto` e FE `a fazer`. A próxima etapa cabe ao frontend, que deverá trazer o resultado da validação integrada. O retorno não solicita ação adicional no backend.
