@@ -72,3 +72,4 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 6. Reiniciar a sessão do Claude Code para carregar agentes e skills.
 7. `docs/devlog/tempo.html`: registro de tempo (array `SESSOES`); a `/registrar-etapa` acrescenta a sessão de cada etapa, perguntando as horas ao autor.
 8. Convenções do autor (2026-11-14): mensagem de commit sugerida sempre em inglês; Docker ligado só para testar e desligado ao terminar. Revisão 2026-11-15: o Docker é manual (o autor abre o Docker Desktop e sobe/para containers; o agente só pede e confere com `docker compose ps`).
+9. No Codex, consulte a seção **Uso no Codex** de `AGENTS.md` para reaproveitar os fluxos e executar a guarda manualmente. As horas ficam a preencher pelo autor.

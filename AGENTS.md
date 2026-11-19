@@ -75,3 +75,12 @@ feitos pelo autor — o agente apenas sugere a mensagem (inglês, `type/short de
 - **Registro de tempo** é automático via hook (`.claude/hooks/tempo.mjs`) **no Claude
   Code**. Em outras IAs, que não executam esses hooks, as horas do devlog ficam
   **a preencher** pelo autor.
+
+## Uso no Codex
+
+- Quando o autor pedir um fluxo como `/tarefa T-xx`, abra o `SKILL.md` correspondente
+  em `.claude/skills/` e use o texto do pedido como argumento. Consulte os papéis em
+  `.claude/agents/` nas etapas indicadas, mantendo o escopo e a revisão de cada papel.
+- Em alterações de domínio, execute a guarda manualmente com
+  `node .claude/hooks/domain-guard.mjs --all` na verificação. Ao registrar uma etapa
+  feita no Codex, deixe o tempo **a preencher** e preserve os marcos do Claude Code.
