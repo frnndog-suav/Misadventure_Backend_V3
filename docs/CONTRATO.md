@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.49 · **Data:** 2026-11-18
+> **Versão do contrato:** 0.51 · **Data:** 2026-11-18
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -290,6 +290,7 @@ Base dos nomes no código dos dois lados e dos termos com destaque e tooltip (RE
 | Status do jogador | `statuses` / `statusId` | criado ao ativar efeito com duração |
 | Ativar efeito (Preparar, parte b) | `prepare` (`operation`: `activate`) | |
 | Pagamento escolhido | `payment` (`handCards`) | cartas da mão para o custo de descartar |
+| Escolha de cartas da mão pedida | `handPayment` (`count`, `text`) | pronta do backend (v0.50) |
 | Quantidade variável (13.2) | `Quantity` (`base`, `multiplier`, `minimum`) | "mín. N" = `minimum` |
 | Fase do evento aleatório | `EventPhase` (`anticipation`, `encounter`, `success`, `setback`) | executada na FEAT-12 |
 
@@ -1719,7 +1720,7 @@ Seja `G` criado com `{ "name": "Os Teimosos", "characterName": "Lia", "playerCla
 
 Só nos e2e do backend: ordem exata dos decks de recompensas (sorteio), saves antigos, `deckSlotsFull`, `vaultFull` e `vaultGoldFull` com capacidades baixas no laboratório, e a validação completa dos campos novos no editor.
 
-### FEAT-11 — Efeitos e status — `proposto (BE)`
+### FEAT-11 — Efeitos e status — `acordado`
 
 Regras: README 13 (as quatro partes; tabela gatilho × custo; "Usar um recurso"; momentos de uso; o que um efeito pode citar), 13.1 a 13.4 (variações), 13.6 (buff, debuff, marcação, remover), 5.2 (consumível usado vai para o limbo), 6.5, 7.3 (teto do Vigor; requisito de Pico desliga efeitos), 7.4 (pipeline, etapas 1, 3 e 5) e 12.2 (Preparar, parte b). O catálogo de variações foi validado pelo autor (README III.3).
 
@@ -1729,13 +1730,14 @@ Regras: README 13 (as quatro partes; tabela gatilho × custo; "Usar um recurso";
 - **Efeito estruturado + texto.** Cada efeito traz `text` (pt-BR, pronto para exibir) e as quatro partes tipadas. Para mostrar a carta, o frontend usa só `text` (e `mark`/`polarity`). As partes servem ao formulário do editor e a quem precisar ler o efeito; o frontend nunca calcula nada a partir delas.
 - **`kind` em vez de `type` dentro do efeito** (exceção registrada a §1.2): o objeto da carta já usa `type`, e as quatro partes são uniões discriminadas por `kind`. Tudo o mais segue §1.2.
 - **Modelado não é executado.** Toda variação do catálogo pode aparecer numa carta; o que esta FEAT não executa é exibido normalmente, mas não aparece em `activatableEffects` e o `activate` recusa com `notActivatableYet`.
-- **O que dá para ativar vem pronto** em `activatableEffects` (já conferidos posse, Pico, se o efeito é ativável e se o custo cabe). O frontend só pede a escolha das cartas da mão quando o custo tem `discardFromHand` sem `random`.
+- **O que dá para ativar vem pronto** em `activatableEffects` (já conferidos posse, Pico, se o efeito é ativável e se o custo cabe). **v0.50 (pedido do FE):** cada item traz `handPayment` pronto: `null` quando não há cartas da mão a escolher (omita `payment`); senão, quantas cartas escolher e a instrução em pt-BR. O frontend não lê `cost[]` para decidir isso.
+- **Status com texto (v0.50, pedido do FE):** `PlayerStatus.text` é a cópia do `text` do efeito no momento da ativação; a tela mostra esse texto, não o da carta (que pode ter sido editada).
 - **Ativar é gratuito** (Preparar, B K2): não gasta ponto de ação, vale com 0 pontos, só o jogador da vez, repetível.
 - **Doar vida até 0 não nocauteia** nesta FEAT (o nocaute é da FEAT-14).
 - **Parâmetros sempre presentes:** parâmetro opcional de lista vem `[]` quando não usado; opcional escalar vem `null`; os que têm padrão vêm com o padrão.
 
 **Mudanças em outras seções:**
-- **FEAT-04 (`validado`):** `effects` de `ZoneCard`, `AttributeCard`, `EquipmentCard`, `ItemCard` e `DimensionCard` trocam `RuleText` por `Effect` (zona e dimensão: `ZoneEffect`, com `polarity`). `DimensionCard.effects` **ganha `polarity`** (spec REQ-98). `RuleText` continua para habilidades, eventos, refino e encantamento. A `fixture` muda (abaixo).
+- **FEAT-04 (`validado`):** `effects` de `ZoneCard`, `AttributeCard`, `EquipmentCard`, `ItemCard` e `DimensionCard` trocam `RuleText` por `Effect` (zona e dimensão: `ZoneEffect`, com `polarity`). `DimensionCard.effects` **ganha `polarity`**. `RuleText` continua para habilidades, eventos, refino e encantamento. A `fixture` muda (abaixo).
 - **FEAT-06/07/08/09/10/32 (`validado`):** `PlayerState` ganha `statuses` e `activatableEffects`; `effectiveModifiers` passa a somar passivos e status; `PrepareAction` ganha `activate`; `availableActions` passa a ter `prepare` também quando `activatableEffects` não é vazio; motivos novos em `ActionInvalidDetails` e `ActionNotAllowedDetails`. Saves de antes desta versão continuam: são lidos com `statuses: []`.
 - **FEAT-31 (`validado`):** `CardInput` e `EditorCard` usam `Effect`/`ZoneEffect`; as regras de efeito viram problemas de `CONTENT_INVALID` (abaixo) ao salvar, publicar e importar.
 
@@ -2050,11 +2052,23 @@ interface PlayerState {
    * ativável e executado nesta FEAT, e custo que cabe (há cartas na mão que atendem `discardFromHand`, sem olhar a escolha).
    * `[]` para quem não é o membro da vez.
    */
-  activatableEffects: { cardId: string; effectIndex: number; source: 'inventory' | 'equipment' }[]
+  activatableEffects: ActivatableEffect[]
   /**
    * Ordem fixa sem mudança (FEAT-32). `prepare` entra também quando `activatableEffects` não é vazio.
    */
   availableActions: PartyActionType[]
+}
+
+interface ActivatableEffect {
+  cardId: string
+  effectIndex: number
+  source: 'inventory' | 'equipment'
+  /**
+   * v0.50. Escolha de cartas da mão que o `activate` pede (custos `discardFromHand` sem `random`, somados).
+   * `null` = não há escolha: omita `payment`. Senão, `count` (≥ 1) é o total de ids a enviar em `payment.handCards`
+   * e `text` a instrução pt-BR pronta (ex.: "Escolha 1 carta de Força."). A validação da escolha é do backend (`paymentInvalid`).
+   */
+  handPayment: { count: number; text: string } | null
 }
 
 /** README 13.4/13.6. Cópia do efeito no momento da ativação: editar a carta depois não muda o status. */
@@ -2063,6 +2077,8 @@ interface PlayerStatus {
   /** Só para exibir a origem. */
   sourceCardId: string
   effectIndex: number
+  /** v0.50. Cópia do `text` do efeito no momento da ativação (pt-BR, para exibir). */
+  text: string
   mark: 'buff' | 'debuff'
   activation: Activation[]
   duration: Duration
@@ -2079,7 +2095,7 @@ type PrepareAction =
    * Paga o custo na ordem, aplica cada ativação em ordem e, se a duração não é `immediate`, cria um status.
    * Item `consumable`: 1 unidade do slot vai para o limbo. Gratuita; repetível.
    * `payment.handCards`: ids das cartas da mão escolhidas para os `discardFromHand` sem `random`, na ordem dos custos
-   * (repita o id para cada cópia). Vão para a pilha de descarte. Omita `payment` quando não há essa escolha.
+   * (repita o id para cada cópia). Vão para a pilha de descarte. Omita `payment` quando `handPayment` é `null`.
    */
   | { type: 'prepare'; operation: 'activate'; cardId: string; effectIndex: number; payment?: { handCards: string[] } }
 
@@ -2127,11 +2143,11 @@ Seja `G` criado com `{ "name": "Os Teimosos", "characterName": "Lia", "playerCla
 
 - Quando `POST /parties`, então `player` traz `statuses: []` e `activatableEffects: []`.
 - Quando `GET /catalog/cards/fixture.healing-potion`, então `effects` como acima.
-- Com `P` ×2 doado, então `activatableEffects = [{ "cardId": P, "effectIndex": 0, "source": "inventory" }]` e `prepare` em `availableActions`.
-- Com `U` doado e equipado, `activatableEffects` traz `U` 0, 1 e 2 com `source: "equipment"` (2 só se houver Força na mão). Quando `{ "type": "prepare", "operation": "activate", "cardId": U, "effectIndex": 0 }`, então `200` com `vigor: 5`, `gold: 10` e `turn.actionPoints: 3`; de novo → `vigor: 0`, `gold: 20`, e `U` 0 sai de `activatableEffects`; uma terceira → `409` `ACTION_NOT_ALLOWED` `{ "reason": "notEnoughVigor" }` e nada muda.
+- Com `P` ×2 doado, então `activatableEffects = [{ "cardId": P, "effectIndex": 0, "source": "inventory", "handPayment": null }]` e `prepare` em `availableActions`.
+- Com `U` doado e equipado, `activatableEffects` traz `U` 0, 1 e 2 com `source: "equipment"` (2 só se houver Força na mão); `U` 0 e 1 com `handPayment: null`, `U` 2 com `handPayment = { "count": 1, "text": <instrução pt-BR> }`. Quando `{ "type": "prepare", "operation": "activate", "cardId": U, "effectIndex": 0 }`, então `200` com `vigor: 5`, `gold: 10` e `turn.actionPoints: 3`; de novo → `vigor: 0`, `gold: 20`, e `U` 0 sai de `activatableEffects`; uma terceira → `409` `ACTION_NOT_ALLOWED` `{ "reason": "notEnoughVigor" }` e nada muda.
 - Em seguida, `activate` `U` 1 → `200` com `health: 17`, `vigor: 5`. Depois `activate` `P` 0 → `200` com `health: 22` e `P` com `quantity: 1`; de novo (vida cheia) → `200`, `health: 22` e `P` fora do `inventory`.
 - Com uma Força na mão (id `fixture.strength-basic`), `activate` `U` 2 com `"payment": { "handCards": ["fixture.strength-basic"] }` → `200`: a mão perde essa carta e ganha 2, `attributeDiscardPileCount` +1, `attributeDeckCount` −2. Sem `payment` → `409` `{ "reason": "paymentInvalid" }`; com `["fixture.endurance-basic"]` → `409` `{ "reason": "paymentInvalid", "cardId": "fixture.endurance-basic" }`.
-- Com `T` doado, `activate` `T` 0 → `200` com `effectiveModifiers.attack: 9`, `T` fora do `inventory` e `statuses = [{ "statusId": <id>, "sourceCardId": T, "effectIndex": 0, "mark": "buff", "activation": [{ "kind": "modifierFlat", "changes": [{ "modifier": "attack", "amount": 3 }] }], "duration": { "kind": "forOwnTurns", "turns": 2 }, "remaining": 2 }]`. `endTurn` → `remaining: 1`, `attack: 9`; `endTurn` de novo → `statuses: []`, `attack: 6`.
+- Com `T` doado, `activate` `T` 0 → `200` com `effectiveModifiers.attack: 9`, `T` fora do `inventory` e `statuses = [{ "statusId": <id>, "sourceCardId": T, "effectIndex": 0, "text": "+3 de Ataque durante 2 vezes suas.", "mark": "buff", "activation": [{ "kind": "modifierFlat", "changes": [{ "modifier": "attack", "amount": 3 }] }], "duration": { "kind": "forOwnTurns", "turns": 2 }, "remaining": 2 }]`. `endTurn` → `remaining: 1`, `attack: 9`; `endTurn` de novo → `statuses: []`, `attack: 6`.
 - Com `A` equipado, `effectiveModifiers.defense: 19` (⌊15 × 1,10 × 1,20⌋) e nenhum efeito de `A` em `activatableEffects`; `activate` `A` 0 → `409` `{ "reason": "notActivatable" }`.
 - Com `C` doado, `C` não aparece em `activatableEffects`; `activate` `C` 0 → `409` `{ "reason": "notActivatableYet" }`.
 - Com `U` no inventário (não equipado), `activate` `U` 0 → `409` `{ "reason": "equipmentNotInUse" }`; `activate` de carta que o jogador não tem → `409` `{ "reason": "notOwned", "cardId": <id> }`; `activate` `P` 5 → `409` `{ "reason": "effectNotFound" }`.
@@ -2221,3 +2237,5 @@ Só nos e2e do backend: Pico abaixo do requisito com passivo, `removeDebuffs`/`r
 | 0.47 | 2026-11-18 | BE | FEAT-32 `implementado (BE)` (T-30 a T-33; e2e de todos os cenários de validação). Esclarecimento no cenário de `DELETE` de `fixture.silver-fish`: `CONTENT_REFERENCED` só sem grupo; com um grupo vivo a carta está no deck de recompensas dele → `CONTENT_IN_USE` (ordem da FEAT-31, REQ-94). Sem mudança de tipos. |
 | 0.48 | 2026-11-18 | FE | FEAT-32 `validado`: cenários com chamadas HTTP (conteúdo temporário criado pelo editor sobre a `base` e desfeito no fim) e as telas do Vasculhar e do Usar cofre contra o backend real. Sem mudança de formato. |
 | 0.49 | 2026-11-18 | BE | FEAT-11 proposta (`proposto (BE)`): `Effect`/`ZoneEffect` com `trigger`, `cost`, `activation`, `duration` (uniões por `kind`, as 172 variações do catálogo validado) e `mark`/`polarity` nos `effects` das cartas (altera FEAT-04/06; `DimensionCard.effects` ganha `polarity`); `PlayerState.statuses` (`PlayerStatus`) e `activatableEffects`, `effectiveModifiers` com passivos e status, `prepare` em `availableActions` também com efeito ativável (altera FEAT-06 a 32); `PrepareAction` ganha `activate` (gratuita, `payment.handCards`); motivo novo `notObject` em `ActionInvalidDetails` e 9 em `ActionNotAllowedDetails`; regras de efeito em `CONTENT_INVALID` (altera FEAT-31); `fixture` com 4 cartas novas e ferramentas sem efeito; glossário §2.16. Exceção a §1.2: `kind` como discriminante dentro do efeito. Sem rota nem código de erro novos. |
+| 0.50 | 2026-11-18 | FE | FEAT-11 → `proposto (FE)`, dois pedidos de mudança (princípio "o backend decide"): (1) `PlayerStatus.text`, cópia do texto do efeito na ativação (o status é uma cópia; o texto da carta pode mudar depois); (2) `activatableEffects[]` vira `ActivatableEffect` com `handPayment: { count, text } \| null`, para o frontend não interpretar `cost[]`/`HandRequirement` ao pedir a escolha de cartas da mão. Cenários e glossário §2.16 atualizados. O resto da proposta aceito sem mudanças. |
+| 0.51 | 2026-11-18 | BE | FEAT-11 `acordado`: `PlayerStatus.text` e `ActivatableEffect.handPayment` aceitos sem mudanças. Os textos exatos de `handPayment.text` ficam definidos na spec do backend (o cenário só exige a instrução pt-BR). Sem mudança de formato além da v0.50. |
