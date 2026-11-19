@@ -59,6 +59,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 039 | T-33 | FEAT-32 ponta a ponta: `PartyPresenter` com cofre, capacidades, `scavengeTargets`, `lastScavenge` e ações de zona; e2e da FEAT-32; mapper v6 testado; CONTRATO v0.47 `implementado (BE)` (D-94) | concluída |
 | 040 | FEAT-32 | FEAT-32 validada pelo frontend: CONTRATO v0.48 `validado`, ROADMAP v0.53 | concluída |
 | 041 | T-34 | Catálogo de variações de efeitos (FEAT-11): `docs/EFEITOS-CATALOGO.md` v0.1, aguardando validação do autor | aguardando revisão |
+| 042 | FEAT-11 | Contrato da FEAT-11 proposto pelo backend: CONTRATO v0.49 `proposto (BE)` | aguardando frontend |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
