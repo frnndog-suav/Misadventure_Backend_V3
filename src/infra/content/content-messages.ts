@@ -54,6 +54,18 @@ const CATALOG_MESSAGES: Record<TCatalogIssueReason, string> = {
   notKebabCase: 'Use só letras minúsculas, números e hífens.',
   notARewardCard:
     'O deck de recompensas só tem cartas de atributo, equipamento ou item.',
+  unknownEffectKind: 'Variação de efeito desconhecida.',
+  exactlyOneRequired: 'Informe exatamente um dos dois campos.',
+  filterRequired: 'Informe pelo menos um filtro.',
+  markNotAllowed: 'Efeito imediato não tem marcação de bônus ou penalidade.',
+  markRequired: 'Efeito com duração precisa ser bônus ou penalidade.',
+  consumableNeedsConsumeSelf:
+    'Consumível precisa ter o custo de usar a própria carta.',
+  consumeSelfOnlyInItem: 'Só um item pode ter o custo de usar a própria carta.',
+  citationNotAllowed:
+    'Cite só categoria, etiqueta, tipo de zona, local ou nome exato de carta ou título de zona.',
+  citedCardNotFound: 'A carta citada não existe no catálogo.',
+  citedZoneNotFound: 'O título de zona citado não existe no catálogo.',
 }
 
 /** Relatório de REQ-11 (o arquivo e a carta já localizam o problema). */
@@ -149,6 +161,16 @@ export function contentIssueMessage(issue: TContentIssue): string {
     case 'scavengeZoneTypesNotAllowed':
     case 'notKebabCase':
     case 'notARewardCard':
+    case 'unknownEffectKind':
+    case 'exactlyOneRequired':
+    case 'filterRequired':
+    case 'markNotAllowed':
+    case 'markRequired':
+    case 'consumableNeedsConsumeSelf':
+    case 'consumeSelfOnlyInItem':
+    case 'citationNotAllowed':
+    case 'citedCardNotFound':
+    case 'citedZoneNotFound':
       return CATALOG_MESSAGES[reason]
     default: {
       const _exhaustive: never = reason

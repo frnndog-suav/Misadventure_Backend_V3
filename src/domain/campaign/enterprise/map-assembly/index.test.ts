@@ -5,6 +5,7 @@ import type { TZoneCard } from '@/domain/catalog/enterprise/value-objects/card'
 import {
   makeUrbanZoneCard,
   makeZoneCard,
+  makeZoneEffect,
 } from '../../../../../test/factories/make-card'
 
 import { assembleMap, type TMapZone, type TPartyMap } from '.'
@@ -184,12 +185,18 @@ describe('assembleMap', () => {
     const cursed = makeUrbanZoneCard({
       id: 'fixture.a-cursed-city',
       title: 'Cidade Amaldiçoada',
-      effects: [{ text: 'Perca 1 de vida.', polarity: 'negative' }],
+      effects: [makeZoneEffect({ polarity: 'negative' })],
     })
     const blessed = makeUrbanZoneCard({
       id: 'fixture.b-blessed-city',
       title: 'Cidade Abençoada',
-      effects: [{ text: 'Ganhe 1 de ouro.', polarity: 'positive' }],
+      effects: [
+        makeZoneEffect({
+          text: 'Ganhe 1 de ouro.',
+          activation: [{ kind: 'gainGold', amount: 1 }],
+          polarity: 'positive',
+        }),
+      ],
     })
     const zones = [cursed, blessed, harbor, mine]
     const cities = new Set<string>()

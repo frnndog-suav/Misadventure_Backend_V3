@@ -60,6 +60,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 040 | FEAT-32 | FEAT-32 validada pelo frontend: CONTRATO v0.48 `validado`, ROADMAP v0.53 | concluída |
 | 041 | T-34 | Catálogo de variações de efeitos (FEAT-11): `docs/EFEITOS-CATALOGO.md` v0.1, aguardando validação do autor | aguardando revisão |
 | 042 | FEAT-11 | Contrato da FEAT-11 proposto pelo backend: CONTRATO v0.49 `proposto (BE)` | aguardando frontend |
+| 043 | T-35 | Domínio do modelo de efeitos (FEAT-11): tipos por `kind`, regras de REQ-99 em `checkCatalogIntegrity`, citação ao publicar, D-103; infra de conteúdo vermelha até a T-36 | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

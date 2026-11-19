@@ -8,6 +8,7 @@ import {
   makeDimensionCard,
   makeUrbanZoneCard,
   makeZoneCard,
+  makeZoneEffect,
 } from '../../../../../test/factories/make-card'
 
 import { checkDimensionComposition } from '.'
@@ -74,7 +75,7 @@ describe('checkDimensionComposition', () => {
 
   it('REQ-36: sem arrivalZoneTitle e toda Urbana com efeito negativo → pede uma sem efeito negativo', () => {
     const cursed = makeUrbanZoneCard({
-      effects: [{ text: 'Perca 1 de vida.', polarity: 'negative' }],
+      effects: [makeZoneEffect({ polarity: 'negative' })],
     })
 
     expect(check([cursed])).toEqual([NO_SAFE_URBAN])
@@ -82,7 +83,13 @@ describe('checkDimensionComposition', () => {
 
   it('REQ-36: sem arrivalZoneTitle e uma Urbana só com efeito positivo → sem problema', () => {
     const blessed = makeUrbanZoneCard({
-      effects: [{ text: 'Ganhe 1 de ouro.', polarity: 'positive' }],
+      effects: [
+        makeZoneEffect({
+          text: 'Ganhe 1 de ouro.',
+          activation: [{ kind: 'gainGold', amount: 1 }],
+          polarity: 'positive',
+        }),
+      ],
     })
 
     expect(check([blessed])).toEqual([])

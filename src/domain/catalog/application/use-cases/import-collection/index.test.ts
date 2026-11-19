@@ -5,6 +5,7 @@ import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_err
 import { ExportCollectionUseCase } from '@/domain/catalog/application/use-cases/export-collection'
 import {
   makeAttributeCard,
+  makeEffect,
   makeItemCard,
   makeZoneCard,
 } from '../../../../../../test/factories/make-card'
@@ -218,6 +219,42 @@ describe('ImportCollectionUseCase', () => {
     expect(out?.fields).toEqual([
       { path: 'cards.1.card.title', reason: 'duplicateTitle' },
     ])
+  })
+
+  it('REQ-99: carta publicada do arquivo cita zona que não existe em lugar nenhum → cards.N.card.effects.0...', async () => {
+    const citing = makeItemCard({
+      effects: [
+        makeEffect({
+          trigger: { kind: 'onEnterZoneTitle', zoneTitle: 'Forte Perdido' },
+        }),
+      ],
+    })
+    const body = (zones: unknown[]) =>
+      file({
+        cards: [
+          ...zones,
+          { status: 'published', card: citing },
+          {
+            status: 'draft',
+            card: makeItemCard({ id: 'fixture.draft-potion' }),
+          },
+        ],
+      })
+
+    const missing = await fieldsOf(body([]))
+    expect(missing?.fields).toEqual([
+      {
+        path: 'cards.0.card.effects.0.trigger.zoneTitle',
+        reason: 'citedZoneNotFound',
+      },
+    ])
+
+    const result = await sut.execute({
+      body: body([
+        { status: 'draft', card: makeZoneCard({ title: 'Forte Perdido' }) },
+      ]),
+    })
+    expect(result.isRight()).toBe(true)
   })
 
   it('REQ-48: status da carta inválido → cards.N.status', async () => {

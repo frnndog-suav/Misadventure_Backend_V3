@@ -11,8 +11,40 @@ import type {
   TRandomEventCard,
   TZoneCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
+import type {
+  TEffect,
+  TZoneEffect,
+} from '@/domain/catalog/enterprise/value-objects/effect'
 
 // Cartas válidas por padrão (REQ-15); cada teste muda só o que exercita.
+
+/** Efeito imediato de item consumível (Poção de Cura): válido por padrão (REQ-98). */
+export function makeEffect(override: Partial<TEffect> = {}): TEffect {
+  return {
+    text: 'Recupere 10 de vida.',
+    trigger: null,
+    cost: [{ kind: 'consumeSelf' }],
+    activation: [{ kind: 'heal', amount: 10 }],
+    duration: { kind: 'immediate' },
+    mark: null,
+    ...override,
+  }
+}
+
+/** Efeito de zona ou dimensão (README 13.6: `polarity` no lugar de `mark`). */
+export function makeZoneEffect(
+  override: Partial<TZoneEffect> = {}
+): TZoneEffect {
+  return {
+    text: 'Perca 1 de vida.',
+    trigger: { kind: 'onEnterThisZone' },
+    cost: [],
+    activation: [{ kind: 'loseLife', amount: 1 }],
+    duration: { kind: 'immediate' },
+    polarity: 'negative',
+    ...override,
+  }
+}
 
 export function makeCollection(
   override: Partial<TCollection> = {}
@@ -109,7 +141,7 @@ export function makeItemCard(override: Partial<TItemCard> = {}): TItemCard {
     rarity: 'common',
     itemCategory: 'consumable',
     tags: ['Poção'],
-    effects: [{ text: 'Recupere 10 de vida.' }],
+    effects: [makeEffect()],
     toolKind: null,
     scavengeZoneTypes: [],
     scavengeTool: null,

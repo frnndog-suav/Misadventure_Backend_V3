@@ -1,3 +1,8 @@
+import type {
+  TEffect,
+  TZoneEffect,
+} from '@/domain/catalog/enterprise/value-objects/effect'
+
 /**
  * Cartas como dados (Constituição 6, D-18). Espelham os tipos do CONTRATO
  * FEAT-04; os nomes dos enums vêm do glossário (CONTRATO §2.3, §2.5, §2.7).
@@ -197,7 +202,7 @@ export type TEnemyBehavior = (typeof ENEMY_BEHAVIORS)[number]
 export const ZONE_EFFECT_POLARITIES = ['positive', 'negative'] as const
 export type TZoneEffectPolarity = (typeof ZONE_EFFECT_POLARITIES)[number]
 
-/** Texto de regra para exibir (pt-BR); estruturado na FEAT-11 (D-20). */
+/** Texto de regra para exibir (pt-BR); habilidades, eventos, refino e encantamento (D-98). */
 export type TRuleText = Readonly<{ text: string }>
 
 export type TAbility = Readonly<{ name: string; text: string }>
@@ -217,7 +222,7 @@ export type TZoneCard = Readonly<{
   /** Só com 2 setas (D-37); `null` com 1, 3 ou 4. */
   arrowLayout: TArrowLayout | null
   zoneActions: readonly TZoneAction[]
-  effects: readonly Readonly<TRuleText & { polarity: TZoneEffectPolarity }>[]
+  effects: readonly TZoneEffect[]
 }>
 
 export type TAttributeCard = Readonly<{
@@ -229,7 +234,7 @@ export type TAttributeCard = Readonly<{
   rarity: TRarity
   attributeKind: TAttributeKind
   attributes: readonly TAttribute[]
-  effects: readonly TRuleText[]
+  effects: readonly TEffect[]
 }>
 
 export type TEquipmentCard = Readonly<{
@@ -246,7 +251,7 @@ export type TEquipmentCard = Readonly<{
   classRestriction: readonly TPlayerClass[]
   blocksShield: boolean
   abilities: readonly TAbility[]
-  effects: readonly TRuleText[]
+  effects: readonly TEffect[]
   refinement: Readonly<{ maxLevel: number; materials: TRuleText }> | null
   enchantment: TRuleText | null
   priceMultiplier: number
@@ -263,7 +268,7 @@ export type TItemCard = Readonly<{
   rarity: TRarity
   itemCategory: TItemCategory
   tags: readonly string[]
-  effects: readonly TRuleText[]
+  effects: readonly TEffect[]
   /** D-86: só em `tool` (`kebab-case`); senão `null`. */
   toolKind: string | null
   /** D-86: zonas onde a ferramenta vasculha; não vazia se e só se `toolKind`. */
@@ -326,7 +331,7 @@ export type TDimensionCard = Readonly<{
   flavorText: string | null
   releaseOrder: number
   arrivalZoneTitle: string | null
-  effects: readonly TRuleText[]
+  effects: readonly TZoneEffect[]
   rewardDecks: readonly TRewardDeck[]
 }>
 

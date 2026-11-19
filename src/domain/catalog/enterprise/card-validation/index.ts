@@ -1,4 +1,5 @@
 import { checkCatalogIntegrity } from '@/domain/catalog/enterprise/catalog-integrity'
+import { effectCitations } from '@/domain/catalog/enterprise/effect-rules'
 import type {
   TCard,
   TDimensionCard,
@@ -129,4 +130,31 @@ export function isCitedInRewardDeck(
         deck.cards.some((entry) => cardIds.has(entry.cardId))
       )
   )
+}
+
+/**
+ * REQ-99 (D-91): ao publicar, a carta e o título de zona citados pelos efeitos
+ * precisam existir no catálogo. `cards` = as cartas de todas as coleções
+ * (a candidata incluída, para citar a si mesma).
+ */
+export function effectCitationPublicationIssues(
+  candidate: TCard,
+  cards: readonly TCard[]
+): TContentIssue[] {
+  if (candidate.type === 'randomEvent' || candidate.type === 'combatEvent') {
+    return []
+  }
+  const cardIds = new Set(cards.map((card) => card.id))
+  const zoneTitles = new Set(
+    cards.flatMap((card) => (card.type === 'zone' ? [card.title] : []))
+  )
+  const issues: TContentIssue[] = []
+  for (const citation of effectCitations(candidate)) {
+    if (citation.type === 'card' && !cardIds.has(citation.value)) {
+      issues.push({ path: citation.path, reason: 'citedCardNotFound' })
+    } else if (citation.type === 'zone' && !zoneTitles.has(citation.value)) {
+      issues.push({ path: citation.path, reason: 'citedZoneNotFound' })
+    }
+  }
+  return issues
 }

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { makeAttributeCard } from '../../../../../test/factories/make-card'
+import {
+  makeAttributeCard,
+  makeEffect,
+} from '../../../../../test/factories/make-card'
 
 import { isClassActive } from '.'
 
@@ -14,7 +17,7 @@ const dexterity = makeAttributeCard({
 const strengthEnhanced = makeAttributeCard({
   id: 'fixture.strength-enhanced',
   attributeKind: 'enhanced',
-  effects: [{ text: 'Efeito.' }],
+  effects: [makeEffect({ cost: [] })],
 })
 const synergy = makeAttributeCard({
   id: 'fixture.strength-dexterity',

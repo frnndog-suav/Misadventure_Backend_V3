@@ -1,4 +1,8 @@
 import {
+  checkEffects,
+  type TEffectIssueReason,
+} from '@/domain/catalog/enterprise/effect-rules'
+import {
   type TBuildEntry,
   isClassActive,
 } from '@/domain/catalog/enterprise/class-lock'
@@ -57,6 +61,8 @@ export type TCatalogIssueReason =
   | 'notKebabCase'
   // REQ-82
   | 'notARewardCard'
+  // REQ-99
+  | TEffectIssueReason
 
 export type TCatalogIssue = {
   collectionId: string
@@ -164,18 +170,22 @@ export function checkCatalogIntegrity({
         if (zoneTitles.has(titleKey)) report('title', 'duplicateTitle')
         zoneTitles.add(titleKey)
         checkZone(card, report)
+        checkEffects(card, report)
         break
       }
       case 'attribute':
         checkAttribute(card, report)
+        checkEffects(card, report)
         break
       case 'equipment':
         checkEquipment(card, report)
+        checkEffects(card, report)
         break
       case 'item':
         checkNoDuplicates(card.tags, 'tags', report)
         checkTool(card, report)
         checkKebab(card.scavengeTool, 'scavengeTool', report)
+        checkEffects(card, report)
         break
       case 'randomEvent':
         if (card.requirements.length === 0) report('requirements', 'empty')
@@ -196,6 +206,7 @@ export function checkCatalogIntegrity({
         }
         releaseOrders.add(card.releaseOrder)
         checkRewardDecks(card, cardsById, report)
+        checkEffects(card, report)
         break
       default: {
         const _exhaustive: never = card

@@ -12,6 +12,7 @@ import {
   makeCollection,
   makeCombatEventCard,
   makeDimensionCard,
+  makeEffect,
   makeEnemy,
   makeEquipmentCard,
   makeItemCard,
@@ -230,7 +231,9 @@ describe('checkCatalogIntegrity', () => {
           makeAttributeCard({
             attributeKind: 'enhanced',
             attributes: [],
-            effects: [{ text: 'Ao ser paga, compre 1 carta.' }],
+            effects: [
+              makeEffect({ cost: [], text: 'Ao ser paga, compre 1 carta.' }),
+            ],
           }),
         ])
       ).toEqual([issue('attributes', 'enhancedAttributeCount')])
@@ -259,15 +262,15 @@ describe('checkCatalogIntegrity', () => {
     })
 
     it('REQ-15: básica ou sinérgica com efeito', () => {
-      expect(check([makeAttributeCard({ effects: [{ text: 'x' }] })])).toEqual([
-        issue('effects', 'effectsNotAllowed'),
-      ])
+      expect(
+        check([makeAttributeCard({ effects: [makeEffect({ cost: [] })] })])
+      ).toEqual([issue('effects', 'effectsNotAllowed')])
       expect(
         check([
           makeAttributeCard({
             attributeKind: 'synergy',
             attributes: ['strength', 'luck'],
-            effects: [{ text: 'x' }],
+            effects: [makeEffect({ cost: [] })],
           }),
         ])
       ).toEqual([issue('effects', 'effectsNotAllowed')])
@@ -771,7 +774,7 @@ describe('checkCatalogIntegrity', () => {
         name: 'Força Aprimorada',
         attributeKind: 'enhanced',
         attributes: ['strength'],
-        effects: [{ text: 'Efeito' }],
+        effects: [makeEffect({ cost: [] })],
       })
       const cards = [...deckCards, synergy, enhanced]
       const deck = (extra: { cardId: string; copies: number }) => [

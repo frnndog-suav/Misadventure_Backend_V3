@@ -10,6 +10,7 @@ import { CardNotFoundError } from '@/domain/catalog/application/use-cases/_error
 import { CollectionNotFoundError } from '@/domain/catalog/application/use-cases/_errors/collection-not-found-error'
 import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_errors/content-invalid-error'
 import {
+  effectCitationPublicationIssues,
   rewardDeckPublicationIssues,
   validateCandidate,
 } from '@/domain/catalog/enterprise/card-validation'
@@ -41,8 +42,7 @@ export class PublishCardUseCase {
       .map((entry) => entry.card)
       .filter((other) => other.id !== card.id)
 
-    const allCards =
-      card.type === 'dimension' ? await loadAllCards(this.contentStore) : []
+    const allCards = await loadAllCards(this.contentStore)
     const issues = [
       ...validateCandidate(
         collection,
@@ -50,9 +50,15 @@ export class PublishCardUseCase {
         card,
         card.id,
         await loadOtherDimensions(this.contentStore, card.collectionId),
-        cardsOutside(allCards, card.collectionId)
+        card.type === 'dimension'
+          ? cardsOutside(allCards, card.collectionId)
+          : []
       ),
       ...rewardDeckPublicationIssues(card, statusById(allCards)),
+      ...effectCitationPublicationIssues(
+        card,
+        allCards.map((entry) => entry.card)
+      ),
     ]
     if (issues.length > 0) return left(new ContentInvalidError(issues))
 

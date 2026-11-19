@@ -6,6 +6,7 @@ import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_err
 import { ContentLockedError } from '@/domain/catalog/application/use-cases/_errors/content-locked-error'
 import {
   makeAttributeCard,
+  makeEffect,
   makeItemCard,
   makeZoneCard,
   toCardInput,
@@ -132,6 +133,38 @@ describe('ReplaceCardUseCase', () => {
     expect(store.cards).toEqual([
       { status: 'draft', card: makeAttributeCard() },
     ])
+  })
+
+  it('REQ-99: citação inexistente barra a carta publicada, não o rascunho', async () => {
+    const citing = makeItemCard({
+      effects: [
+        makeEffect({
+          trigger: { kind: 'onEnterZoneTitle', zoneTitle: 'Forte Perdido' },
+        }),
+      ],
+    })
+    store.cards = [{ status: 'draft', card: citing }]
+    const draft = await sut.execute({
+      cardId: citing.id,
+      body: toCardInput(citing),
+    })
+    expect(draft.isRight()).toBe(true)
+
+    store.cards = [{ status: 'published', card: makeItemCard() }]
+    const published = await sut.execute({
+      cardId: citing.id,
+      body: toCardInput(citing),
+    })
+    expect(published.isLeft()).toBe(true)
+    if (published.isRight()) return
+    expect(published.value).toMatchObject({
+      details: {
+        fields: [
+          { path: 'effects.0.trigger.zoneTitle', reason: 'citedZoneNotFound' },
+        ],
+      },
+    })
+    expect(store.cards).toEqual([{ status: 'published', card: makeItemCard() }])
   })
 
   it('REQ-43: slug novo já usado por outra carta → CONTENT_ID_TAKEN, nada muda', async () => {

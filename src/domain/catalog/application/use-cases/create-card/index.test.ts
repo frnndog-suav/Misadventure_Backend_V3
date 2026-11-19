@@ -6,7 +6,9 @@ import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_err
 import {
   makeAttributeCard,
   makeCombatEventCard,
+  makeEffect,
   makeEnemy,
+  makeItemCard,
   makeZoneCard,
   toCardInput,
 } from '../../../../../../test/factories/make-card'
@@ -117,6 +119,26 @@ describe('CreateCardUseCase', () => {
     expect(error).toMatchObject({
       details: {
         fields: [{ path: 'attributes', reason: 'basicAttributeCount' }],
+      },
+    })
+    expect(store.cards).toEqual([])
+  })
+
+  it('REQ-99: ao salvar rascunho, poção com cost: [] → effects.0.cost', async () => {
+    const error = await fieldsOf(
+      sut.execute({
+        collectionId: 'fixture',
+        body: toCardInput(
+          makeItemCard({ effects: [makeEffect({ cost: [] })] })
+        ),
+      })
+    )
+
+    expect(error).toMatchObject({
+      details: {
+        fields: [
+          { path: 'effects.0.cost', reason: 'consumableNeedsConsumeSelf' },
+        ],
       },
     })
     expect(store.cards).toEqual([])

@@ -18,6 +18,7 @@ import {
 import {
   buildCard,
   isCitedInRewardDeck,
+  effectCitationPublicationIssues,
   rewardDeckPublicationIssues,
   sortByCardId,
   toContentPath,
@@ -121,9 +122,16 @@ export class ImportCollectionUseCase {
           status ? [{ status, card }] : []
         ),
       ])
+      const knownCards = [
+        ...outside.map(({ card }) => card),
+        ...parsedCards.map(({ card }) => card),
+      ]
       for (const { index, card, status } of parsedCards) {
         if (status !== 'published') continue
-        for (const issue of rewardDeckPublicationIssues(card, statuses)) {
+        for (const issue of [
+          ...rewardDeckPublicationIssues(card, statuses),
+          ...effectCitationPublicationIssues(card, knownCards),
+        ]) {
           issues.push({ ...issue, path: `cards.${index}.card.${issue.path}` })
         }
       }

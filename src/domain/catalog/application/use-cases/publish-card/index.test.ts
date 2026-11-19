@@ -4,6 +4,8 @@ import { CardNotFoundError } from '@/domain/catalog/application/use-cases/_error
 import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_errors/content-invalid-error'
 import {
   makeAttributeCard,
+  makeEffect,
+  makeItemCard,
   makeZoneCard,
 } from '../../../../../../test/factories/make-card'
 import { InMemoryContentStore } from '../../../../../../test/fakes/in-memory-content-store'
@@ -89,6 +91,55 @@ describe('PublishCardUseCase', () => {
       details: { fields: [{ path: 'title', reason: 'duplicateTitle' }] },
     })
     expect(store.cards[1]?.status).toBe('draft')
+  })
+
+  it('REQ-99: ao publicar, título de zona citado que não existe → CONTENT_INVALID e continua rascunho', async () => {
+    store.cards = [
+      {
+        status: 'draft',
+        card: makeItemCard({
+          effects: [
+            makeEffect({
+              trigger: { kind: 'onEnterZoneTitle', zoneTitle: 'Forte Perdido' },
+            }),
+          ],
+        }),
+      },
+    ]
+
+    const result = await sut.execute({ cardId: 'fixture.healing-potion' })
+
+    expect(result.isLeft()).toBe(true)
+    if (result.isRight()) return
+    expect(result.value).toMatchObject({
+      details: {
+        fields: [
+          { path: 'effects.0.trigger.zoneTitle', reason: 'citedZoneNotFound' },
+        ],
+      },
+    })
+    expect(store.cards[0]?.status).toBe('draft')
+  })
+
+  it('REQ-99: título de zona citado que existe (qualquer status) → publica', async () => {
+    store.cards = [
+      { status: 'draft', card: makeZoneCard({ title: 'Forte Perdido' }) },
+      {
+        status: 'draft',
+        card: makeItemCard({
+          effects: [
+            makeEffect({
+              trigger: { kind: 'onEnterZoneTitle', zoneTitle: 'Forte Perdido' },
+            }),
+          ],
+        }),
+      },
+    ]
+
+    const result = await sut.execute({ cardId: 'fixture.healing-potion' })
+
+    expect(result.isRight()).toBe(true)
+    expect(store.cards[1]?.status).toBe('published')
   })
 
   it('REQ-45: inexistente → CARD_NOT_FOUND', async () => {

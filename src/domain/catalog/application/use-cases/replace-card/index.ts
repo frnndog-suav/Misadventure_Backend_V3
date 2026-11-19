@@ -16,6 +16,7 @@ import { ContentReferencedError } from '@/domain/catalog/application/use-cases/_
 import {
   buildCard,
   isCitedInRewardDeck,
+  effectCitationPublicationIssues,
   rewardDeckPublicationIssues,
   validateCandidate,
 } from '@/domain/catalog/enterprise/card-validation'
@@ -91,7 +92,15 @@ export class ReplaceCardUseCase {
         card.type === 'dimension' ? cardsOutside(allCards, collectionId) : []
       ),
       ...(current.status === 'published'
-        ? rewardDeckPublicationIssues(card, statusById(allCards))
+        ? [
+            ...rewardDeckPublicationIssues(card, statusById(allCards)),
+            ...effectCitationPublicationIssues(card, [
+              ...allCards
+                .map((entry) => entry.card)
+                .filter((other) => other.id !== cardId),
+              card,
+            ]),
+          ]
         : []),
     ]
     if (issues.length > 0) return left(new ContentInvalidError(issues))
