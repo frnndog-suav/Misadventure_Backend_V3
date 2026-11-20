@@ -1,9 +1,9 @@
 # 052 — T-43 — Save e ações HTTP da FEAT-12
 
 - **Data** — 2026-11-20
-- **Status** — aguardando revisão
+- **Status** — concluída
 - **Spec** — REQ-108 a REQ-116
-- **Contrato** — v0.57, acordado
+- **Contrato** — v0.57 na implementação, v0.58 após a validação BE
 - **Horas** — a preencher pelo autor
 
 ## Objetivo
@@ -35,7 +35,7 @@ Na rodada inicial, a nova asserção do mapper deve mostrar o deck vazio após a
 - A segunda tentativa teve o mesmo resultado, com `ECONNREFUSED` em `::1:5432` e `127.0.0.1:5432`.
 - Com o PostgreSQL disponível, o autor confirmou 8 falhas e 11 aprovações. As cinco falhas de evento expuseram os campos ausentes e a recusa de `handCopies` pelo mapper antigo. As três falhas de Vasculhar expuseram a recusa `inventoryFull` e a ausência de `lastScavenge.delivery`.
 - Após a implementação, typecheck, ESLint dos arquivos alterados e `git diff --check` passaram. A revisão dos arquivos de domínio confirmou o uso das portas existentes para relógio, IDs e repositório e a preservação do RNG semeado.
-- Aguardando os resultados da rodada de validação do autor. O aceite no contrato e o aviso de validação para o frontend dependem dessa rodada.
+- O autor confirmou a aprovação de todos os testes e registrou a implementação no commit `aa95860`. A validação integrada com o frontend está pendente.
 
 ## Implementação
 
@@ -53,6 +53,8 @@ npm.cmd run test:e2e -- src/infra/http/controllers/take-party-action src/infra/h
 
 Todos os cenários selecionados devem passar. No caso de borda de duas escolhas concorrentes, uma resposta deve ser 200 e a outra 409 com `staleReward`. A recompensa seguinte deve permanecer disponível e a tentativa de repetir a última escolha deve preservar o save.
 
-## Commit sugerido
+## Ponte com o frontend
 
-`feat/persist random events and expose party actions (t-43)`
+O CONTRATO v0.58 registra `implementado (BE)` e o ROADMAP v0.59 marca o backend `pronto`. Copiar ambos na íntegra. Validar a seção FEAT-12 com MSW desligado contra o backend real disponibilizado pelo autor. A URL padrão local é `http://localhost:3333`; confirmar a URL efetiva na sessão integrada.
+
+`src/infra/http/contract-version.ts` anuncia `0.58` em `GET /health` após reiniciar o backend com esta atualização.
