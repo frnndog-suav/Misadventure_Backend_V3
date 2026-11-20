@@ -1,4 +1,4 @@
-﻿# AGENTS.md — instruções para o Codex no backend
+# AGENTS.md — instruções para o Codex no backend
 
 Este arquivo define como trabalhar no backend do Misadventures. `docs/` reúne o conhecimento técnico compartilhado e o progresso do desenvolvimento. Mantenha as regras, os requisitos, o contrato, o planejamento e o histórico técnico nos documentos correspondentes.
 
@@ -49,7 +49,7 @@ Use o mapa para selecionar as consultas da tarefa e mantenha o conteúdo técnic
 2. Identifique os arquivos mínimos necessários.
 3. Inspecione as implementações e os testes relacionados. Consulte a seção do contrato quando a tarefa afetar a interface pública e obtenha o acordo antes de implementar a mudança.
 4. Se a mudança alterar comportamento, confirme os critérios Dado / Quando / Então na spec. Se a spec precisar mudar, obtenha aprovação antes de escrever os testes e o código correspondentes.
-5. Para critérios novos ou alterados, escreva primeiro os testes com o ID do requisito e confirme a falha esperada. Implemente a menor solução completa e execute os testes afetados e as validações pertinentes. Em alterações de domínio, confira os limites de dependência e o determinismo. Respeite o procedimento de operação do ambiente local nas etapas que dependam de serviços.
+5. Para critérios novos ou alterados, escreva primeiro os testes com o ID do requisito e peça ao autor que confirme a falha esperada. Implemente a menor solução completa, peça ao autor que execute os testes afetados e faça as demais validações pertinentes. Em alterações de domínio, confira os limites de dependência e o determinismo. Respeite o procedimento de operação do ambiente local nas etapas que dependam de serviços.
 6. Registre a etapa de desenvolvimento no devlog conforme o formato existente. Inclua arquivos alterados, verificações e resultados, pendências e, quando aplicável, um roteiro com resultados esperados e um caso de borda.
 7. Ao final de cada implementação, sugira um commit curto em inglês e em minúsculas, no formato `tipo/descrição`, sem dois-pontos. Use o prefixo adequado à mudança e inclua os IDs definidos para a tarefa conforme o histórico do backend, como `feat/activate resource effects in prepare (t-38)` ou `docs/feat-11 contract agreed (contract v0.51)`. O autor faz o commit.
 
@@ -61,6 +61,7 @@ Use o mapa para selecionar as consultas da tarefa e mantenha o conteúdo técnic
 
 ## Coordenação com o frontend
 
+- Somente o autor executa testes do projeto backend. O Codex jamais os executa, inclusive por ferramentas, scripts ou automações. Quando precisar de um teste, avise o autor, indique o comando ou cenário e o resultado esperado, e aguarde o retorno antes de prosseguir com o trabalho que depende do teste.
 - Somente o autor executa testes do projeto frontend. O Codex jamais os executa, inclusive por meio de scripts, automações ou ferramentas. Quando precisar de um teste no frontend, avise o autor, indique o cenário e o resultado esperado e aguarde o retorno antes de prosseguir com a parte que depende desse teste.
 - Trabalhe neste repositório. O autor leva as propostas, os arquivos, os avisos e os resultados entre os lados. Consulte `docs/ROADMAP.md` §2 para sincronização e conflitos.
 - Confira a situação da seção em `docs/CONTRATO.md` §0. Ao receber uma proposta do frontend, confira sua compatibilidade com a spec e as regras. Confirme o acordo ou devolva os pontos a ajustar. Para uma proposta do backend, solicite a confirmação do frontend pelo autor. Implemente a interface após o acordo e marque `implementado (BE)` depois da entrega e dos testes do backend.
@@ -83,4 +84,4 @@ Use o mapa para selecionar as consultas da tarefa e mantenha o conteúdo técnic
 - Quando o autor indicar que está começando o dia de trabalho, quando uma etapa for concluída ou quando ele pedir o ponto atual, inclua um prompt curto e copiável para retomada. Confirme a próxima tarefa no roadmap, na spec ou no devlog e aguarde autorização para iniciá-la. Quando houver um Aviso de frontend, deixe-o por último.
 - Use os IDs e o ponto de retomada confirmados. Omita decisões que não se aplicam e deixe campos a preencher quando a informação ainda não estiver definida.
 
-> Implemente a `T-xx`. Consulte os critérios de `REQ-xx` e a decisão `D-yy` aplicável. Retome de <entrada do devlog ou ponto atual>. Rode os testes afetados, registre a etapa e entregue o roteiro de verificação.
+> Implemente a `T-xx`. Consulte os critérios de `REQ-xx` e a decisão `D-yy` aplicável. Retome de <entrada do devlog ou ponto atual>. Peça ao autor que execute os testes afetados, registre a etapa e entregue o roteiro de verificação.
