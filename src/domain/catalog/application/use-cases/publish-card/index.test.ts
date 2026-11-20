@@ -4,7 +4,9 @@ import { CardNotFoundError } from '@/domain/catalog/application/use-cases/_error
 import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_errors/content-invalid-error'
 import {
   makeAttributeCard,
+  makeCombatEventCard,
   makeDimensionCard,
+  makeEnemy,
   makeEffect,
   makeItemCard,
   makeRandomEventCard,
@@ -23,6 +25,43 @@ describe('PublishCardUseCase', () => {
     store.collections = [{ id: 'fixture', name: 'Coleção', description: '' }]
     sut = new PublishCardUseCase(store)
   })
+
+  it.each(['outcomes', 'abilities'] as const)(
+    'REQ-117/D-109: recusa deck explícito com combate incompleto (%s)',
+    async (legacy) => {
+      const original = makeCombatEventCard()
+      const goodOutcome = { ...original.goodOutcome, steps: [] }
+      const badOutcome = { ...original.badOutcome, steps: [] }
+      const combat = makeCombatEventCard(
+        legacy === 'outcomes'
+          ? {}
+          : {
+              goodOutcome,
+              badOutcome,
+              enemies: [
+                makeEnemy({
+                  abilities: [{ name: 'Investida', text: 'Avança.' }],
+                }),
+              ],
+            }
+      )
+      const dimension = makeDimensionCard({
+        eventDecks: [
+          { zoneType: 'urban', cards: [{ cardId: combat.id, copies: 2 }] },
+        ],
+      })
+      store.cards = [
+        { status: 'published', card: combat },
+        { status: 'draft', card: dimension },
+      ]
+
+      const result = await sut.execute({ cardId: dimension.id })
+
+      expect(result.isLeft()).toBe(true)
+      expect(result.value).toMatchObject({ code: 'CONTENT_INVALID' })
+      expect(await store.findCard(dimension.id)).toBeNull()
+    }
+  )
 
   it('REQ-110: publicar deck com evento legado devolve CONTENT_INVALID', async () => {
     const card = makeRandomEventCard()

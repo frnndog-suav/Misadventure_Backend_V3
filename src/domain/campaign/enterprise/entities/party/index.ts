@@ -4,6 +4,7 @@ import { AggregateRoot } from '@/core/pattern/aggregate-root'
 import type { IdGenerator } from '@/core/ports/id-generator'
 import { type RngState, SeededRng } from '@/core/rng/seeded-rng'
 import { isClassActive } from '@/domain/catalog/enterprise/class-lock'
+import { isExecutableCombatEvent } from '@/domain/catalog/enterprise/catalog-integrity'
 import { checkDimensionComposition } from '@/domain/catalog/enterprise/dimension-composition'
 import type {
   TAttributeCard,
@@ -205,6 +206,10 @@ export const mapAttemptsProblem = (attempts: number): string =>
   `O gerador não montou o mapa dentro do limite de tentativas (mapMaxAttempts = ${attempts}).`
 
 /** O grupo é o save (README 28.1, D-27). */
+function isPlayableEvent(card: TCard | undefined): boolean {
+  return isExecutableEvent(card) || isExecutableCombatEvent(card)
+}
+
 export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   get name(): string {
     return this.props.name
@@ -311,7 +316,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       : (dimension?.eventDecks
           ?.find((entry) => entry.zoneType === zone.zoneType)
           ?.cards.map(({ cardId }) => cardId) ?? [])
-    return ids.some((id) => isExecutableEvent(cards.get(id)))
+    return ids.some((id) => isPlayableEvent(cards.get(id)))
   }
 
   takeEventAction(
@@ -349,7 +354,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           configured?.cards.flatMap(({ cardId, copies }) =>
             Array.from({ length: copies }, () => cardId)
           ) ?? []
-        const eligible = (id: string) => isExecutableEvent(cards.get(id))
+        const eligible = (id: string) => isPlayableEvent(cards.get(id))
         this.updateEventDeck({
           zoneType: zone.zoneType,
           discard: [],

@@ -1,10 +1,13 @@
 import { z } from 'zod'
 
 import {
+  ABILITY_FORMS,
+  ABILITY_RELEASE_FORMS,
   ARROW_LAYOUTS,
   ATTRIBUTE_KINDS,
   ATTRIBUTES,
   ELEMENTS,
+  ENEMY_ABILITY_PRIORITIES,
   ENEMY_BEHAVIORS,
   ENEMY_CATEGORIES,
   ENEMY_TYPES,
@@ -39,7 +42,38 @@ import {
 const text = z.string().min(1)
 const flavorText = z.string().min(1).nullable()
 const ruleText = z.strictObject({ text })
-const ability = z.strictObject({ name: text, text })
+const legacyAbility = z.strictObject({ name: text, text })
+const executableAbility = legacyAbility.extend({
+  id: text,
+  form: z.enum(ABILITY_FORMS),
+  element: z.enum(ELEMENTS).nullable(),
+  cost: z.array(costSchema),
+  power: z.number().int().nonnegative().nullable(),
+  effects: z.array(effectSchema),
+  cooldown: z.number().int().nonnegative(),
+  timing: z.enum(['combat', 'outsideCombat', 'both']),
+  classRestriction: z.array(z.enum(PLAYER_CLASSES)),
+  usesPerTurn: z.number().int().positive(),
+  target: z.enum(['self', 'opponent', 'ally', 'allOpponents']),
+  duration: durationSchema.nullable(),
+  channel: z
+    .strictObject({
+      chargesRequired: z.number().int().positive(),
+      releaseForm: z.enum(ABILITY_RELEASE_FORMS),
+    })
+    .nullable(),
+})
+const ability = z.unknown().transform((value, ctx) => {
+  const schema =
+    typeof value === 'object' && value !== null && Object.hasOwn(value, 'id')
+      ? executableAbility
+      : legacyAbility
+  const result = schema.safeParse(value)
+  if (result.success) return result.data
+  for (const issue of result.error.issues)
+    ctx.issues.push({ ...issue, input: undefined })
+  return z.NEVER
+})
 
 const eventRequirementBase = { id: text, text }
 export const eventRequirement = z.union([
@@ -114,6 +148,13 @@ const enemy = z.strictObject({
   vigor: z.number().nullable(),
   abilities: z.array(ability),
   behavior: z.enum(ENEMY_BEHAVIORS),
+  combatRules: z
+    .strictObject({
+      abilityUsesPerTurn: z.number().int().positive().optional(),
+      abilityPriority: z.array(z.enum(ENEMY_ABILITY_PRIORITIES)).optional(),
+      preferredAbilityIds: z.array(text).optional(),
+    })
+    .optional(),
 })
 
 const id = text
@@ -187,8 +228,9 @@ const cardSchemas = {
     title: text,
     flavorText,
     enemies: z.array(enemy),
-    goodOutcome: ruleText,
-    badOutcome: ruleText,
+    goodOutcome: z.union([ruleText, eventOutcome]),
+    badOutcome: z.union([ruleText, eventOutcome]),
+    escapeThreshold: z.number().int().min(0).max(20).nullable().optional(),
     noEscape: z.boolean(),
   }),
   dimension: z.strictObject({

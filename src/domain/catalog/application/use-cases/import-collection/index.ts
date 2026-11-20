@@ -20,6 +20,7 @@ import {
   buildCard,
   isCitedInRewardDeck,
   effectCitationPublicationIssues,
+  combatDeckPublicationIssues,
   rewardDeckPublicationIssues,
   sortByCardId,
   toContentPath,
@@ -131,6 +132,7 @@ export class ImportCollectionUseCase {
         if (status !== 'published') continue
         for (const issue of [
           ...rewardDeckPublicationIssues(card, statuses),
+          ...combatDeckPublicationIssues(card, knownCards),
           ...effectCitationPublicationIssues(card, knownCards),
         ]) {
           issues.push({ ...issue, path: `cards.${index}.card.${issue.path}` })

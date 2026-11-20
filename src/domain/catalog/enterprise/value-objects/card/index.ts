@@ -1,5 +1,6 @@
 import type {
   TCost,
+  TDuration,
   TEffect,
   TZoneEffect,
 } from '@/domain/catalog/enterprise/value-objects/effect'
@@ -206,7 +207,45 @@ export type TZoneEffectPolarity = (typeof ZONE_EFFECT_POLARITIES)[number]
 /** Texto de regra para exibir (pt-BR); habilidades, eventos, refino e encantamento (D-98). */
 export type TRuleText = Readonly<{ text: string }>
 
-export type TAbility = Readonly<{ name: string; text: string }>
+export const ABILITY_FORMS = [
+  'targeted',
+  'projectile',
+  'area',
+  'continuous',
+  'channeled',
+  'passive',
+] as const
+export const ABILITY_RELEASE_FORMS = ['targeted', 'projectile', 'area'] as const
+export const ENEMY_ABILITY_PRIORITIES = [
+  'selfBuff',
+  'continuous',
+  'selfBuffOrContinuous',
+  'supportWoundedAlly',
+  'highestPower',
+] as const
+export type TEnemyAbilityPriority = (typeof ENEMY_ABILITY_PRIORITIES)[number]
+export type TExecutableAbility = Readonly<{
+  id: string
+  name: string
+  text: string
+  form: (typeof ABILITY_FORMS)[number]
+  element: TElement | null
+  cost: readonly TCost[]
+  power: number | null
+  effects: readonly TEffect[]
+  cooldown: number
+  timing: 'combat' | 'outsideCombat' | 'both'
+  classRestriction: readonly TPlayerClass[]
+  usesPerTurn: number
+  target: 'self' | 'opponent' | 'ally' | 'allOpponents'
+  duration: TDuration | null
+  channel: Readonly<{
+    chargesRequired: number
+    releaseForm: (typeof ABILITY_RELEASE_FORMS)[number]
+  }> | null
+}>
+export type TAbility =
+  Readonly<{ name: string; text: string; id?: never }> | TExecutableAbility
 
 /** README 3.5, D-37: forma da zona com 2 setas (lados opostos ou vizinhos). */
 export const ARROW_LAYOUTS = ['straight', 'corner'] as const
@@ -334,6 +373,11 @@ export type TEnemy = Readonly<{
   vigor: number | null
   abilities: readonly TAbility[]
   behavior: TEnemyBehavior
+  combatRules?: Readonly<{
+    abilityUsesPerTurn?: number
+    abilityPriority?: readonly TEnemyAbilityPriority[]
+    preferredAbilityIds?: readonly string[]
+  }>
 }>
 
 export type TCombatEventCard = Readonly<{
@@ -343,9 +387,10 @@ export type TCombatEventCard = Readonly<{
   title: string
   flavorText: string | null
   enemies: readonly TEnemy[]
-  goodOutcome: TRuleText
-  badOutcome: TRuleText
+  goodOutcome: (TRuleText & { steps?: never }) | TRandomEventOutcome
+  badOutcome: (TRuleText & { steps?: never }) | TRandomEventOutcome
   noEscape: boolean
+  escapeThreshold?: number | null
 }>
 
 /** README 3.4, D-74: composição do deck de recompensas de um tipo de zona. */

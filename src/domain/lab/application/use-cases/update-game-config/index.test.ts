@@ -18,6 +18,32 @@ describe('UpdateGameConfigUseCase', () => {
     sut = new UpdateGameConfigUseCase(repository, new InMemoryCardCatalog())
   })
 
+  it('REQ-117/D-109: grava ajustes de combate e prioridades por perfil', async () => {
+    const patch = {
+      maxCombatCycles: 100,
+      combatEscapeThreshold: 0,
+      combatEscapePeakLoss: 5,
+      exhaustionPenaltyPercent: 15,
+      projectileAccuracyBonusPercent: 12,
+      areaDamagePercent: 60,
+      shieldProjectileDamagePercent: 40,
+      channelInterruptDamagePercent: 30,
+      elementAdvantageBonusPercent: 35,
+      elementDisadvantagePenaltyPercent: 20,
+      enemyAbilityPriorities: {
+        aggressive: ['highestPower'],
+        defensive: ['highestPower', 'selfBuffOrContinuous'],
+        support: ['supportWoundedAlly', 'highestPower'],
+        hunter: ['highestPower'],
+      },
+    }
+
+    expect((await sut.execute({ patch })).isRight()).toBe(true)
+    const { config } = (await new GetGameConfigUseCase(repository).execute())
+      .value
+    expect(config.values).toMatchObject(patch)
+  })
+
   it('REQ-108: salva o percentual de fuga e a reserva e os devolve na consulta', async () => {
     const patch = {
       escapeVigorPercent: 35,

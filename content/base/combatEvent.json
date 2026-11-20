@@ -27,8 +27,24 @@
         "behavior": "aggressive"
       }
     ],
-    "goodOutcome": { "text": "Os goblins fogem, largando o butim." },
-    "badOutcome": { "text": "Os goblins roubam parte dos suprimentos." },
+    "goodOutcome": {
+      "text": "Os goblins fogem, largando o butim.",
+      "steps": [{ "type": "drawRewards", "count": 1 }]
+    },
+    "badOutcome": {
+      "text": "Os goblins roubam parte dos suprimentos.",
+      "steps": [
+        {
+          "type": "effect",
+          "effect": {
+            "text": "Perca 5 de ouro.",
+            "activation": [{ "kind": "loseGold", "amount": 5 }],
+            "duration": { "kind": "immediate" },
+            "mark": null
+          }
+        }
+      ]
+    },
     "noEscape": false
   }
 ]

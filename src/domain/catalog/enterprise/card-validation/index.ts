@@ -1,4 +1,7 @@
-import { checkCatalogIntegrity } from '@/domain/catalog/enterprise/catalog-integrity'
+import {
+  checkCatalogIntegrity,
+  combatExecutionFields,
+} from '@/domain/catalog/enterprise/catalog-integrity'
 import { effectCitations } from '@/domain/catalog/enterprise/effect-rules'
 import type {
   TCard,
@@ -190,4 +193,22 @@ export function effectCitationPublicationIssues(
     }
   }
   return issues
+}
+
+export function combatDeckPublicationIssues(
+  candidate: TCard,
+  cards: readonly TCard[]
+): TContentIssue[] {
+  if (candidate.type !== 'dimension') return []
+  const byId = new Map(cards.map((card) => [card.id, card]))
+  return (candidate.eventDecks ?? []).flatMap((deck, index) =>
+    deck.cards.flatMap(({ cardId }, cardIndex) => {
+      const card = byId.get(cardId)
+      if (card?.type !== 'combatEvent') return []
+      return combatExecutionFields(card).map((field): TContentIssue => ({
+        path: `eventDecks.${index}.cards.${cardIndex}.cardId.${field}`,
+        reason: 'combatEventNotExecutable',
+      }))
+    })
+  )
 }

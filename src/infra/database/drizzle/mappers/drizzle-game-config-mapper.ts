@@ -11,7 +11,7 @@ interface TGameConfigRow {
 }
 
 const KEYS = Object.keys(GAME_CONFIG_DEFAULTS).filter(
-  (key) => key !== 'reserveDeck'
+  (key) => key !== 'reserveDeck' && key !== 'enemyAbilityPriorities'
 ) as TNumericGameConfigKey[]
 
 export class DrizzleGameConfigMapper {
@@ -36,11 +36,10 @@ export class DrizzleGameConfigMapper {
       }
     }
 
-    const reserve = GameConfig.withDefaults().applyPatch({
-      reserveDeck: saved.reserveDeck,
-    })
-    if (reserve.isRight()) {
-      values.reserveDeck = reserve.value.values.reserveDeck
+    for (const key of ['reserveDeck', 'enemyAbilityPriorities'] as const) {
+      const result = GameConfig.withDefaults().applyPatch({ [key]: saved[key] })
+      if (result.isRight())
+        Object.assign(values, { [key]: result.value.values[key] })
     }
     return GameConfig.create(values)
   }
@@ -54,11 +53,13 @@ export class DrizzleGameConfigMapper {
         adjusted[key] = current[key]
       }
     }
-    if (
-      JSON.stringify(current.reserveDeck) !==
-      JSON.stringify(GAME_CONFIG_DEFAULTS.reserveDeck)
-    ) {
-      adjusted.reserveDeck = current.reserveDeck
+    for (const key of ['reserveDeck', 'enemyAbilityPriorities'] as const) {
+      if (
+        JSON.stringify(current[key]) !==
+        JSON.stringify(GAME_CONFIG_DEFAULTS[key])
+      ) {
+        Object.assign(adjusted, { [key]: current[key] })
+      }
     }
     return adjusted
   }

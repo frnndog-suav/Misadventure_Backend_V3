@@ -57,6 +57,10 @@ const CATALOG_MESSAGES: Record<TCatalogIssueReason, string> = {
   notAnEventCard: 'Use uma carta de evento aleatório ou de combate.',
   randomEventNotExecutable:
     'Informe regras executáveis para o evento aleatório.',
+  combatEventNotExecutable:
+    'Informe regras executáveis para o evento de combate.',
+  invalidAbility: 'O campo é incompatível com a habilidade.',
+  unknownAbility: 'A habilidade informada não existe neste bloco.',
   unknownEffectKind: 'Variação de efeito desconhecida.',
   exactlyOneRequired: 'Informe exatamente um dos dois campos.',
   filterRequired: 'Informe pelo menos um filtro.',
@@ -166,6 +170,9 @@ export function contentIssueMessage(issue: TContentIssue): string {
     case 'notARewardCard':
     case 'notAnEventCard':
     case 'randomEventNotExecutable':
+    case 'combatEventNotExecutable':
+    case 'invalidAbility':
+    case 'unknownAbility':
     case 'unknownEffectKind':
     case 'exactlyOneRequired':
     case 'filterRequired':

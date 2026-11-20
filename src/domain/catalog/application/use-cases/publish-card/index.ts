@@ -11,6 +11,7 @@ import { CollectionNotFoundError } from '@/domain/catalog/application/use-cases/
 import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_errors/content-invalid-error'
 import {
   effectCitationPublicationIssues,
+  combatDeckPublicationIssues,
   rewardDeckPublicationIssues,
   validateCandidate,
 } from '@/domain/catalog/enterprise/card-validation'
@@ -55,6 +56,10 @@ export class PublishCardUseCase {
           : []
       ),
       ...rewardDeckPublicationIssues(card, statusById(allCards)),
+      ...combatDeckPublicationIssues(
+        card,
+        allCards.map((entry) => entry.card)
+      ),
       ...effectCitationPublicationIssues(
         card,
         allCards.map((entry) => entry.card)

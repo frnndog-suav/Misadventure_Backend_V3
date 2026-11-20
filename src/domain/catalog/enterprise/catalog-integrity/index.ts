@@ -1,5 +1,6 @@
 import {
   checkEffects,
+  checkEnemyAbilityExecution,
   checkEventCost,
   checkEventOutcomeEffect,
   type TEffectIssueReason,
@@ -10,6 +11,7 @@ import {
 } from '@/domain/catalog/enterprise/class-lock'
 import {
   MODIFIERS,
+  type TAbility,
   type TAttributeCard,
   type TCard,
   type TClassDefinition,
@@ -66,6 +68,9 @@ export type TCatalogIssueReason =
   | 'notARewardCard'
   | 'notAnEventCard'
   | 'randomEventNotExecutable'
+  | 'combatEventNotExecutable'
+  | 'invalidAbility'
+  | 'unknownAbility'
   // REQ-99
   | TEffectIssueReason
 
@@ -413,6 +418,7 @@ function checkAttribute(card: TAttributeCard, report: TReport): void {
 
 /** README 5.1 */
 function checkEquipment(card: TEquipmentCard, report: TReport): void {
+  checkAbilities(card.abilities, 'abilities', report)
   if (card.blocksShield && card.slot !== 'weapon') {
     report('blocksShield', 'onlyForWeapons')
   }
@@ -505,6 +511,48 @@ export function isEventDeckCard(card: TCard): boolean {
   )
 }
 
+export function isExecutableCombatEvent(
+  card: TCard | undefined
+): card is TCombatEventCard {
+  return (
+    card?.type === 'combatEvent' && combatExecutionFields(card).length === 0
+  )
+}
+
+export function combatExecutionFields(card: TCombatEventCard): string[] {
+  const fields = new Set<string>()
+  checkCombatEvent(card, (field) =>
+    fields.add(field.replace(/\[(\d+)\]/g, '.$1'))
+  )
+  for (const field of ['goodOutcome', 'badOutcome'] as const) {
+    const outcome = card[field]
+    if (outcome.steps === undefined) {
+      fields.add(field)
+      continue
+    }
+    outcome.steps.forEach((step, index) => {
+      if (step.type === 'effect') {
+        checkEventOutcomeEffect(
+          step.effect,
+          `${field}.steps.${index}.effect`,
+          (path) => fields.add(path.replace(/\[(\d+)\]/g, '.$1'))
+        )
+      }
+    })
+  }
+  card.enemies.forEach(({ abilities }, index) => {
+    abilities.forEach((ability, abilityIndex) => {
+      const path = `enemies.${index}.abilities.${abilityIndex}`
+      if (!ability.id) fields.add(`${path}.id`)
+      else {
+        if (ability.timing === 'outsideCombat') fields.add(`${path}.timing`)
+        checkEnemyAbilityExecution(ability, path, (field) => fields.add(field))
+      }
+    })
+  })
+  return [...fields]
+}
+
 function checkRandomEvent(
   card: TRandomEventCard,
   cardsById: ReadonlyMap<string, TCard>,
@@ -578,6 +626,23 @@ function checkCombatEvent(card: TCombatEventCard, report: TReport): void {
 
   card.enemies.forEach((enemy, index) => {
     const path = `enemies[${index}]`
+    checkAbilities(enemy.abilities, `${path}.abilities`, report)
+    enemy.abilities.forEach((ability, abilityIndex) => {
+      if (ability.id !== undefined && ability.classRestriction.length > 0) {
+        report(
+          `${path}.abilities[${abilityIndex}].classRestriction`,
+          'invalidAbility'
+        )
+      }
+    })
+    enemy.combatRules?.preferredAbilityIds?.forEach((id, preferredIndex) => {
+      if (!enemy.abilities.some((ability) => ability.id === id)) {
+        report(
+          `${path}.combatRules.preferredAbilityIds[${preferredIndex}]`,
+          'unknownAbility'
+        )
+      }
+    })
 
     if (!isIntegerBetween(enemy.count, 1, Infinity)) {
       report(`${path}.count`, 'outOfRange')
@@ -596,6 +661,36 @@ function checkCombatEvent(card: TCombatEventCard, report: TReport): void {
     }
     if (enemy.vigor !== null && !isIntegerBetween(enemy.vigor, 0, Infinity)) {
       report(`${path}.vigor`, 'outOfRange')
+    }
+  })
+}
+
+function checkAbilities(
+  abilities: readonly TAbility[],
+  path: string,
+  report: TReport
+): void {
+  const ids = new Set<string>()
+  abilities.forEach((ability, index) => {
+    if (ability.id === undefined) return
+    const field = `${path}[${index}]`
+    if (ids.has(ability.id)) report(`${field}.id`, 'duplicateValue')
+    ids.add(ability.id)
+    if ((ability.form === 'channeled') !== (ability.channel !== null)) {
+      report(`${field}.channel`, 'invalidAbility')
+    }
+    if (ability.form === 'continuous' && ability.duration === null) {
+      report(`${field}.duration`, 'invalidAbility')
+    }
+    if (ability.form === 'passive' && ability.cost.length > 0) {
+      report(`${field}.cost`, 'invalidAbility')
+    }
+    if (
+      (ability.form === 'area' || ability.channel?.releaseForm === 'area') &&
+      ability.power !== null &&
+      ability.target !== 'allOpponents'
+    ) {
+      report(`${field}.target`, 'invalidAbility')
     }
   })
 }

@@ -1,10 +1,15 @@
 import { type Either, left, right } from '@/core/error/either'
 import { ValueObject } from '@/core/value-object'
+import {
+  ENEMY_ABILITY_PRIORITIES,
+  ENEMY_BEHAVIORS,
+} from '@/domain/catalog/enterprise/value-objects/card'
 
 import {
   GAME_CONFIG_DEFAULTS,
   GAME_CONFIG_LIMITS,
   type TGameConfigKey,
+  type TEnemyAbilityPriorities,
   type TGameConfigValues,
   type TReserveDeckEntry,
 } from './defaults'
@@ -53,6 +58,13 @@ export class GameConfig extends ValueObject<TGameConfigValues> {
         next.reserveDeck = validateReserveDeck(value, issues)
         continue
       }
+      if (field === 'enemyAbilityPriorities') {
+        next.enemyAbilityPriorities = validateEnemyAbilityPriorities(
+          value,
+          issues
+        )
+        continue
+      }
       if (typeof value !== 'number' || !Number.isInteger(value)) {
         issues.push({ field, reason: 'notInteger' })
         continue
@@ -78,6 +90,37 @@ export class GameConfig extends ValueObject<TGameConfigValues> {
 
     return right(new GameConfig(next))
   }
+}
+
+function validateEnemyAbilityPriorities(
+  input: unknown,
+  issues: TGameConfigIssue[]
+): TEnemyAbilityPriorities {
+  const field = 'enemyAbilityPriorities'
+  const priorities = { ...GAME_CONFIG_DEFAULTS.enemyAbilityPriorities }
+  if (!isPlainObject(input)) {
+    issues.push({ field, reason: 'outOfRange' })
+    return priorities
+  }
+  for (const key of Object.keys(input)) {
+    if (!(ENEMY_BEHAVIORS as readonly string[]).includes(key)) {
+      issues.push({ field: `${field}.${key}`, reason: 'unknownKey' })
+    }
+  }
+  for (const behavior of ENEMY_BEHAVIORS) {
+    const values = input[behavior]
+    if (
+      !Array.isArray(values) ||
+      values.length < GAME_CONFIG_LIMITS.enemyAbilityPriorities.minEntries ||
+      new Set(values).size !== values.length ||
+      !values.every((value) => ENEMY_ABILITY_PRIORITIES.includes(value))
+    ) {
+      issues.push({ field: `${field}.${behavior}`, reason: 'outOfRange' })
+      continue
+    }
+    priorities[behavior] = [...values]
+  }
+  return priorities
 }
 
 function validateReserveDeck(

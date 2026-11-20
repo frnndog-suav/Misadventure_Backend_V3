@@ -22,6 +22,8 @@ import {
   type TPlayerState,
 } from '@/domain/campaign/enterprise/entities/party-member'
 import {
+  ENEMY_ABILITY_PRIORITIES,
+  ENEMY_BEHAVIORS,
   EQUIPMENT_SLOTS,
   MODIFIERS,
   type TEquipmentSlot,
@@ -30,6 +32,7 @@ import {
   ZONE_TYPES,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import {
+  COMBAT_NUMERIC_LIMITS,
   GAME_CONFIG_DEFAULTS,
   type TGameConfigKey,
   type TGameConfigValues,
@@ -77,10 +80,18 @@ const isV5ConfigKey = (key: TGameConfigKey): key is TV5ConfigKey =>
 const isV6ConfigKey = (key: TGameConfigKey): key is TV6ConfigKey =>
   (V6_CONFIG_KEYS as readonly string[]).includes(key)
 
-type TLegacyConfigKey = Exclude<TNumericGameConfigKey, 'escapeVigorPercent'>
+type TCombatConfigKey = keyof typeof COMBAT_NUMERIC_LIMITS
+type TLegacyConfigKey = Exclude<
+  TNumericGameConfigKey,
+  'escapeVigorPercent' | TCombatConfigKey
+>
 
 const configKeys = Object.keys(GAME_CONFIG_DEFAULTS).filter(
-  (key) => key !== 'reserveDeck' && key !== 'escapeVigorPercent'
+  (key) =>
+    key !== 'reserveDeck' &&
+    key !== 'escapeVigorPercent' &&
+    key !== 'enemyAbilityPriorities' &&
+    !Object.hasOwn(COMBAT_NUMERIC_LIMITS, key)
 ) as TLegacyConfigKey[]
 
 const configSchema = z.strictObject(
@@ -90,6 +101,22 @@ const configSchema = z.strictObject(
 )
 
 const currentConfigSchema = configSchema.extend({
+  ...(Object.fromEntries(
+    Object.entries(COMBAT_NUMERIC_LIMITS).map(([key, { min, max }]) => [
+      key,
+      z.number().int().min(min).max(max).optional(),
+    ])
+  ) as Record<TCombatConfigKey, z.ZodOptional<z.ZodNumber>>),
+  enemyAbilityPriorities: z
+    .record(
+      z.enum(ENEMY_BEHAVIORS),
+      z
+        .array(z.enum(ENEMY_ABILITY_PRIORITIES))
+        .min(1)
+        .refine((values) => new Set(values).size === values.length)
+        .readonly()
+    )
+    .optional(),
   escapeVigorPercent: z.number().int().min(0).max(100).optional(),
   reserveDeck: z
     .array(

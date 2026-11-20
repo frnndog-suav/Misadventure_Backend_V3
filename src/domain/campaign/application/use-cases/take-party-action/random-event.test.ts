@@ -5,6 +5,7 @@ import { SeededRng, type RngState } from '@/core/rng/seeded-rng'
 import type { TRandomEventRequirement } from '@/domain/catalog/enterprise/value-objects/card'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import { availableActions } from '../../../enterprise/available-actions'
+import { shuffle } from '../../../enterprise/shuffle'
 import {
   PartyMember,
   type TPlayerState,
@@ -297,6 +298,9 @@ function setup({
   player = {},
   actionPoints = 1,
   combatOnly = false,
+  combatCard = combat,
+  combatCopies = 1,
+  eventDecks,
   noEscape = false,
   rngState = SeededRng.fromSeed(42).state(),
   outcome = emptyOutcome,
@@ -307,6 +311,9 @@ function setup({
   player?: Partial<TPlayerState>
   actionPoints?: number
   combatOnly?: boolean
+  combatCard?: typeof combat
+  combatCopies?: number
+  eventDecks?: ReturnType<typeof makeParty>['eventDecks']
   noEscape?: boolean
   rngState?: RngState
   outcome?: ReturnType<typeof makeRandomEventCard>['goodOutcome']
@@ -326,7 +333,7 @@ function setup({
       {
         zoneType: 'urban',
         cards: [
-          { cardId: combat.id, copies: 1 },
+          { cardId: combatCard.id, copies: combatCopies },
           ...(combatOnly ? [] : [{ cardId: event.id, copies: 1 }]),
         ],
       },
@@ -349,6 +356,7 @@ function setup({
     rngState,
     config: rewardConfig,
     rewardDecks: [{ zoneType: 'urban', cards: rewardCards }],
+    eventDecks,
   })
   const repository = new InMemoryPartiesRepository()
   // O mapper de saves será exercitado na T-43.
@@ -361,7 +369,7 @@ function setup({
   const catalog = new InMemoryCardCatalog()
   catalog.cards = [
     event,
-    combat,
+    combatCard,
     dimension,
     harbor,
     strength,
@@ -426,6 +434,53 @@ function setup({
 }
 
 describe('TakePartyActionUseCase — encontro aleatório (T-41)', () => {
+  it('REQ-117: inicializa deck misto semeado com todas as cópias executáveis', async () => {
+    const combatCard = {
+      ...combat,
+      goodOutcome: { ...combat.goodOutcome, steps: [] },
+      badOutcome: { ...combat.badOutcome, steps: [] },
+    }
+    const rngState = SeededRng.fromSeed(42).state()
+    const game = setup({ combatCard, combatCopies: 2, rngState })
+    const configured = [combatCard.id, combatCard.id, game.event.id]
+
+    await game.start()
+
+    expect(game.party().eventDecks).toEqual([
+      {
+        zoneType: 'urban',
+        cards: shuffle(configured, SeededRng.fromState(rngState)),
+        discard: [],
+      },
+    ])
+    expect(game.party().rngState).toEqual(rngState)
+  })
+
+  it('REQ-117: permite antecipação quando o descarte do tipo de zona tem combate executável', async () => {
+    const combatCard = {
+      ...combat,
+      goodOutcome: { ...combat.goodOutcome, steps: [] },
+      badOutcome: { ...combat.badOutcome, steps: [] },
+    }
+    const urbanDeck = {
+      zoneType: 'urban' as const,
+      cards: [],
+      discard: [combatCard.id],
+    }
+    const game = setup({
+      combatCard,
+      combatOnly: true,
+      eventDecks: [urbanDeck],
+    })
+
+    await game.start()
+
+    expect(game.party().eventDecks).toEqual([urbanDeck])
+    expect(game.party()).toMatchObject({
+      randomEventEncounter: { phase: 'anticipation', card: null },
+    })
+  })
+
   it('REQ-111: gasta 1 PA, oculta a carta, bloqueia o fim da vez e recicla só o evento aleatório', async () => {
     const game = setup()
     const encounterId = await game.start()

@@ -1,5 +1,6 @@
 import {
   ITEM_CATEGORIES,
+  type TExecutableAbility,
   type TAttributeCard,
   type TDimensionCard,
   type TEquipmentCard,
@@ -653,6 +654,121 @@ export function checkEventCost(
   if (isRec(value) && isRec(value.amount) && value.amount.base === 'perEnemy') {
     report(`${path}.amount.base`, 'unknownEffectKind')
   }
+}
+
+// Variantes de EFEITOS-CATALOGO disponíveis no contexto de uma habilidade inimiga.
+const COMBAT_TRIGGERS = new Set([
+  'onEnemyDefeated',
+  'onCombatFleeAttempt',
+  'onAbilityUsed',
+  'onElementAbilityUsed',
+  'onElementalAdvantageHit',
+  'onElementDamageTaken',
+  'whileUsedAbilitiesSameElement',
+  'onEngageEnemyElement',
+  'onEngageEnemyType',
+  'onEnemyCategoryDefeated',
+  'whileEnemyCount',
+  'onAttackedByEnemyBehavior',
+])
+
+const COMBAT_COSTS = new Set(['donateLife', 'spendVigor'])
+
+const COMBAT_ACTIVATIONS = new Set([
+  'gainGold',
+  'loseGold',
+  'heal',
+  'loseLife',
+  'gainPeak',
+  'restoreVigor',
+  'modifierFlat',
+  'modifierPercent',
+  'attributeValueMultiplier',
+  'effectDamage',
+  'enemyModifierFlat',
+  'drawCards',
+  'nullifyAbilities',
+  'fleeTargetOverride',
+  'fleeTargetModifier',
+  'diceChooseResult',
+  'diceResultModifier',
+  'breakEquipment',
+  'changeNextAbilityElement',
+  'grantElementToAbility',
+  'removeEnemyElement',
+  'ignoreElementalDisadvantage',
+  'elementalAdvantageOverride',
+  'invertElementalRelations',
+  'elementResistance',
+  'elementImmunity',
+  'elementVulnerability',
+  'elementVigorCostModifier',
+  'defeatEnemy',
+  'extraAttack',
+  'skipEnemyTurn',
+  'swapCombatOrder',
+  'removeDebuffs',
+  'removeBuffs',
+])
+
+const COMBAT_DURATIONS = new Set([
+  'immediate',
+  'whileSourceActive',
+  'infinite',
+  'untilEndOfTurn',
+  'untilStartOfNextTurn',
+  'forOwnTurns',
+  'untilEndOfRound',
+  'forRounds',
+  'untilLeaveZone',
+  'untilNextCombatEnd',
+  'forCombats',
+  'untilCombatWon',
+  'untilOwnCombatTurnEnd',
+  'forOwnCombatTurns',
+  'forCombatCycles',
+  'untilDamageTaken',
+  'untilAttackMade',
+  'untilAttackMissed',
+  'untilAbilityUsed',
+  'forAbilitiesUsed',
+  'whileAbilityActive',
+  'untilPartyEnd',
+])
+
+export function checkEnemyAbilityExecution(
+  ability: TExecutableAbility,
+  path: string,
+  report: TEffectReport
+): void {
+  if (ability.duration && !COMBAT_DURATIONS.has(ability.duration.kind)) {
+    report(`${path}.duration`, 'unknownEffectKind')
+  }
+  ability.cost.forEach((cost, index) => {
+    if (!COMBAT_COSTS.has(cost.kind))
+      report(`${path}.cost.${index}`, 'unknownEffectKind')
+    else checkNode(cost, COSTS, `${path}.cost.${index}`, report)
+  })
+  ability.effects.forEach((effect, index) => {
+    const field = `${path}.effects.${index}`
+    if (effect.trigger && !COMBAT_TRIGGERS.has(effect.trigger.kind)) {
+      report(`${field}.trigger`, 'unknownEffectKind')
+    }
+    if (!COMBAT_DURATIONS.has(effect.duration.kind)) {
+      report(`${field}.duration`, 'unknownEffectKind')
+    }
+    effect.cost.forEach((cost, costIndex) => {
+      if (!COMBAT_COSTS.has(cost.kind))
+        report(`${field}.cost.${costIndex}`, 'unknownEffectKind')
+      else checkNode(cost, COSTS, `${field}.cost.${costIndex}`, report)
+    })
+    effect.activation.forEach((activation, activationIndex) => {
+      const activationField = `${field}.activation.${activationIndex}`
+      if (!COMBAT_ACTIVATIONS.has(activation.kind))
+        report(activationField, 'unknownEffectKind')
+      else checkNode(activation, ACTIVATIONS, activationField, report)
+    })
+  })
 }
 
 export function checkEventOutcomeEffect(

@@ -17,10 +17,14 @@ import {
   buildCard,
   isCitedInRewardDeck,
   effectCitationPublicationIssues,
+  combatDeckPublicationIssues,
   rewardDeckPublicationIssues,
   validateCandidate,
 } from '@/domain/catalog/enterprise/card-validation'
-import { isRewardCard } from '@/domain/catalog/enterprise/catalog-integrity'
+import {
+  isExecutableCombatEvent,
+  isRewardCard,
+} from '@/domain/catalog/enterprise/catalog-integrity'
 import type { TEditorCard } from '@/domain/catalog/enterprise/value-objects/content'
 
 export type TReplaceCardUseCaseRequest = { cardId: string; body: unknown }
@@ -75,10 +79,15 @@ export class ReplaceCardUseCase {
         current.card.type === 'combatEvent') &&
       card.type !== 'combatEvent' &&
       (card.type !== 'randomEvent' || card.escapeThreshold === undefined)
+    const losesCombatExecution =
+      isExecutableCombatEvent(current.card) &&
+      card.type === 'combatEvent' &&
+      !isExecutableCombatEvent(card)
     const allCards =
       card.type === 'dimension' ||
       card.type === 'randomEvent' ||
       leavesEventTypes ||
+      losesCombatExecution ||
       current.status === 'published' ||
       renamed ||
       leavesRewardTypes
@@ -103,6 +112,10 @@ export class ReplaceCardUseCase {
       ...(current.status === 'published'
         ? [
             ...rewardDeckPublicationIssues(card, statusById(allCards)),
+            ...combatDeckPublicationIssues(
+              card,
+              allCards.map((entry) => entry.card)
+            ),
             ...effectCitationPublicationIssues(card, [
               ...allCards
                 .map((entry) => entry.card)
@@ -115,6 +128,19 @@ export class ReplaceCardUseCase {
     if (issues.length > 0) return left(new ContentInvalidError(issues))
 
     if (!renamed && (leavesRewardTypes || leavesEventTypes) && cited()) {
+      return left(new ContentReferencedError('rewardDeck'))
+    }
+    if (
+      !renamed &&
+      losesCombatExecution &&
+      isCitedInRewardDeck(
+        allCards
+          .filter(({ status }) => status === 'published')
+          .map((entry) => entry.card),
+        new Set([cardId]),
+        'event'
+      )
+    ) {
       return left(new ContentReferencedError('rewardDeck'))
     }
 

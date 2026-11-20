@@ -5,7 +5,46 @@ export type TReserveDeckEntry =
   | { type: 'gold'; amount: number; weight: number }
   | { type: 'card'; cardId: string; weight: number }
 
-export interface TGameConfigValues {
+import type {
+  TEnemyAbilityPriority,
+  TEnemyBehavior,
+} from '@/domain/catalog/enterprise/value-objects/card'
+
+const COMBAT_NUMERIC_DEFAULTS = {
+  maxCombatCycles: 20,
+  combatEscapeThreshold: 10,
+  combatEscapePeakLoss: 2,
+  exhaustionPenaltyPercent: 10,
+  projectileAccuracyBonusPercent: 10,
+  areaDamagePercent: 50,
+  shieldProjectileDamagePercent: 50,
+  channelInterruptDamagePercent: 20,
+  elementAdvantageBonusPercent: 25,
+  elementDisadvantagePenaltyPercent: 25,
+}
+
+export const COMBAT_NUMERIC_LIMITS = {
+  maxCombatCycles: { min: 1, max: 100 },
+  combatEscapeThreshold: { min: 0, max: 20 },
+  combatEscapePeakLoss: { min: 0, max: 1000 },
+  exhaustionPenaltyPercent: { min: 0, max: 100 },
+  projectileAccuracyBonusPercent: { min: 0, max: 100 },
+  areaDamagePercent: { min: 0, max: 100 },
+  shieldProjectileDamagePercent: { min: 0, max: 100 },
+  channelInterruptDamagePercent: { min: 0, max: 100 },
+  elementAdvantageBonusPercent: { min: 0, max: 100 },
+  elementDisadvantagePenaltyPercent: { min: 0, max: 100 },
+}
+
+export type TEnemyAbilityPriorities = Readonly<
+  Record<TEnemyBehavior, readonly TEnemyAbilityPriority[]>
+>
+
+export interface TGameConfigValues extends Record<
+  keyof typeof COMBAT_NUMERIC_DEFAULTS,
+  number
+> {
+  enemyAbilityPriorities: TEnemyAbilityPriorities
   escapeVigorPercent: number
   reserveDeck: readonly Readonly<TReserveDeckEntry>[]
   minPlayers: number // README 1.3
@@ -41,7 +80,10 @@ export interface TGameConfigValues {
 
 export type TGameConfigKey = keyof TGameConfigValues
 
-export type TNumericGameConfigKey = Exclude<TGameConfigKey, 'reserveDeck'>
+export type TNumericGameConfigKey = Exclude<
+  TGameConfigKey,
+  'reserveDeck' | 'enemyAbilityPriorities'
+>
 
 export interface TGameConfigLimit {
   min: number
@@ -49,6 +91,13 @@ export interface TGameConfigLimit {
 }
 
 export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
+  ...COMBAT_NUMERIC_DEFAULTS,
+  enemyAbilityPriorities: {
+    aggressive: ['highestPower'],
+    defensive: ['selfBuffOrContinuous', 'highestPower'],
+    support: ['supportWoundedAlly', 'highestPower'],
+    hunter: ['highestPower'],
+  } as const,
   escapeVigorPercent: 20,
   reserveDeck: Object.freeze([
     Object.freeze({ type: 'gold' as const, amount: 1, weight: 1 }),
@@ -88,8 +137,11 @@ export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
 export const GAME_CONFIG_LIMITS: Readonly<
   Record<TNumericGameConfigKey, Readonly<TGameConfigLimit>> & {
     reserveDeck: Readonly<{ minEntries: number; minWeight: number }>
+    enemyAbilityPriorities: Readonly<{ minEntries: number }>
   }
 > = Object.freeze({
+  ...COMBAT_NUMERIC_LIMITS,
+  enemyAbilityPriorities: { minEntries: 1 },
   escapeVigorPercent: { min: 0, max: 100 },
   reserveDeck: { minEntries: 1, minWeight: 1 },
   minPlayers: { min: 1, max: 6 },
