@@ -39,6 +39,15 @@ export type TEventPayment = {
   resources?: { cardId: string; copies: number }[]
 }
 
+export type TResolveTriggeredEffectAction = {
+  type: 'resolveTriggeredEffect'
+  choiceId: string
+  effectId: string
+} & (
+  | { decision: 'resolve' | 'decline' }
+  | { decision: 'pay'; payment?: TEventPayment }
+)
+
 export type TRandomEventAction =
   | { type: 'startEvent' }
   | {
@@ -79,6 +88,7 @@ export type TVaultOperation =
 /** Intenção de jogo (CONTRATO §1.6). União por `type`; as FEATs 10+ acrescentam variantes. */
 export type TPartyAction =
   | TRandomEventAction
+  | TResolveTriggeredEffectAction
   | TCombatAction
   | TResolveRewardAction
   | { type: 'move'; zoneId: string }
@@ -148,6 +158,10 @@ export function parsePartyAction(
   }
 
   switch (body.type) {
+    case 'resolveTriggeredEffect':
+      return combatEnabled
+        ? parseTriggeredEffectAction(body)
+        : left([{ field: 'type', reason: 'unknownAction' }])
     case 'combatAttack':
     case 'useAbility':
     case 'activateCombatEffect':
@@ -190,6 +204,38 @@ export function parsePartyAction(
     default:
       return left([{ field: 'type', reason: 'unknownAction' }])
   }
+}
+
+function parseTriggeredEffectAction(
+  body: Record<string, unknown>
+): Either<TActionIssue[], TResolveTriggeredEffectAction> {
+  const { choiceId, effectId, decision } = body
+  const issues: TActionIssue[] = []
+  for (const field of ['choiceId', 'effectId', 'decision']) {
+    if (typeof body[field] !== 'string')
+      issues.push({
+        field,
+        reason: body[field] === undefined ? 'required' : 'notString',
+      })
+  }
+  const keys = ['type', 'choiceId', 'effectId', 'decision']
+  const payment =
+    decision === 'pay' ? readEventPayment(body.payment, issues) : undefined
+  if (decision === 'pay') keys.push('payment')
+  issues.push(...extraKeys(body, keys))
+  if (issues.length) return left(issues)
+  if (decision !== 'resolve' && decision !== 'decline' && decision !== 'pay')
+    return left([{ field: 'decision', reason: 'unknownOperation' }])
+  if (typeof choiceId !== 'string' || typeof effectId !== 'string')
+    return left(issues)
+  const command = {
+    type: 'resolveTriggeredEffect' as const,
+    choiceId,
+    effectId,
+  }
+  return decision === 'pay'
+    ? right({ ...command, decision, ...(payment && { payment }) })
+    : right({ ...command, decision })
 }
 
 function parseCombatAction(

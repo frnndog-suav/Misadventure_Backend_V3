@@ -108,6 +108,17 @@ function executableAbility(
   }
 }
 
+function triggeredEffectChoiceOf(party: ReturnType<typeof makeParty>) {
+  const { triggeredEffectChoice } = party as typeof party & {
+    triggeredEffectChoice?: {
+      choiceId: string
+      effects: { effectId: string; mode: 'automatic' | 'optional' }[]
+    } | null
+  }
+  if (!triggeredEffectChoice) throw new Error('Era esperada uma escolha aberta')
+  return triggeredEffectChoice
+}
+
 describe('TakePartyActionUseCase — habilidades e IA (T-47)', () => {
   it.each([
     { attack: 4, charges: 1, remainingHealth: 19 },
@@ -175,6 +186,101 @@ describe('TakePartyActionUseCase — habilidades e IA (T-47)', () => {
         turnId: next.combat!.turn.id,
       })
       expect(releasedOrRecharged.combat).toMatchObject({
+        enemies: [{ health: remainingHealth }],
+      })
+    }
+  )
+
+  it.each([
+    { element: 'fire', enemyEffect: null, remainingHealth: 12 },
+    { element: null, enemyEffect: null, remainingHealth: 19 },
+    { element: null, enemyEffect: 'healOnDamage', remainingHealth: 21 },
+    { element: null, enemyEffect: 'defenseWhileAlone', remainingHealth: 21 },
+  ] as const)(
+    'REQ-119: acerto elemental (alvo $element, efeito inimigo $enemyEffect)',
+    async ({ element, enemyEffect, remainingHealth }) => {
+      const ability = executableAbility({
+        form: 'area',
+        target: 'allOpponents',
+        element: 'water',
+        power: 16,
+        effects: [
+          makeEffect({
+            trigger: { kind: 'onElementalAdvantageHit' },
+            cost: [],
+            activation: [{ kind: 'effectDamage', amount: 4 }],
+          }),
+        ],
+      })
+      const weapon = makeEquipmentCard({ abilities: [ability], modifiers: [] })
+      const enemy = makeEnemy({
+        count: 1,
+        health: 30,
+        element,
+        abilities: enemyEffect
+          ? [
+              executableAbility({
+                form: 'passive',
+                effects: [
+                  enemyEffect === 'healOnDamage'
+                    ? makeEffect({
+                        trigger: {
+                          kind: 'onElementDamageTaken',
+                          element: 'water',
+                        },
+                        cost: [],
+                        activation: [{ kind: 'heal', amount: 2 }],
+                      })
+                    : makeEffect({
+                        trigger: {
+                          kind: 'whileEnemyCount',
+                          count: 1,
+                          op: 'eq',
+                        },
+                        cost: [],
+                        activation: [
+                          {
+                            kind: 'modifierFlat',
+                            changes: [{ modifier: 'defense', amount: 4 }],
+                          },
+                        ],
+                      }),
+                ],
+              }),
+            ]
+          : [],
+      })
+      const combatCard = makeCombatEventCard({
+        goodOutcome: emptyOutcome,
+        badOutcome: emptyOutcome,
+        enemies: [
+          {
+            ...enemy,
+            modifiers: { ...enemy.modifiers, defense: 0, celerity: 0 },
+          },
+        ],
+      })
+      const game = setup({
+        combatOnly: true,
+        combatCard,
+        additionalCards: [weapon],
+        player: {
+          peak: 0,
+          equipment: { ...makePlayerState().equipment, weapon: weapon.id },
+        },
+      })
+
+      await game.reveal()
+      const state = game.party().combat!
+      const used = await game.accept({
+        type: 'useAbility',
+        combatId: state.id,
+        turnId: state.turn.id,
+        abilityId: ability.id,
+        equipmentSlot: 'weapon',
+      })
+
+      expect(used.combat).toMatchObject({
         enemies: [{ health: remainingHealth }],
       })
     }
@@ -261,6 +367,255 @@ describe('TakePartyActionUseCase — habilidades e IA (T-47)', () => {
     })
     expect(game.handCopies()).toEqual([])
   })
+
+  it.each([
+    { decision: 'pay', gold: 9, health: 17 },
+    { decision: 'decline', gold: 10, health: 15 },
+    { decision: 'automaticFirst', gold: 1, health: 17 },
+  ] as const)(
+    'REQ-119: escolha de efeito disparado na antecipação ($decision)',
+    async ({ decision, gold, health }) => {
+      const trigger = {
+        kind: 'onAbilityUsed',
+        slots: ['weapon'],
+        excludeSlots: [],
+        tags: [],
+        cardId: null,
+      } as const
+      const ability = executableAbility({ timing: 'outsideCombat' })
+      const passive = executableAbility({
+        id: 'fixture.passive',
+        form: 'passive',
+        timing: 'both',
+        effects: [
+          makeEffect({
+            trigger,
+            cost: [
+              {
+                kind: 'payGold',
+                amount: decision === 'automaticFirst' ? 11 : 1,
+              },
+            ],
+            activation: [{ kind: 'heal', amount: 2 }],
+          }),
+          ...(decision === 'automaticFirst'
+            ? [
+                makeEffect({
+                  trigger,
+                  cost: [],
+                  activation: [{ kind: 'gainGold', amount: 2 }],
+                }),
+              ]
+            : []),
+        ],
+      })
+      const weapon = makeEquipmentCard({ abilities: [ability, passive] })
+      const game = setup({
+        additionalCards: [weapon],
+        player: {
+          peak: 0,
+          health: 15,
+          equipment: { ...makePlayerState().equipment, weapon: weapon.id },
+        },
+      })
+      await game.start()
+      expect(game.playerState()).toMatchObject({ health: 15, gold: 10 })
+
+      await game.accept({
+        type: 'prepare',
+        operation: 'useAbility',
+        equipmentSlot: 'weapon',
+        abilityId: ability.id,
+      })
+
+      expect(game.playerState()).toMatchObject({ health: 15, gold: 10 })
+      const paused = game.party()
+      expect(availableActions(paused, paused.turn.memberId, new Set())).toEqual(
+        ['resolveTriggeredEffect']
+      )
+      const choice = triggeredEffectChoiceOf(paused)
+      expect(choice).toMatchObject({
+        memberId: paused.turn.memberId.toString(),
+        decisionDeadlineAt: null,
+      })
+      const optional = choice.effects.find(({ mode }) => mode === 'optional')!
+      const command = {
+        type: 'resolveTriggeredEffect',
+        choiceId: choice.choiceId,
+        effectId: optional.effectId,
+      }
+      if (decision === 'automaticFirst') {
+        expect(optional).toMatchObject({ canPay: false })
+        await game.refuse(
+          { ...command, decision: 'pay' },
+          { reason: 'paymentInvalid' }
+        )
+        expect(triggeredEffectChoiceOf(game.party())).toEqual(choice)
+        const automatic = choice.effects.find(
+          ({ mode }) => mode === 'automatic'
+        )!
+        await game.accept({
+          ...command,
+          effectId: automatic.effectId,
+          decision: 'resolve',
+        })
+        expect(game.playerState().gold).toBe(12)
+        const next = triggeredEffectChoiceOf(game.party())
+        expect(next.choiceId).not.toBe(choice.choiceId)
+        expect(next.effects).toEqual([
+          expect.objectContaining({
+            effectId: optional.effectId,
+            canPay: true,
+          }),
+        ])
+        await game.refuse(
+          { ...command, decision: 'pay' },
+          { reason: 'staleTriggeredEffectChoice' }
+        )
+        expect(triggeredEffectChoiceOf(game.party())).toEqual(next)
+        await game.accept({
+          ...command,
+          choiceId: next.choiceId,
+          decision: 'pay',
+        })
+      } else {
+        await game.accept({ ...command, decision })
+      }
+      expect(game.playerState()).toMatchObject({ health, gold })
+      expect(game.party()).toMatchObject({ triggeredEffectChoice: null })
+      await game.refuse(
+        { ...command, decision: 'decline' },
+        { reason: 'staleTriggeredEffectChoice' }
+      )
+      expect(game.playerState()).toMatchObject({ health, gold })
+    }
+  )
+
+  it('REQ-119: escolha de efeito disparado pausa e retoma o turno inimigo', async () => {
+    const passive = executableAbility({
+      form: 'passive',
+      effects: [
+        makeEffect({
+          trigger: { kind: 'onElementDamageTaken', element: 'fire' },
+          cost: [{ kind: 'payGold', amount: 1 }],
+          activation: [{ kind: 'heal', amount: 1 }],
+        }),
+      ],
+    })
+    const weapon = makeEquipmentCard({ abilities: [passive], modifiers: [] })
+    const enemy = makeEnemy({ count: 1, health: 30 })
+    const combatCard = makeCombatEventCard({
+      goodOutcome: emptyOutcome,
+      badOutcome: emptyOutcome,
+      enemies: [
+        {
+          ...enemy,
+          abilities: [
+            executableAbility({
+              target: 'opponent',
+              element: 'fire',
+              power: 0,
+            }),
+          ],
+          combatRules: { abilityPriority: ['highestPower'] },
+          modifiers: { ...enemy.modifiers, attack: 2, celerity: 12 },
+        },
+      ],
+    })
+    const player = makePlayerState()
+    const game = setup({
+      combatOnly: true,
+      combatCard,
+      additionalCards: [weapon],
+      player: {
+        peak: 0,
+        health: 20,
+        equipment: { ...player.equipment, weapon: weapon.id },
+        modifiers: { ...player.modifiers, defense: 0, evasion: 0 },
+      },
+    })
+
+    await game.reveal()
+    const paused = game.party()
+    expect(paused.combat!.turn.actorId).not.toBe('member-1')
+    expect(game.playerState()).toMatchObject({ health: 18, gold: 10 })
+    const choice = triggeredEffectChoiceOf(paused)
+    expect(availableActions(paused, paused.turn.memberId, new Set())).toEqual([
+      'resolveTriggeredEffect',
+    ])
+    await game.accept({
+      type: 'resolveTriggeredEffect',
+      choiceId: choice.choiceId,
+      effectId: choice.effects[0].effectId,
+      decision: 'pay',
+    })
+
+    expect(game.playerState()).toMatchObject({ health: 17, gold: 9 })
+    expect(game.party()).toMatchObject({ triggeredEffectChoice: null })
+    expect(game.party().combat!.turn.actorId).toBe('member-1')
+  })
+
+  it.each([
+    { element: 'fire', remainingHealth: 11, defense: 4 },
+    { element: null, remainingHealth: 9, defense: 0 },
+  ] as const)(
+    'REQ-119: a passiva do inimigo reage ao uso de Fogo (elemento $element)',
+    async ({ element, remainingHealth, defense }) => {
+      const ability = executableAbility({
+        element,
+        cost: [{ kind: 'donateLife', amount: 4 }],
+        effects: [
+          makeEffect({
+            cost: [],
+            mark: 'buff',
+            activation: [{ kind: 'heal', amount: 1 }],
+          }),
+        ],
+      })
+      const passive = executableAbility({
+        id: 'fixture.enemy-passive',
+        form: 'passive',
+        effects: [
+          makeEffect({
+            trigger: { kind: 'onElementAbilityUsed', element: 'fire' },
+            cost: [],
+            activation: [{ kind: 'heal', amount: 2 }],
+          }),
+          makeEffect({
+            trigger: { kind: 'whileUsedAbilitiesSameElement' },
+            cost: [],
+            activation: [
+              {
+                kind: 'modifierFlat',
+                changes: [{ modifier: 'defense', amount: 4 }],
+              },
+            ],
+          }),
+        ],
+      })
+      const enemy = makeEnemy({ count: 1, health: 12 })
+      const combatCard = makeCombatEventCard({
+        goodOutcome: emptyOutcome,
+        badOutcome: emptyOutcome,
+        enemies: [
+          {
+            ...enemy,
+            abilities: [ability, passive],
+            combatRules: { abilityPriority: ['selfBuff'] },
+            modifiers: { ...enemy.modifiers, defense: 0, celerity: 12 },
+          },
+        ],
+      })
+      const game = setup({ combatOnly: true, combatCard })
+
+      await game.reveal()
+
+      expect(game.party().combat).toMatchObject({
+        turn: { actorId: 'member-1' },
+        enemies: [{ health: remainingHealth, effectiveModifiers: { defense } }],
+      })
+    }
+  )
 
   it('REQ-121: Suporte cura o aliado ferido de menor vida, desempata pela ordem impressa e ainda ataca', async () => {
     const heal = executableAbility({

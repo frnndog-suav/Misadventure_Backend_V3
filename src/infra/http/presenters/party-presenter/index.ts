@@ -141,6 +141,7 @@ export interface TPartyHttp {
   turnOrder: string[]
   turn: TPartyTurnHttp
   randomEventEncounter: ReturnType<Party['describeRandomEvent']>
+  triggeredEffectChoice: Party['triggeredEffectChoice']
   pendingRewards: readonly TPendingReward[]
   createdAt: string
   savedAt: string
@@ -346,6 +347,7 @@ export class PartyPresenter {
         actionPoints: party.turn.actionPoints,
       },
       randomEventEncounter: encounter,
+      triggeredEffectChoice: party.triggeredEffectChoice,
       pendingRewards: party.pendingRewards,
       createdAt: party.createdAt.toISOString(),
       savedAt: party.savedAt.toISOString(),

@@ -87,6 +87,17 @@ export class TakePartyActionUseCase {
     if (typeof blocked === 'string')
       return left(new ActionNotAllowedError(blocked))
     switch (action.type) {
+      case 'resolveTriggeredEffect': {
+        const { cards } = await this.findEventCatalog(party)
+        const result = party.resolveTriggeredEffect(
+          action,
+          cards,
+          this.clock.now()
+        )
+        if (result.isLeft())
+          return left(new ActionNotAllowedError(result.value))
+        break
+      }
       case 'combatAttack':
       case 'useAbility':
       case 'activateCombatEffect':

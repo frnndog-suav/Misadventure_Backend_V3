@@ -29,6 +29,11 @@ export function availableActions(
   canUseAbility = party.adventureAbilityOptions().length > 0
 ): TPartyActionType[] {
   const { turn } = party
+  const choice = party.triggeredEffectChoice
+  if (choice)
+    return choice.memberId === memberId.toString()
+      ? ['resolveTriggeredEffect']
+      : []
   if (!turn.memberId.equals(memberId)) return []
   if (party.combat) return party.combatActions()
   if (party.pendingRewards.length) return ['resolveReward']

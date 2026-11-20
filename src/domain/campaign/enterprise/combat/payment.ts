@@ -410,15 +410,14 @@ export function describeAbilityPayment(
   costs: readonly TCost[],
   cards: Cards,
   rngState: RngState,
-  enemyCount = 0
+  enemyCount = 0,
+  includeUnavailable = false
 ) {
-  if (
-    payAbility(player, cardId, costs, cards, rngState, undefined, {
-      simulate: true,
-      enemyCount,
-    }).isLeft()
-  )
-    return null
+  const canPay = payAbility(player, cardId, costs, cards, rngState, undefined, {
+    simulate: true,
+    enemyCount,
+  }).isRight()
+  if (!canPay && !includeUnavailable) return null
   const paymentCosts = costs.map((cost, costIndex): CostOption => {
     if (cost.kind === 'discardFromHand' && !cost.random) {
       const ids = handCopiesOf(player).map(({ copyId }) => copyId)
@@ -504,5 +503,5 @@ export function describeAbilityPayment(
         : total,
     0
   )
-  return { vigorCost, paymentCosts }
+  return { vigorCost, paymentCosts, canPay }
 }

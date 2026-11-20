@@ -3,7 +3,7 @@
 - Data — 2026-11-20
 - Status — aguardando revisão
 - Spec — v0.62
-- Contrato — v0.62, acordado
+- Contrato — v0.64, acordado
 - Horas — a preencher pelo autor
 
 ## Objetivo
@@ -42,9 +42,50 @@ npm.cmd exec -- vitest run src/domain/campaign/application/use-cases/take-party-
 
 - Após a implementação, `npm.cmd run typecheck`, ESLint nos arquivos de código alterados e `git diff --check` passaram.
 - O autor executou o Vitest e confirmou as quatro falhas esperadas, com 22 testes passando. Os dois usos de Canalizada retornaram `unknownAction`, Preparar retornou `unknownOperation` e o aliado de Suporte ficou com 7 PV em vez de 8 PV.
-- Pendente o retorno do autor sobre as suítes afetadas. A suíte de encontro deve ter 26 testes passando. As demais devem passar sem regressões.
+- O autor confirmou que as suítes afetadas passaram sem erros e registrou a implementação no commit `a21895f`.
 - A cobertura de gatilhos adiados declarados dentro das próprias habilidades ainda precisa ser completada para D-109.
+
+## Retomada a partir de `a21895f`
+
+- REQ-119 e D-109 — adicionado em `random-event.test.ts` um cenário em que o uso de uma habilidade de arma, na antecipação, dispara um efeito declarado em uma habilidade passiva equipada. O cenário verifica que o efeito custa 1 de ouro e recupera 2 PV somente após o uso.
+- O autor confirmou a falha esperada com o código de `a21895f` (1 falha, 26 testes filtrados). O uso foi aceito e o jogador permaneceu com 15 PV e 10 de ouro.
+- O agregado `Party` inclui habilidades passivas e contínuas ativas com alvo próprio nas fontes dos gatilhos já resolvidos. A elegibilidade reaproveita as regras de origem, classe e momento. O pagamento reaproveita o RNG do save e recebe a contagem de inimigos vivos em combate.
+- TypeScript e ESLint passaram. O autor confirmou que o teste isolado e as suítes afetadas passaram sem erros após a primeira correção.
+- REQ-119 — adicionados dois cenários em `random-event.test.ts` para a passiva inimiga com gatilho `onElementAbilityUsed`. Após doar 4 PV e recuperar 1 PV com o efeito imediato, o inimigo deve recuperar mais 2 PV somente se a habilidade usada for de Fogo. O TypeScript passou. A confirmação dos cenários pelo autor precede a mudança no executor.
+- O autor confirmou 1 falha esperada, 1 caso passando e 27 filtrados. O inimigo ficou com 9 PV após usar Fogo, contra 11 PV esperados.
+- `combat/index.ts` despacha `onElementAbilityUsed` para passivas e contínuas ativas do inimigo com alvo próprio, após o uso, com pagamento pelo próprio inimigo. Efeitos passivos condicionais deixam de entrar como modificadores permanentes. O autor confirmou que os casos isolados e as suítes afetadas passaram.
+- REQ-119 — adicionados dois casos em `random-event.test.ts` para `onElementalAdvantageHit` declarado na própria habilidade ofensiva. Contra Fogo, a habilidade de Água deve deixar o alvo com 12 PV. Contra um alvo sem elemento, deve deixar 19 PV. TypeScript passou. Aguardando o autor confirmar a falha esperada de 17 PV no primeiro caso e a aprovação do segundo.
+- O autor confirmou 1 falha esperada, 1 caso passando e 29 filtrados. Contra Fogo, o alvo ficou com 17 PV em vez de 12 PV.
+- `party/index.ts` encaminha os efeitos automáticos de vantagem elemental da habilidade ofensiva. `combat/index.ts` avalia a vantagem no acerto de cada alvo e aplica o efeito secundário naquele alvo. O autor confirmou a aprovação dos testes pós-correção.
+- REQ-119 — acrescentado caso para `onElementDamageTaken` numa passiva inimiga. Um inimigo sem elemento recebe 11 PV de dano de Água e recupera 2 PV. Aguardando confirmação de que o executor atual deixa 19 PV em vez dos 21 PV esperados.
+- O autor confirmou 1 falha esperada, 2 aprovações e 29 casos filtrados. `combat/index.ts` agora reutiliza o resolvedor de gatilhos inimigos após dano elemental positivo do ataque ou do efeito da habilidade. Só inimigos vivos resolvem a reação. O autor confirmou que o comando isolado e as suítes afetadas passaram após a correção.
+- REQ-119 — acrescentado caso de `whileEnemyCount` em passiva inimiga. Com exatamente um inimigo vivo, a passiva fornece +4 de Defesa. O ataque de Água em área deve deixar o alvo com 21 PV. TypeScript passou. Aguardando confirmação de que o caso falha com 19 PV no executor atual.
+- O autor confirmou 1 falha esperada e 32 casos filtrados. `combat/index.ts` calcula os modificadores de passivas sem custo que dependem da contagem de inimigos vivos. A contagem entra no cálculo inicial e os modificadores são recalculados após derrotas por dano ou por efeito da habilidade do jogador. O autor confirmou que o caso isolado e as suítes afetadas passaram após a correção.
+- REQ-119 — ampliados os casos de uso de Fogo pelo inimigo para verificar `whileUsedAbilitiesSameElement` na passiva. Após usar Fogo, a Defesa base de 0 deve passar a 4. Com uso sem elemento, fica em 0. O TypeScript passou e a implementação aguarda a confirmação da falha esperada no primeiro caso.
+- O autor confirmou 1 falha esperada, 5 aprovações e 27 casos filtrados. `combat/index.ts` agora avalia a condição pelo histórico de usos do próprio inimigo, incluindo o uso recém-registrado. A Defesa esperada após Fogo é 4, e sem elemento é 0. O autor confirmou que o comando isolado e as suítes afetadas passaram após a correção.
+- O README §13 exige uma escolha para efeitos do jogador com gatilho e custo. O contrato v0.62 da FEAT-13 define pagamentos em ações voluntárias, mas ainda não define como expor uma escolha iniciada por gatilho nem retomar a sequência após pagar ou recusar. O primeiro cenário de antecipação desta retomada verifica cobrança automática de 1 ouro e precisa ser atualizado quando o fluxo for acordado. Proposta para revisão via autor: projetar uma escolha pendente com origem e opções de pagamento, aceitar pagamento ou recusa e retomar a resolução em ordem. Manter gatilhos sem custo automáticos. Aguardando acordo antes de alterar o contrato e essa parte da implementação.
+- Ainda é preciso verificar a cobertura dos demais gatilhos adiados, incluindo os efeitos opcionais com custo e as reações inimigas fora do uso elemental.
+
+## Revisão do contrato da escolha
+
+- O frontend concordou com o fluxo de escolha e pediu os tipos, a regra de ordenação e as recusas. O `CONTRATO.md` v0.63 registra a extensão da FEAT-13 como `proposto (BE)`.
+- Efeitos automáticos entram na ordem escolhida pelo jogador junto com os opcionais. A ação usa `resolve` para o automático, `pay` ou `decline` para o opcional. O backend consome o ID a cada decisão aceita e persiste a escolha atual para o GET.
+- Retomada após o acordo: corrigir a expectativa de cobrança automática na antecipação, escrever os cenários de REQ-119 para escolha, retomada, ordem e recusas e pedir ao autor a confirmação das falhas esperadas.
+- O frontend confirmou a v0.63. A v0.64 registra a extensão como `acordado`.
+- Em `random-event.test.ts`, os quatro cenários de REQ-119 verificam pagamento, recusa, seleção do automático primeiro com recálculo da disponibilidade de pagamento, recusas sem gravação nem avanço do RNG, e pausa e retomada no turno inimigo pelo caso de uso. A recarga por GET com persistência real depende do mapper e da composição HTTP da T-49.
+- TypeScript passou. Aguardando o autor executar `node ./node_modules/vitest/vitest.mjs run src/domain/campaign/application/use-cases/take-party-action/random-event.test.ts -t disparado` e confirmar a ausência da pausa na antecipação e no turno inimigo antes da implementação.
+- O autor confirmou as quatro falhas esperadas (32 casos filtrados). Na antecipação, o executor cobrou o efeito opcional automaticamente ou concedeu o ouro do efeito automático sem abrir a escolha. No combate, voltou ao turno do jogador sem pausar o turno inimigo. Com o contrato acordado e as falhas confirmadas, o próximo passo é implementar a escolha e sua retomada na T-47.
+
+## Implementação da escolha de efeitos disparados
+
+- O agregado guarda a escolha, as origens pendentes e o ponto de retomada. Dimensão e zona resolvem antes do grupo do jogador. Efeitos opcionais abrem decisão mesmo quando o pagamento está indisponível. Um automático remanescente resolve sozinho. Cada decisão aceita renova o ID da escolha e revalida origem, alvos e pagamento das opções restantes.
+- `entities/party`, `combat` e `combat/payment.ts` aplicam os efeitos e interrompem a sequência inimiga depois da transição que disparou a escolha. A retomada preserva a fase, as habilidades já executadas e os ataques pendentes. Os custos continuam a usar o RNG do save.
+- `party-action`, o caso de uso `take-party-action` e `action-not-allowed-error.ts` validam e despacham a decisão, gravando somente ações aceitas. `available-actions` restringe as ações ao dono na pausa. `party-presenter` projeta a escolha.
+- TypeScript, ESLint nos arquivos de implementação e `git diff --check` passaram. Aguardando a execução do Vitest pelo autor.
+- Na antecipação, pagar deve terminar com 17 PV e 9 de ouro. Recusar deve terminar com 15 PV e 10 de ouro. Escolher o automático primeiro deve liberar o pagamento de 11 de ouro e terminar com 17 PV e 1 de ouro. Uma tentativa de pagar acima do saldo ou com o ID anterior deve preservar escolha, save e RNG.
+- No combate, a primeira habilidade inimiga deve pausar com 18 PV e 10 de ouro. Pagar deve aplicar a cura, executar o ataque básico pendente e devolver o turno ao jogador com 17 PV e 9 de ouro.
+- A T-49 cobre a persistência no mapper, o GET após recarga e o lote `combatUpdates` do POST na integração HTTP. O contrato segue acordado até a validação do backend.
 
 ## Commit sugerido
 
-`feat/resolve combat abilities and enemy ai (t-47)`
+`feat/resolve triggered effect choices (t-47)`

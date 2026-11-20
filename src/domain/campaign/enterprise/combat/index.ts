@@ -11,6 +11,7 @@ import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/ga
 import type {
   TEffect,
   TQuantity,
+  TTrigger,
 } from '@/domain/catalog/enterprise/value-objects/effect'
 import { effectiveModifiers } from '../effective-modifiers'
 import type { TPaymentRefusal } from '../effect-payment'
@@ -243,6 +244,7 @@ export type TCombatState = {
     actorId: string
     phase: 'prepare' | 'attack'
     attacksRemaining: number
+    enemyAbilitiesResolved?: number
   }
   enemies: readonly CombatEnemy[]
   abilityUsage?: readonly CombatAbilityUsage[]
@@ -272,12 +274,13 @@ type CombatPlayer = {
   equippedSlots?: readonly TEquipmentSlot[]
   snapshot?: TPlayerState
   withSnapshot?: (player: TPlayerState) => CombatPlayer
+  reactionPending?: () => boolean
   react?: (
     fighter: CombatPlayer,
     state: TCombatState,
     notices: readonly CombatNotice[],
     rng: SeededRng
-  ) => { fighter: CombatPlayer; rng: SeededRng }
+  ) => { fighter: CombatPlayer; rng: SeededRng; state?: TCombatState }
   refresh?: (
     health: number,
     statuses: readonly TPlayerStatus[],
@@ -319,7 +322,7 @@ function notifyCombat(
   }
   return health > 0 && notices.length && fighter.react
     ? fighter.react(fighter, state, notices, rng)
-    : { fighter, rng }
+    : { fighter, rng, state }
 }
 
 export function combatAbilityUsage(
@@ -445,7 +448,7 @@ export function createCombat(
     }))
   )
   const enemies = printedEnemies.map((enemy) =>
-    enemyWithModifiers({ card }, enemy, config)
+    enemyWithModifiers({ card, enemies: printedEnemies }, enemy, config)
   )
   const order = cycleOrder(participantsOf({ memberId, enemies }, player))
   return {
@@ -533,7 +536,7 @@ function nextTurn(state: TCombatState, player: CombatPlayer): TCombatState {
 }
 
 function enemyWithModifiers(
-  state: Pick<TCombatState, 'card'>,
+  state: Pick<TCombatState, 'card' | 'enemies' | 'abilityUsage'>,
   enemy: CombatEnemy,
   config: TGameConfigValues
 ) {
@@ -551,6 +554,38 @@ function enemyWithModifiers(
     ability.form === 'passive' &&
     ability.timing !== 'outsideCombat'
       ? ability.effects.flatMap((effect, index) => {
+          if (effect.cost.length > 0) return []
+          const trigger = effect.trigger
+          if (trigger !== null) {
+            if (enemy.health === 0) return []
+            if (trigger.kind === 'whileEnemyCount') {
+              const living = state.enemies.filter(
+                ({ health }) => health > 0
+              ).length
+              const { count, op } = trigger
+              const matches = {
+                eq: living === count,
+                lt: living < count,
+                lte: living <= count,
+                gt: living > count,
+                gte: living >= count,
+              }[op]
+              if (!matches) return []
+            } else if (trigger.kind === 'whileUsedAbilitiesSameElement') {
+              const used =
+                state.abilityUsage?.filter(
+                  ({ actorId }) => actorId === enemy.id
+                ) ?? []
+              const element = used[0]?.element
+              if (
+                element == null ||
+                !used.every((entry) => entry.element === element)
+              )
+                return []
+            } else {
+              return []
+            }
+          }
           const status = abilityEffectStatus(
             {
               ...effect,
@@ -580,37 +615,70 @@ function enemyWithModifiers(
   }
 }
 
+function refreshEnemyCountModifiers(
+  before: TCombatState,
+  after: TCombatState,
+  config: TGameConfigValues
+) {
+  if (
+    before.enemies.every(
+      ({ health }, index) => health > 0 === after.enemies[index].health > 0
+    )
+  )
+    return after
+  return {
+    ...after,
+    enemies: after.enemies.map((enemy) =>
+      enemyWithModifiers(after, enemy, config)
+    ),
+  }
+}
+
 function damageEnemy(
   state: TCombatState,
   id: string,
   damage: number,
-  config: TGameConfigValues
+  config: TGameConfigValues,
+  element: TElement | null = null
 ) {
-  return interruptChannel(
-    {
-      ...state,
-      enemies: state.enemies.map((enemy) =>
-        enemy.id === id
-          ? enemyWithModifiers(
-              state,
-              {
-                ...enemy,
-                health: Math.max(0, enemy.health - damage),
-                statuses:
-                  damage > 0
-                    ? enemy.statuses.filter(
-                        ({ duration }) => duration.kind !== 'untilDamageTaken'
-                      )
-                    : enemy.statuses,
-              },
-              config
-            )
-          : enemy
-      ),
-    },
-    id,
-    damage,
+  const damaged = refreshEnemyCountModifiers(
+    state,
+    interruptChannel(
+      {
+        ...state,
+        enemies: state.enemies.map((enemy) =>
+          enemy.id === id
+            ? enemyWithModifiers(
+                state,
+                {
+                  ...enemy,
+                  health: Math.max(0, enemy.health - damage),
+                  statuses:
+                    damage > 0
+                      ? enemy.statuses.filter(
+                          ({ duration }) => duration.kind !== 'untilDamageTaken'
+                        )
+                      : enemy.statuses,
+                },
+                config
+              )
+            : enemy
+        ),
+      },
+      id,
+      damage,
+      config
+    ),
     config
+  )
+  if (damage <= 0 || element === null) return damaged
+  return resolveEnemyAbilityTriggers(
+    damaged,
+    id,
+    config,
+    (trigger) =>
+      trigger?.kind === 'onElementDamageTaken' &&
+      (trigger.element === null || trigger.element === element)
   )
 }
 
@@ -716,9 +784,14 @@ export function resolvePlayerAbility(
   let attacked = false
   let missed = false
   let reflected = 0
+  const hitTargets: string[] = []
+  const advantageTargets: string[] = []
   const roll = () => rng.nextUint32() / 2 ** 32
   const form = ability.channel?.releaseForm ?? ability.form
-  for (const enemy of targets) {
+  for (const { id } of targets) {
+    const enemy = current.enemies.find((entry) => entry.id === id)
+    if (!enemy?.health) continue
+    let targetAdvantageHit = false
     const target = {
       id: enemy.id,
       health: enemy.health,
@@ -747,7 +820,13 @@ export function resolvePlayerAbility(
       attacked = true
       missed ||= result.hit === false
       reflected += result.reflectedDamage
-      current = damageEnemy(current, enemy.id, result.damage, config)
+      current = damageEnemy(
+        current,
+        enemy.id,
+        result.damage,
+        config,
+        ability.element
+      )
       health = Math.max(0, health - result.reflectedDamage)
       current = interruptChannel(
         current,
@@ -755,7 +834,7 @@ export function resolvePlayerAbility(
         result.reflectedDamage,
         config
       )
-      if (
+      targetAdvantageHit = Boolean(
         result.hit &&
         ability.element !== null &&
         (target.vulnerable ||
@@ -765,10 +844,17 @@ export function resolvePlayerAbility(
             elementalRules(player.statuses ?? []).inverted
           ) === 1)
       )
-        advantageHit = true
+      advantageHit ||= targetAdvantageHit
       if (result.hit === false) continue
     }
+    hitTargets.push(id)
+    if (targetAdvantageHit) advantageTargets.push(id)
     for (const [index, raw] of ability.effects.entries()) {
+      if (
+        raw.trigger?.kind === 'onElementalAdvantageHit' &&
+        !targetAdvantageHit
+      )
+        continue
       const effect = abilityEffectDuration(ability, raw)
       for (const activation of effect.activation) {
         const victim = current.enemies.find(({ id }) => id === enemy.id)
@@ -790,7 +876,13 @@ export function resolvePlayerAbility(
             roll,
             elemental: elementalRules(player.statuses ?? []),
           })
-          current = damageEnemy(current, enemy.id, result.damage, config)
+          current = damageEnemy(
+            current,
+            enemy.id,
+            result.damage,
+            config,
+            ability.element
+          )
         }
         if (activation.kind === 'swapCombatOrder') {
           const order = [...current.order]
@@ -804,6 +896,7 @@ export function resolvePlayerAbility(
           current = { ...current, order }
         }
       }
+      const beforeEffect = current
       current = {
         ...current,
         enemies: current.enemies.map((entry) =>
@@ -819,9 +912,96 @@ export function resolvePlayerAbility(
             : entry
         ),
       }
+      current = refreshEnemyCountModifiers(beforeEffect, current, config)
     }
   }
-  return { state: current, health, advantageHit, attacked, missed, reflected }
+  return {
+    state: current,
+    health,
+    advantageHit,
+    attacked,
+    missed,
+    reflected,
+    hitTargets,
+    advantageTargets,
+  }
+}
+
+function reactToEnemyAbilityUse(
+  state: TCombatState,
+  actorId: string,
+  used: TExecutableAbility,
+  config: TGameConfigValues
+) {
+  if (used.element === null) return state
+  return resolveEnemyAbilityTriggers(
+    state,
+    actorId,
+    config,
+    (trigger) =>
+      trigger?.kind === 'onElementAbilityUsed' &&
+      trigger.element === used.element,
+    used.id
+  )
+}
+
+function resolveEnemyAbilityTriggers(
+  state: TCombatState,
+  actorId: string,
+  config: TGameConfigValues,
+  matches: (trigger: TTrigger | null) => boolean,
+  usedAbilityId?: string
+) {
+  const actor = state.enemies.find(({ id }) => id === actorId)
+  if (!actor?.health) return state
+
+  let changed = actor
+  const block = state.card.enemies[actor.blockIndex]
+  for (const ability of block.abilities) {
+    if (
+      ability.id === undefined ||
+      ability.timing === 'outsideCombat' ||
+      ability.target !== 'self' ||
+      ability.id === usedAbilityId
+    )
+      continue
+    const usage = combatAbilityUsage(state, actorId, null, ability.id)
+    if (
+      ability.form !== 'passive' &&
+      !(
+        ability.form === 'continuous' &&
+        (usage?.activeUntilCycle ?? 0) > state.cycle
+      )
+    )
+      continue
+    for (const [index, effect] of ability.effects.entries()) {
+      if (
+        changed.health === 0 ||
+        changed.statuses.some(({ activation }) =>
+          activation.some(({ kind }) => kind === 'nullifyAbilities')
+        ) ||
+        !matches(effect.trigger)
+      )
+        continue
+      const paid = payEnemyCosts(changed, effect.cost, ability.element)
+      if (!paid?.health) continue
+      changed = applyEnemyEffect(
+        state,
+        paid,
+        effect,
+        `${state.turn.id}:${actorId}:${ability.id}:trigger:${changed.statuses.length}:${index}`,
+        index,
+        config
+      )
+    }
+  }
+  if (changed === actor) return state
+  return {
+    ...state,
+    enemies: state.enemies.map((enemy) =>
+      enemy.id === actorId ? changed : enemy
+    ),
+  }
 }
 
 function chooseEnemyAbility(
@@ -980,7 +1160,11 @@ function resolveEnemyAbilities(
   let brokenEquipment = player.brokenEquipment ?? []
   const limit =
     state.card.enemies[enemy.blockIndex].combatRules?.abilityUsesPerTurn ?? 1
-  for (let use = 0; use < limit && health > 0; use++) {
+  for (
+    let use = state.turn.enemyAbilitiesResolved ?? 0;
+    use < limit && health > 0;
+    use++
+  ) {
     const before = current
     const actor = current.enemies.find(({ id }) => id === enemy.id)!
     if (actor.health === 0) break
@@ -999,7 +1183,7 @@ function resolveEnemyAbilities(
       enemies: registered.state.enemies.map((entry) =>
         entry.id === actor.id
           ? enemyWithModifiers(
-              current,
+              registered.state,
               {
                 ...paid,
                 statuses: statusesAfterAbility(entry.statuses, ability.element),
@@ -1009,7 +1193,11 @@ function resolveEnemyAbilities(
           : entry
       ),
     }
-    if (registered.charging || paid.health === 0) continue
+    if (paid.health === 0) continue
+    if (registered.charging) {
+      current = reactToEnemyAbilityUse(current, actor.id, ability, config)
+      continue
+    }
     let payer = current.enemies.find(({ id }) => id === actor.id)!
     const effects = ability.effects.flatMap((effect) => {
       const trigger = effect.trigger
@@ -1074,6 +1262,7 @@ function resolveEnemyAbilities(
             },
           }
       }
+      current = reactToEnemyAbilityUse(current, actor.id, ability, config)
       continue
     }
     const roll = () => rng.nextUint32() / 2 ** 32
@@ -1211,6 +1400,7 @@ function resolveEnemyAbilities(
         statuses = [...statuses, status]
       }
     }
+    current = reactToEnemyAbilityUse(current, actor.id, ability, config)
     const reaction = notifyCombat(
       player,
       health,
@@ -1222,9 +1412,17 @@ function resolveEnemyAbilities(
     )
     player = reaction.fighter
     rng = reaction.rng
+    current = reaction.state ?? current
     health = player.health
     statuses = player.statuses ?? []
     brokenEquipment = player.brokenEquipment ?? []
+    if (player.reactionPending?.()) {
+      current = {
+        ...current,
+        turn: { ...current.turn, enemyAbilitiesResolved: use + 1 },
+      }
+      break
+    }
   }
   return { state: current, health, statuses, brokenEquipment, player, rng }
 }
@@ -1234,7 +1432,8 @@ export function resolveCombatTurn(
   player: CombatPlayer,
   config: TGameConfigValues,
   rng: SeededRng,
-  targetId?: string
+  targetId?: string,
+  resume = false
 ): {
   state: TCombatState
   health: number
@@ -1268,6 +1467,7 @@ export function resolveCombatTurn(
     )
     player = reaction.fighter
     rng = reaction.rng
+    current = reaction.state ?? current
     health = player.health
     statuses = player.statuses ?? []
     brokenEquipment = player.brokenEquipment ?? []
@@ -1360,6 +1560,7 @@ export function resolveCombatTurn(
   }
 
   if (current.turn.actorId === current.memberId) {
+    if (resume && current.turn.attacksRemaining > 0) return finish()
     const target = current.enemies.find(({ id }) => id === targetId)
     if (target) {
       const before = current
@@ -1408,6 +1609,7 @@ export function resolveCombatTurn(
       )
       notify(enemyDefeatNotices(before, current))
       if (
+        player.reactionPending?.() ||
         current.turn.attacksRemaining > 0 ||
         combatIsTerminal(current, health)
       )
@@ -1447,10 +1649,15 @@ export function resolveCombatTurn(
       brokenEquipment = used.brokenEquipment
       player = used.player
       rng = used.rng
+      if (player.reactionPending?.()) return finish()
     }
     if (combatIsTerminal(current, health)) break
     enemy = current.enemies.find(({ id }) => id === current.turn.actorId)!
     if (enemy.health === 0) {
+      advance()
+      continue
+    }
+    if (current.turn.attacksRemaining === 0) {
       advance()
       continue
     }
@@ -1503,6 +1710,7 @@ export function resolveCombatTurn(
       },
       ...enemyDefeatNotices(before, current),
     ])
+    if (player.reactionPending?.()) return finish()
     if (
       !combatIsTerminal(current, health) &&
       current.turn.attacksRemaining === 0
