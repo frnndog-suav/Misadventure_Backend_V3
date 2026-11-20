@@ -1,7 +1,7 @@
 # 050 — T-41 — Domínio e ações do encontro
 
 - **Data** — 2026-11-20
-- **Status** — aguardando revisão
+- **Status** — concluída
 - **Spec** — v0.58, REQ-111 a REQ-114
 - **Contrato** — v0.57, acordado
 - **Horas** — a preencher pelo autor
@@ -28,7 +28,8 @@ A rodada atual deve passar os 14 casos. No caso de borda de deck só de combate,
 
 - O autor confirmou 13 falhas na rodada inicial com `ACTION_INVALID` e `type: unknownAction`.
 - Typecheck, ESLint nos arquivos afetados e `git diff --check` passaram.
-- Após a implementação, aguarda-se a execução dos unitários pelo autor. A persistência em banco e os cenários HTTP ficam na T-43.
+- O autor confirmou a aprovação da rodada unitária após a implementação e registrou a entrega no commit `86edbdb`. A persistência em banco e os cenários HTTP ficam na T-43.
+- A T-42 retoma deste ponto com recompensas pendentes, reserva, destinos de manter/deixar e recibos de Vasculhar.
 
 ## Commit sugerido
 
