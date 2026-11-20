@@ -58,3 +58,43 @@ Todos os cenários selecionados devem passar. No caso de borda de duas escolhas 
 O CONTRATO v0.58 registra `implementado (BE)` e o ROADMAP v0.59 marca o backend `pronto`. Copiar ambos na íntegra. Validar a seção FEAT-12 com MSW desligado contra o backend real disponibilizado pelo autor. A URL padrão local é `http://localhost:3333`; confirmar a URL efetiva na sessão integrada.
 
 `src/infra/http/contract-version.ts` anuncia `0.58` em `GET /health` após reiniciar o backend com esta atualização.
+
+### Estados da T-62 para validação integrada
+
+O frontend confirmou os fluxos com o Viajante Ferido, a poção, a vara de pesca e o Peixe Prateado. A validação integral segue aberta. Foram cadastrados 23 grupos no banco local apontado por `.env`. `GET /health` retornou `0.58` e o GET de cada grupo retornou seu estado inicial em `http://localhost:3333`. As ações ficam para a rodada do autor com o frontend.
+
+Os IDs usam o prefixo `fe120000-0000-4000-8000-0000000000` seguido pelos dois dígitos da tabela. O membro é `m1`. Encontros pré-abertos usam `e1`; ao iniciar um encontro pelo HTTP, use o ID da resposta.
+
+| Sufixo | Cenário | Ação e resultado esperado |
+| --- | --- | --- |
+| 01 | `deck-misto` | Iniciar e revelar, desistir e repetir. A antecipação oculta a carta, e a revelação compra o aleatório mesmo após reciclar. |
+| 02 | `so-combate` | `startEvent` ausente. Pedido direto com 1 PA retorna `409 eventDeckEmpty`. |
+| 03–04 | `pagamento-vigor-7`, `pagamento-vigor-8` | Pagar `attrs` em dois envios com `h1` e `h2`, depois `gold`. `vigor` retorna `409 eventMinimumNotMet` com `actual: 4` no 03 e êxito com Vigor 5 no 04. |
+| 05–06 | `duplicatas-parcial`, `duplicatas-recusado` | Pagar `attrs` com `h2`. No 05 sobra `h1` e fica parcial. No 06 o mínimo falha e ambas as cópias permanecem. |
+| 07 | `consumivel` | Ativar a poção com 0 PA leva vida de 10 a 15. Pagar `attrs` com `h2` e tentar ativar de novo retorna `409 eventPaymentStarted`. |
+| 08–09 | `aleatorio-vigor-4`, `aleatorio-vigor-5` | Enviar `discard` sem `payment` sorteia `h2`. Segundo envio retorna 409 no 08 e consome `h3` no 09. No 08 compare o RNG e `savedAt` antes e depois da recusa. |
+| 10–11 | `esquiva-79`, `esquiva-80` | `resolveEvent` retorna 409 com `actual: 79` no 10 e êxito no 11. |
+| 12–14 | `fuga-10-zero-pa`, `fuga-10-um-pa`, `fuga-11` | `escapeEvent` com 10 falha. No 12 cria dívida e o próximo turno começa com 2 PA, no 13 gasta 1 PA agora. Com 11, a fuga tem êxito. |
+| 15–16 | `fuga-proibida`, `fuga-sem-vigor` | Fuga retorna `escapeForbidden` ou `notEnoughVigor`. |
+| 17 | `recompensa-deck-e-reserva` | `resolveEvent` abre minério urbano. Descartar só um peixe falha; descartar os dois permite manter e abre a poção da reserva. Deixar a poção retorna `removed`. |
+| 18–20 | `recompensa-deck-deixar`, `recompensa-fixa-deixar`, `recompensa-busca-vazia` | `resolveEvent` abre a recompensa para conferir `returnedToDeck` ou `sentToLimbo`. No 20 a busca retorna `found: false`. |
+| 21–23 | `vasculhar-pendente`, `vasculhar-empilha`, `vasculhar-sem-achado` | Vasculhar `fixture.silver-fish` retorna respectivamente `pending`, `inventory` e `none`. No 21, deixar muda para `left`. |
+
+O catálogo da fixture usa Força e Destreza separadas no 03–04, portanto a variação reproduz a checagem final com dois recibos de atributo e reposição de duas cópias. Vasculhar usa o peixe acessível pela vara. Os cenários de prazo multiplayer seguem a FEAT-26.
+
+```powershell
+# Listar os IDs sem acessar o banco
+node_modules/.bin/tsx.cmd test/fixtures/restore-feat-12.ts
+
+# Restaurar um grupo de teste
+node_modules/.bin/tsx.cmd test/fixtures/restore-feat-12.ts --env .env --only aleatorio-vigor-4
+
+# Ler o estado bruto do RNG e savedAt sem restaurar
+node_modules/.bin/tsx.cmd test/fixtures/restore-feat-12.ts --env .env --only aleatorio-vigor-4 --inspect
+```
+
+Para restaurar todos os grupos, omita `--only` no comando de restauração. Use o mesmo banco local da API, com o PostgreSQL e o backend disponíveis durante a validação integrada.
+
+### Retorno da validação integrada
+
+A T-62 confirmou os 23 cenários determinísticos contra a API v0.58, inclusive a preservação do RNG e de `savedAt` no grupo 08. A FEAT-12 foi validada. O CONTRATO v0.59 e o ROADMAP v0.60 foram copiados integralmente do frontend e conferidos por SHA-256. Os prazos multiplayer seguem na FEAT-26.

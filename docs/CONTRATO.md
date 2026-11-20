@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.58 · **Data:** 2026-11-20
+> **Versão do contrato:** 0.60 · **Data:** 2026-11-20
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -2170,7 +2170,7 @@ Seja `G` criado com `{ "name": "Os Teimosos", "characterName": "Lia", "playerCla
 
 Só nos e2e do backend: Pico abaixo do requisito com passivo, `removeDebuffs`/`removeBuffs`, as demais durações executadas (vencimento no `move` e na virada da rodada), `donateLife`/`reducePeak`/`payGold` com `Quantity` em fórmula e `minimumNotMet`, `random` no descarte, saves antigos e cada regra de `CONTENT_INVALID`.
 
-### FEAT-12 — Eventos aleatórios — `implementado (BE)`
+### FEAT-12 — Eventos aleatórios — `validado`
 
 Regras de README 3.4, 6.5–6.6, 11.3, 12.2, 12.6, 13 e 14–15. Usa `POST /parties/:partyId/actions` e a resposta `200 Party`. O GET devolve o mesmo estado persistido, inclusive após recarga ou retomada da sessão.
 
@@ -2392,6 +2392,137 @@ Exemplo dos campos executáveis de `cart` no cenário da última parte:
 | Inventário cheio, uma cópia de `ore` coletável no deck. `{"type":"scavenge","cardId":"ore"}`. | 200, −1 PA, `lastScavenge: {"cardId":"ore","found":true,"delivery":"pending"}`, recompensa de `rewardDeck` com fonte `scavenge`. Deixar devolve ao fundo e muda `delivery` para `left`. Com espaço em pilha, entrega direta e `delivery: "inventory"`. Com deck vazio, gasta o ponto, `found: false`, `delivery: "none"` e reserva intacta. |
 | Relógio controlado para integração FEAT-26, fase `encounter`, ouro já pago e prazo `2026-11-20T18:00:30Z`. GET após vencer o prazo. | Revés por `timedOut`; o ouro permanece pago, cartas elegíveis são repostas. Em escolha de recompensa vencida, mesmo destino de `leave`. No solo, avançar o relógio mantém a escolha aberta. |
 
+### FEAT-13 — Combate solo — `proposto (BE)`
+
+Base: ROADMAP v0.60, SPEC-BACKEND v0.61 (REQ-117 a REQ-123) e devlog 052. A integração começa com `startEvent` e `revealEvent` da FEAT-12. A revelação de um `combatEvent` fecha a antecipação, preenche `Party.combat` e avança eventuais turnos inimigos anteriores ao primeiro turno do jogador. Os fluxos de evento aleatório e recompensa da FEAT-12 mantêm seus formatos.
+
+#### Catálogo, editor e laboratório
+
+```ts
+type AbilityForm = 'targeted' | 'projectile' | 'area' | 'continuous' | 'channeled' | 'passive'
+interface ExecutableAbility {
+  id: string
+  name: string
+  text: string
+  form: AbilityForm
+  element: Element | null
+  cost: Cost[]
+  power: number | null
+  effects: Effect[]
+  cooldown: number
+  timing: 'combat' | 'outsideCombat' | 'both'
+  usesPerTurn: number
+  target: 'self' | 'opponent' | 'ally' | 'allOpponents'
+  duration: Duration | null
+  channel: { chargesRequired: number; releaseForm: 'targeted' | 'projectile' | 'area' } | null
+}
+type CombatOutcome = { text: string; steps: RandomEventOutcomeStep[] }
+type EnemyAbilityPriority = 'selfBuff' | 'continuous' | 'selfBuffOrContinuous' | 'supportWoundedAlly' | 'highestPower'
+interface EnemyCombatRules {
+  abilityUsesPerTurn?: number
+  abilityPriority?: EnemyAbilityPriority[]
+  preferredAbilityIds?: string[]
+}
+```
+
+`Ability` aceita a forma legada de nome e texto e a forma executável acima. IDs de habilidade são únicos dentro do equipamento ou bloco inimigo. `power: null` indica ausência de ataque principal. `cooldown` e `power`, quando presentes, são inteiros não negativos. `usesPerTurn` e `chargesRequired` são inteiros positivos. `channel` é obrigatório para Canalizada e nulo para as demais. Cada uso de Canalizada paga os custos declarados e avança uma carga. Na carga final aplica-se `releaseForm`. Um golpe acima do percentual configurado da vida no início da canalização zera as cargas. Contínua declara duração e só pode haver uma ativa por equipamento. Passiva tem custo vazio, usa a disponibilidade da origem e não dispara gatilho de uso. Área ofensiva usa `allOpponents`; o backend resolve todos os oponentes vivos. Usos fora de combate só são oferecidos com alvos e condições resolvíveis naquela fase.
+
+`CombatEventCard` conserva seus blocos atuais, inclusive `count`, e ganha `escapeThreshold?: number | null`. `goodOutcome` e `badOutcome` passam a aceitar `CombatOutcome` além do texto legado. Cada bloco inimigo pode declarar `combatRules?: EnemyCombatRules`. Regras próprias prevalecem sobre o perfil. A ordem da lista de prioridade define os critérios. Entre habilidades da mesma prioridade, usar a ordem de `preferredAbilityIds`, quando houver, e depois a ordem impressa. Em `highestPower`, comparar Poder primeiro. IDs de preferência precisam existir no bloco. A publicação de um deck explícito exige cartas com desfechos e habilidades inimigas executáveis. `CONTENT_INVALID` aponta o campo inválido, inclusive o índice do bloco e da habilidade quando pertinente. As operações de edição, importação e publicação mantêm as proteções de referência e de conteúdo em uso.
+
+`LabConfig` e o PATCH correspondente ganham os campos abaixo. GET e reset retornam valores e limites. Configurações existentes recebem os padrões ao migrar. O custo de fuga reutiliza `escapeVigorPercent`. Uma tentativa manual bem-sucedida exige total estritamente maior que o limiar.
+
+| Campo | Faixa inteira | Padrão |
+| --- | --- | --- |
+| `maxCombatCycles` | 1–100 | 20 |
+| `combatEscapeThreshold` | 0–20 | 10 |
+| `combatEscapePeakLoss` | 0–1000 | 2 |
+| `exhaustionPenaltyPercent` | 0–100 | 10 |
+| `projectileAccuracyBonusPercent` | 0–100 | 10 |
+| `areaDamagePercent` | 0–100 | 50 |
+| `shieldProjectileDamagePercent` | 0–100 | 50 |
+| `channelInterruptDamagePercent` | 0–100 | 20 |
+| `elementAdvantageBonusPercent` | 0–100 | 25 |
+| `elementDisadvantagePenaltyPercent` | 0–100 | 25 |
+
+`enemyAbilityPriorities: Record<EnemyBehavior, EnemyAbilityPriority[]>` completa a configuração. As listas têm pelo menos um item, sem duplicatas. Padrões: Agressivo e Caçador usam `['highestPower']`; Defensivo usa `['selfBuffOrContinuous', 'highestPower']`; Suporte usa `['supportWoundedAlly', 'highestPower']`.
+
+#### Estado e ações
+
+```ts
+type CombatAction =
+  | { type: 'combatAttack'; combatId: string; turnId: string; targetId: string }
+  | { type: 'endCombatTurn'; combatId: string; turnId: string }
+  | { type: 'escapeCombat'; combatId: string; turnId: string }
+  | { type: 'useAbility'; combatId: string; turnId: string; abilityId: string;
+      equipmentSlot: EquipmentSlot; targetId?: string; payment?: EventPayment }
+  | { type: 'activateCombatEffect'; combatId: string; turnId: string;
+      effectId: string; targetId?: string; payment?: EventPayment }
+
+interface CombatOption {
+  targetIds: string[]
+  vigorCost: number
+  eligibleHandCopyIds: string[]
+  eligibleEquipmentSlots: EquipmentSlot[]
+  eligibleResourceCardIds: string[]
+  handPayment: { text: string } | null
+}
+interface CombatState {
+  id: string
+  card: CombatEventCard
+  memberId: string
+  cycle: number
+  maxCycles: number
+  turn: { id: string; actorId: string; phase: 'prepare' | 'attack'; attacksRemaining: number }
+  order: string[]
+  enemies: {
+    id: string; blockIndex: number; copyIndex: number; health: number; maxHealth: number
+    vigor: number | null; element: Element | null; effectiveModifiers: Record<Modifier, number>
+    statuses: PlayerState['statuses']
+  }[]
+  attackTargetIds: string[]
+  abilities: (CombatOption & { equipmentSlot: EquipmentSlot; abilityId: string })[]
+  effects: (CombatOption & { effectId: string })[]
+  abilityStates: {
+    actorId: string; equipmentSlot: EquipmentSlot | null; abilityId: string
+    cooldownRemaining: number; usesRemaining: number; charges: number | null; active: boolean
+  }[]
+  escape: { vigorCost: number; threshold: number; automatic: boolean; unavailableReason: string | null }
+}
+interface CombatResult {
+  combatId: string
+  cardId: string
+  memberId: string
+  resolution: 'victory' | 'defeat' | 'escaped'
+  cause: 'enemiesDefeated' | 'playerDown' | 'escapeSucceeded' | 'cycleLimit'
+  playerDown: boolean
+  peakDelta: number
+}
+```
+
+`Party` ganha `combat: CombatState | null` e `lastCombatResult: CombatResult | null`. `PlayerState` ganha `down: boolean`. IDs de combate, participantes e turnos são estáveis durante recarga. O ID do jogador na ordem é `memberId`. Inimigos derrotados continuam projetados com 0 PV e saem da seleção de alvos. A ordem só é recalculada por ciclo ou alterada por efeito explícito. `blockIndex` e `copyIndex` começam em zero. A lista de opções contém somente ações elegíveis; `targetId` é obrigatório para alvo individual escolhido, omitido para alvo próprio ou conjunto fixo. O servidor valida o pagamento completo conforme a carta e reaproveita os IDs de cópia da FEAT-12. Habilidades fora de combate usam `prepare` com `operation: 'useAbility'`, `equipmentSlot`, `abilityId` e `payment?: EventPayment`. `PlayerState` projeta `usableAbilities: (CombatOption & { equipmentSlot: EquipmentSlot; abilityId: string })[]` nesses momentos. A janela de encontro aleatório fecha no primeiro pagamento.
+
+As intenções entram em `POST /parties/:partyId/actions` e retornam `200 Party`. A ordem de `availableActions` para o membro é `activateCombatEffect`, `useAbility`, `escapeCombat`, `combatAttack`, `endCombatTurn`, filtrada pela janela e elegibilidade. Todas custam 0 PA. A preparação acaba no primeiro ataque. Enquanto houver combate, Preparar de aventura, ações de zona, fim de vez e encerramento de sessão ficam bloqueados. Turnos inimigos são resolvidos na mesma resposta da ação que os disparar, até a próxima decisão do jogador ou o desfecho. O solo dispensa prazo de decisão.
+
+Para exibir as transições automáticas, a resposta de ação de grupo ganha `combatUpdates: CombatUpdate[]`, em ordem de resolução, vazio nas demais ações. Cada item contém `combatId`, `type` e, quando houver agente, `actorId`. Tipos propostos: `combatStarted`, `combatTurnStarted` (inclui `turnId`, `cycle`), `combatAbilityUsed` (inclui `abilityId`), `combatEffectActivated` (inclui `effectId`), `combatDamageResolved` (inclui `targetId`, `source: 'attack' | 'ability' | 'effect'`, `hit`, `damage`, `reflectedDamage`, `targetHealth`, `actorHealth`), `combatEscapeAttempted` (inclui `naturalRoll: number | null`, `total: number | null`, `threshold`, `vigorSpent`, `succeeded`) e `combatEnded` (inclui `result: CombatResult`). O frontend usa o snapshot para renderizar o estado e a lista ordenada para apresentar o que ocorreu naquela resposta.
+
+Ao terminar o combate, `combat` vira nulo e o resultado permanece disponível até o próximo combate. Se houver recompensa pendente, o fluxo de manter/deixar usa o contrato da FEAT-12. `PendingReward.source` ganha `{ type: 'combatEvent'; combatId: string }`. A carta fica reservada até o desfecho terminar. Na vitória com queda do jogador por Reflexão, o jogador pode decidir as recompensas. Depois do desfecho, um jogador caído pode consultar o save e encerrar/reabrir a sessão, com `availableActions: []`. A retomada após o nocaute será definida na FEAT-14.
+
+**Recusas.** Reutiliza 400 `ACTION_INVALID` para payload malformado e 409 `ACTION_NOT_ALLOWED` para intenção incompatível com estado. Motivos novos: `combatInProgress`, `staleCombat`, `staleCombatTurn`, `wrongCombatPhase`, `combatTargetUnavailable`, `combatAbilityUnavailable`, `playerDown`. Reutiliza `choicePending`, `notEnoughVigor`, `paymentInvalid`, `escapeForbidden` e motivos de efeitos aplicáveis. Conferir sessão, combate e turno antes de janela, alvo e pagamento. Recusas preservam save, RNG e `savedAt`. O encerramento de sessão durante combate usa 409 `ACTION_NOT_ALLOWED` com `combatInProgress`.
+
+#### Cenários para revisar e validar
+
+| Cenário | Resultado esperado |
+| --- | --- |
+| Revelação de deck misto em save v8 | Ordem relativa original preservada, reserva de combate entra no fundo, escolha antiga permanece aberta e RNG só avança por sorteios das ações. |
+| Celeridade empatada e dois inimigos idênticos | Inimigos agem primeiro na ordem impressa e têm IDs distintos. Mudança de Celeridade só reordena no ciclo seguinte. |
+| 0 PA, habilidade com custo e ataque | Habilidade paga uma vez, ataque básico continua disponível e cartas gastas como custo permanecem descartadas. Recarga bloqueia uso pelo intervalo de §17.1. |
+| Habilidade fora de combate | A opção aparece em Preparar, antecipação e encontro quando elegível. O primeiro pagamento fecha a janela do encontro. Entrar no combate zera a recarga anterior. |
+| Área, Precisão zero, elemento e Reflexão | Área dispensa rolagem, ataque dirigido com Precisão zero erra sem RNG, e a resposta traz dano final e refletido na ordem de resolução. |
+| Suporte com aliado ferido e Canalizada após dano | IA usa a habilidade de apoio elegível e mantém o ataque básico. Dano recebido altera as cargas conforme a habilidade. |
+| Fuga falha e limite em Sem fuga | Falha custa Vigor e concede ataque livre. Limite encerra sem rolagem, cobra a perda de Pico e pula recompensas e coisa ruim. |
+| Último inimigo, Reflexão fatal e inventário cheio | Vitória com `playerDown: true`, escolha de recompensa resolvível após recarga e membro caído bloqueado para ações após o desfecho. Em derrota, coisa ruim executada uma única vez. |
+| Turno obsoleto após recarga | 409 `staleCombatTurn` e preservação de estado, RNG e `savedAt`. A intenção com o turno atual prossegue. |
+
 ## 4. Códigos de erro
 
 | Código | Quando acontece | FEAT |
@@ -2480,3 +2611,5 @@ Exemplo dos campos executáveis de `cart` no cenário da última parte:
 | 0.56 | 2026-11-20 | BE | FEAT-12 `acordado`: frontend aceitou a v0.55 integralmente. Os cenários acordados incluem a reversão do RNG na última parte recusada e o consumo da cópia escolhida entre duplicatas. |
 | 0.57 | 2026-11-20 | BE | FEAT-12 `acordado`: limites de `escapeVigorPercent` e `reserveDeck` no laboratório e erro `LAB_CONFIG_INVALID` com caminho indexado a partir de zero para o peso inválido. |
 | 0.58 | 2026-11-20 | BE | FEAT-12 `implementado (BE)`: ações HTTP, projeção e save v8 validados pelo autor. Vasculhar com inventário cheio segue a FEAT-12. Validação integrada pendente. |
+| 0.59 | 2026-11-20 | FE | FEAT-12 validada na T-62 com MSW desligado. Interface com as fixtures e 23 cenários determinísticos contra API v0.58. Prazos multiplayer seguem a FEAT-26. |
+| 0.60 | 2026-11-20 | BE | FEAT-13 `proposto (BE)` na T-44. Catálogo, laboratório, ações, estado, desfechos e cenários determinísticos de combate solo. |

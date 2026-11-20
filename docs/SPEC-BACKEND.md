@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.60 · **Data:** 2026-11-20
+> **Versão da spec:** 0.61 · **Data:** 2026-11-20
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -374,7 +374,23 @@ Regras de README 27 (criação de conteúdo), II.6 (editor no laboratório), 3.5
   - Sucesso → `201` `{ collectionId, cardCount, classCount: 0 }`; o `status` de cada carta vem do arquivo. Export seguido de import com `replace` reproduz a coleção igual.
 - **REQ-49 — Gravação em arquivo:** Dado qualquer mudança bem-sucedida do editor, então ela fica nos arquivos de `CONTENT_DIR` no formato de D-47 e: reiniciar o backend devolve o mesmo editor e o mesmo catálogo; `npm run validate:content` sobre o diretório não acusa problema; uma gravação que falha no disco não muda o estado em memória (o pedido responde `500` `INTERNAL_ERROR`). Pedido que termina em erro não toca o disco.
 
+### FEAT-13 — Combate solo
+
+Escopo do ROADMAP v0.60. Base nas regras README §§7.3–7.4, 13, 15–18, 19.1–19.4, 19.6 e 28.1. O combate nasce de uma carta de evento de zona. A campanha com nocaute completo segue na FEAT-14 e os relógios multiplayer na FEAT-26. Formatos públicos na seção FEAT-13 do contrato.
+
+- **REQ-117 — Catálogo e entrada:** dado um deck com eventos aleatórios e de combate executáveis, quando revelar a antecipação, então comprar pelo RNG semeado e abrir o fluxo da carta revelada. Cada cópia de inimigo ganha identidade própria e posição estável na ordem impressa. A carta fica reservada até o fim do desfecho. A publicação de deck explícito exige cartas executáveis. Cartas legadas continuam legíveis e entram no jogo após conversão revisada pelo autor. Aplicar D-110 aos saves existentes.
+- **REQ-118 — Turnos e alvos:** dado um novo ciclo, quando calcular a ordem, então usar a Celeridade efetiva dos vivos, com inimigos primeiro no empate e ordem impressa entre eles. Durante o ciclo, preservar a ordem calculada, exceto por alteração explícita de efeito. No próprio turno, o jogador pode usar ações elegíveis, atacar alvos vivos ou passar. O ataque encerra o turno após esgotar as oportunidades de ataque, salvo passagem voluntária ou desfecho anterior. A fase de preparação do turno fecha no primeiro ataque. Ações de combate custam 0 PA, inclusive quando a vez já está com 0 PA.
+- **REQ-119 — Habilidades e efeitos:** dada uma habilidade elegível, quando usá-la, então validar momento, origem equipada, classe quando aplicável, Pico, quebra, anulação, alvo, limite, recarga e custos antes de mutar. Resolver as seis formas de §17.4, pagamentos atômicos e efeitos na ordem de §13.5. Contar recargas no turno do usuário em combate e na vez do usuário fora dele. Zerar recargas na entrada e saída do combate e expirar os status de turno/ciclo na saída. Descartes de atributos usados como custo não são repostos. Aplicar D-109 à execução fora do combate.
+- **REQ-120 — Dano:** dado um ataque, quando resolver o golpe, então seguir §19.2, de acerto até Reflexão, com Poder no pipeline do Ataque da habilidade e Exaustão no fator percentual do jogador. Usar uma rolagem por alvo quando houver teste de acerto. Área e Precisão zero dispensam a rolagem, respeitando a dispensa de acerto da forma Área. Dano de efeito segue seu pipeline e dispara gatilhos de dano recebido. Em Área, resolver alvos na ordem impressa, com dano principal antes do refletido por alvo e desfecho após resolver todos os alvos do mesmo golpe.
+- **REQ-121 — IA:** dado o turno de um inimigo vivo, quando o backend avançar até ele, então escolher habilidade disponível conforme o perfil de §19.6, aplicando os desempates impressos, e fazer o ataque básico se ainda puder. Suporte escolhe o aliado ferido de menor vida atual e desempata pela ordem impressa. Uma habilidade por turno por padrão, com exceção declarada em conteúdo executável. Os turnos inimigos avançam automaticamente até devolver o controle, abrir uma escolha de recompensa ou fechar o combate.
+- **REQ-122 — Desfechos:** dado um combate ativo, quando ocorrer vitória, derrota, fuga ou limite de ciclos, então congelar o resultado, resolver os passos da carta na ordem aplicável a esse resultado e descartar a carta uma vez ao concluir o desfecho. Vitória exige derrotar todos os inimigos e reutiliza as escolhas de recompensa da FEAT-12. Fuga voluntária usa §15; na falha, o próximo inimigo vivo na ordem circular faz um ataque básico extra, preservando seu turno normal. No limite, aplicar a perda de Pico de fuga sem custo de Vigor ou rolagem, inclusive em combate Sem fuga. Aplicar D-108 aos 0 PV. Durante combate ativo, recusar ações de aventura e encerramento da sessão.
+- **REQ-123 — Save e interface:** dado um save recarregado, quando consultar ou agir, então preservar inimigos, ordem, turno, janela, recargas, cargas, status, desfecho, recompensas e RNG. Validar o identificador do encontro e do turno antes das condições específicas. Uma ação recusada preserva estado, RNG e `savedAt`. O backend fornece valores efetivos, ações, alvos e pagamentos elegíveis. A gravação do novo formato mantém leitura v2–v8 e respeita D-110.
+
 ## Decisões
+
+- **D-108 — Derrota provisória:** ao chegar a 0 PV em combate, gravar o jogador caído e encerrar o combate. Em derrota, executar a coisa ruim uma vez. Se a Reflexão derrubar o jogador depois de o golpe derrotar o último inimigo, gravar vitória com jogador caído e permitir concluir a recompensa. Após resolver o desfecho, manter o save consultável e permitir encerrar/reabrir sessão. Bloquear ações de aventura desse membro, inclusive passagem de vez, enquanto estiver caído. A FEAT-14 introduz a recuperação desse estado, o respawn e as penalidades de nocaute. Efeitos de cura e reanimação ficam fora dos desfechos de combate desta entrega.
+- **D-109 — Momentos de habilidade e cobertura de efeitos:** executar habilidades em combate e, quando declaradas para fora dele, em Preparar, na antecipação e no encontro aleatório anterior ao primeiro pagamento. A lista de execução inclui as variantes das FEATs 11 e 12 em seus contextos e as linhas `entra` atribuídas à FEAT-13 no EFEITOS-CATALOGO, inclusive gatilhos cujo momento passa a existir nesta FEAT. Outras variantes permanecem editáveis e indisponíveis em jogo. A publicação de decks jogáveis exige que habilidades dos inimigos e passos de desfecho sejam executáveis. Regras próprias de IA dependem de representação estruturada acordada no contrato.
+- **D-110 — Habilitação dos decks legados:** na leitura de saves anteriores ao formato de combate, manter pilhas de compra, descartes, carta reservada e RNG. Quando houver encontro ou recompensa aberta, adiar a inclusão até fechá-los. Na primeira inicialização elegível de cada deck da dimensão, acrescentar ao fundo da pilha de compra as ocorrências de combate agora executáveis da composição do deck, na ordem configurada, sem consumir RNG. Com pilha vazia, essas ocorrências ficam disponíveis antes da reciclagem do descarte. Registrar a transição por tipo de zona e persistir uma única vez junto à próxima gravação bem-sucedida. Consultas e recusas deixam o save persistido intacto.
 
 - **D-01 — Códigos de erro:** a lista única é CONTRATO §4. Todo `DomainError` usa um código de lá; código novo entra pelo `/contrato` antes do código.
 - **D-02 — Estilo do domínio:** classes `Entity`/`AggregateRoot` com portas (organização de referência), mas sem estado global e sem fontes não determinísticas (decidido pelo autor em 2026-11-13).
@@ -608,6 +624,15 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 - [x] **T-43 — Save, projeção HTTP e validação BE** (REQ-108 a REQ-116). Persistir escolhas, decks, RNG, cópias e progresso; projetar `Party` e as recusas na rota de ações. Executar unitários e cenários HTTP determinísticos do contrato, incluindo recarga, save antigo, IDs obsoletos e repetição de escolha. O prazo multiplayer é verificado na integração FEAT-26. Após a validação BE, registrar `implementado (BE)` no contrato e levar ao frontend a URL de teste e os dados dos cenários.
 
 
+### FEAT-13 — Combate solo
+
+- [ ] **T-44 — Critérios e contrato (REQ-117 a REQ-123, D-108 a D-110).** Spec registrada e proposta BE enviada para revisão pelo autor. Concluir a tarefa com confirmação do acordo do frontend.
+- [ ] **T-45 — Catálogo, laboratório e decks (REQ-117).** Reutilizar os blocos de inimigos existentes, estruturar habilidades e desfechos e converter conteúdo com revisão do autor. Verificar publicação, cópias, decks mistos, reciclagem e regras ajustáveis no laboratório.
+- [ ] **T-46 — Estado de combate e dano (REQ-118, REQ-120).** Implementar entrada, turnos, alvos e cálculos puros. Verificar empates, Celeridade entre ciclos, Precisão zero, Área, Perfuração, elemento e Reflexão.
+- [ ] **T-47 — Habilidades, efeitos e IA (REQ-119, REQ-121).** Implementar formas, pagamento, recargas, status, execução nos momentos autorizados e perfis. Verificar Canalizada após dano, apoio a aliado ferido e ordem dos gatilhos.
+- [ ] **T-48 — Desfechos e retorno à vez (REQ-122).** Verificar fuga, ataque livre, limite em Sem fuga, última derrota inimiga, recompensa com inventário cheio, Reflexão fatal e jogador caído após recarga.
+- [ ] **T-49 — Save, HTTP e validação (REQ-123).** Persistir e projetar o combate e integrar D-110 à gravação. Preparar restaurações determinísticas e entregar ao autor os testes e cenários HTTP. Marcar `implementado (BE)` após validação BE e fechar a FEAT após retorno da integração.
+
 ## 8. Histórico
 
 | Versão | Data | Mudança |
@@ -672,6 +697,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.58 | 2026-11-20 | T-40 concluída. Configuração e erro indexado do laboratório, leitura de cartas legadas, publicação de regras executáveis, proteção de referências e configuração de decks mistos. Ver devlog 049. |
 | 0.59 | 2026-11-20 | T-41 concluída. O autor confirmou os unitários do encontro e registrou a implementação no commit `86edbdb`. Ver devlog 050. |
 | 0.60 | 2026-11-20 | T-42 e T-43 concluídas. O autor confirmou os testes do backend. FEAT-12 implementada no backend (CONTRATO v0.58), com validação integrada pendente. Ver devlogs 051 e 052. |
+| 0.61 | 2026-11-20 | T-44 da FEAT-13 após a validação da FEAT-12 no devlog 052. REQ-117 a REQ-123, D-108 a D-110 e T-44 a T-49. CONTRATO v0.60 proposto pelo backend. |
 
 ## Apêndice A — Conteúdo de teste
 
