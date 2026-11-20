@@ -1,86 +1,64 @@
-# AGENTS.md — Misadventures Backend
+﻿# AGENTS.md — instruções para o Codex no backend
 
-Mapa enxuto para agentes de IA que trabalham neste repositório. **Não duplica regras:**
-a fonte da verdade é `CLAUDE.md` (constituição deste lado) e os documentos de `docs/`.
-Leia este mapa primeiro e abra os documentos apontados quando a tarefa exigir.
+Este arquivo define como trabalhar no backend do Misadventures. Consulte em `docs/` as regras, os requisitos, o contrato, o planejamento e o histórico técnico pertinentes à tarefa. Registre o progresso no devlog.
 
-Este arquivo é próprio do backend; o frontend tem o seu. Não é compartilhado.
+## Gestão de contexto
 
-## O projeto
+- Use este arquivo como única diretriz operacional do projeto. Restrinja a exploração aos documentos em `docs/` e aos arquivos de código, testes e configuração necessários para a tarefa. Exclua das buscas as instruções, configurações e automações de outros assistentes, inclusive quando citadas na documentação.
+- Consulte apenas as seções relevantes. Busque por `FEAT-nn`, `T-xx`, `REQ-xx`, `D-xx` ou pelo nome da área usando `rg`. Limite a saída de buscas, diffs e logs ao que ajuda a resolver a tarefa.
+- Reutilize o contexto disponível. Releia um trecho quando houver mudança, lacuna concreta ou perda de contexto.
+- Trabalhe com um único agente por padrão. Delegue somente quando o autor solicitar.
 
-Motor de regras **autoritativo** do Misadventures, um TCG/RPG cooperativo jogado em
-vezes alternadas. Toda regra (sorteios, cálculos, validação de ações, estado da
-partida) roda aqui; o frontend só exibe o estado e envia intenções (README II.1).
-Backend em TypeScript com **NestJS** e **Drizzle ORM** sobre **PostgreSQL**
-(Docker Compose), arquitetura **hexagonal/DDD** (domínio puro em `src/core/` e
-`src/domain/`; Nest, Drizzle e adaptadores em `src/infra/`). Hoje expõe **HTTP + JSON**
-(momentos 1 e 2 do roadmap); **Socket.IO** só no momento 3 (FEAT-26). Conteúdo de
-cartas como dados em `content/` (JSON validado por schema). Testes com Vitest +
-Supertest, TDD.
+## Mapa de consultas pontuais
 
-## Mapa (onde o quê)
+| Fonte | Quando consultar |
+| --- | --- |
+| `docs/SPEC-BACKEND.md` | Requisitos, decisões, arquitetura e critérios da tarefa. |
+| `docs/README.md` | Seções das regras afetadas e decisões registradas no Apêndice B. |
+| `docs/CONTRATO.md` | Situação da FEAT e convenções antes de alterar rotas, campos, eventos ou erros expostos ao frontend. |
+| `docs/ROADMAP.md` | Planejamento da FEAT e protocolo da ponte entre repositórios (§2). |
+| `docs/devlog/README.md` e entrada da área | Histórico, formato do registro e ponto de retomada antes de alterar funcionalidade. |
 
-| Caminho                     | O que guarda                                                                                                                                              | Quando leio                                                                                  |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `CLAUDE.md`                 | Constituição deste lado: 16 princípios inegociáveis, fluxos de trabalho (`/tarefa`, `/contrato`…), AVISO DE FRONTEND, convenções, comandos, guardas       | Sempre; é a autoridade final                                                                 |
-| `docs/SPEC-BACKEND.md`      | Comportamento do backend: arquitetura, REQs, decisões D, tarefas T (spec-anchored)                                                                        | Antes e durante qualquer implementação                                                       |
-| `docs/README.md`            | Regras do jogo (Parte I) e requisitos técnicos (II). **Apêndice B = decisões registradas: não se reabre**                                                 | Para entender a regra por trás de um REQ; citar por seção (ex.: `README 19.2`), nunca copiar |
-| `docs/CONTRATO.md`          | Contrato com o frontend: §1 convenções, §2 glossário, §4 códigos de erro, seções por FEAT com situação (§0)                                               | Antes de criar/alterar endpoint, campo, evento ou erro; `/contrato`                          |
-| `docs/ROADMAP.md`           | Fases e features (FEAT-nn) dos dois lados; **§2 = protocolo da ponte entre repositórios**                                                                 | Para situar a FEAT; para regras de sincronização entre os lados                              |
-| `docs/devlog/`              | Registro de cada etapa (formato em `docs/devlog/README.md`)                                                                                               | Antes de alterar funcionalidade: índice + entradas da área + `git log`                       |
-| `.claude/skills/*/SKILL.md` | Workflows pedidos por nome (`/tarefa T-xx`, `/contrato`, `/mudar-spec`, `/retorno-frontend`, `/checar`, `/testar`, `/registrar-etapa`, `/validar-cartas`) | Quando o autor pedir o fluxo correspondente                                                  |
-| `.claude/agents/*.md`       | Papéis: `test-writer`, `domain-dev`, `infra-dev`, `spec-reviewer`, `content-author`                                                                       | Para delegar ou assumir um papel do fluxo                                                    |
-| `.claude/hooks/`            | Guardas: `domain-guard.mjs` (violações dos princípios 2/3/10) e `tempo.mjs` (registro de tempo)                                                           | `domain-guard.mjs --all` roda manualmente; o resto é automático no Claude Code               |
+## Exploração e escopo
 
-## Invariantes (resumo — autoridade: `CLAUDE.md`)
+- Identifique o módulo e os arquivos envolvidos. Inspecione a implementação, os testes relacionados e, quando útil, o histórico com `git log --oneline -- <arquivos>`. Amplie a busca quando houver uma dependência ou dúvida concreta.
+- Preserve alterações locais do autor e faça apenas o necessário para a tarefa. Evite refatorações paralelas e documentação duplicada.
+- Trabalhe em uma tarefa por vez. Mudanças de regra, mudanças na spec e avanço para outra tarefa exigem autorização do autor.
+- Se faltar uma decisão indispensável após consultar este arquivo e as seções pertinentes de `docs/`, pergunte ao autor e aguarde antes de escrever os testes ou o código que dependem dela.
 
-1. **O backend decide.** Toda regra roda aqui; envia valores já calculados e as listas do que o jogador pode fazer (CONTRATO §1.3). Nunca espera que o frontend calcule.
-2. **Domínio puro e determinístico.** `src/core/` e `src/domain/` não importam Nest/Drizzle/infra e proibem `Math.random`, `Date.now`, `randomUUID` etc.; aleatoriedade por RNG com semente, relógio e IDs por portas.
-3. **Aggregate Root + Domain Events + State Machine.** Invariantes protegidas no agregado; eventos na ordem em que acontecem, entregues por `pullDomainEvents()`.
-4. **Erros como valor.** `Either<DomainError, T>`; ação inválida nunca lança exceção; todo `code` está em CONTRATO §4; infra traduz para o formato §1.4 (pt-BR).
-5. **Cartas são dados e valores vêm de configuração.** Conteúdo em `content/` pela porta `CardCatalog`; valores do Apêndice A injetados, nunca fixos no código.
-6. **Contrato primeiro e TDD.** Nada existe fora de `CONTRATO.md` (`/contrato` antes do código); testes Dado/Quando/Então antes da implementação; escopo fechado, uma tarefa por vez, avanço autorizado.
-7. **Arquivos compartilhados nunca mudam sem aviso.** Versão incrementada, histórico registrado e **AVISO DE FRONTEND** no fim da resposta.
+## Convenções de implementação
 
-## Coordenação usuário ↔ IA ↔ Claude
+- O backend é autoritativo. Valide as intenções dos jogadores, aplique as regras e devolva estado, valores calculados e ações disponíveis conforme o contrato.
+- Preserve a arquitetura hexagonal em TypeScript. Mantenha `src/core/` e `src/domain/` puros e determinísticos, com RNG semeado, relógio e IDs por portas. Mantenha NestJS, Drizzle e adaptadores em `src/infra/`.
+- Proteja invariantes nos agregados e preserve a ordem dos eventos de domínio. Retorne erros de domínio como valores e traduza os erros públicos conforme o contrato.
+- Reutilize portas, casos de uso e adaptadores existentes. Mantenha as cartas em `content/` e use o catálogo e a configuração para acessar dados e valores do jogo.
 
-O **autor orquestra manualmente** entre os dois repositórios: nenhum agente fala com o
-frontend nem lê o outro repositório. O agente deste lado trabalha só aqui; quando o
-trabalho depender do outro lado, para e mostra o aviso (seção abaixo). Os commits são
-feitos pelo autor — o agente apenas sugere a mensagem (inglês, `type/short description`).
+## Execução
 
-## Ponte backend ↔ frontend
+1. Confirme o escopo, os critérios de conclusão e a situação do contrato. Acorde mudanças na interface pública antes de implementá-las.
+2. Para mudanças de comportamento, confirme os critérios Dado / Quando / Então na spec. Quando houver critérios novos ou alterados, escreva primeiro os testes com o ID do requisito e confirme a falha esperada.
+3. Implemente a mudança e execute os testes afetados e as validações pertinentes. Para alterações de domínio, confira também os limites de dependência e o determinismo. Quando a verificação exigir Docker, o autor sobe e para os containers. Confira a disponibilidade com `docker compose ps`.
+4. Registre a etapa de desenvolvimento no devlog conforme o formato existente. Inclua arquivos alterados, verificações e resultados, pendências e, quando aplicável, um roteiro com resultados esperados e um caso de borda. Deixe as horas a preencher quando não houver medição.
+5. Ao final de cada implementação, sugira um commit curto em inglês e em minúsculas, no formato `tipo/descrição`, sem dois-pontos. Use o prefixo adequado à mudança e mantenha os IDs aplicáveis conforme o histórico do backend, como `feat/activate resource effects in prepare (t-38)` ou `docs/feat-11 contract agreed (contract v0.51)`. O autor faz o commit.
 
-- **Arquivos compartilhados** (cópias idênticas nos dois repos): `docs/README.md`,
-  `docs/ROADMAP.md`, `docs/CONTRATO.md`. Quem altera incrementa a versão, registra no
-  histórico e avisa; quem copia o arquivo inteiro para o outro lado é o autor.
-- **Ciclo de vida da seção do contrato** (CONTRATO §0): `proposto (FE)` / `proposto (BE)`
-  → `acordado` → `implementado (BE)` → `validado`. O frontend propõe; **este lado confirma**
-  (`acordado`), implementa e marca `implementado (BE)` — tudo via skill `/contrato`.
-- **Só um lado altera o contrato por vez.** Se os dois mexerem, vale a versão maior e
-  o autor junta (ROADMAP §2).
-- **Uma FEAT só fecha em `validado`**, e a validação roda no frontend, contra o backend
-  real (o autor sobe o backend).
-- **Mudança de regra do jogo** chega daqui para lá via README novo (Apêndice B) que o
-  frontend propõe e o autor carrega.
-- **AVISO DE FRONTEND**: quando o trabalho depender do frontend, a resposta termina com
-  o aviso, no formato da constituição (`CLAUDE.md` → "AVISO DE FRONTEND"): por quê,
-  o que levar (arquivos e versões), o que rodar lá, o que trazer de volta e o que fica
-  bloqueado aqui.
+## Coordenação com o frontend
 
-## Fluxos e tempo
+- Trabalhe neste repositório. O autor leva as propostas, os arquivos, os avisos e os resultados entre os lados. Consulte `docs/ROADMAP.md` §2 para sincronização e conflitos.
+- Confira a situação da seção em `docs/CONTRATO.md` §0. Ao receber uma proposta do frontend, confira sua compatibilidade com a spec e as regras. Confirme o acordo ou devolva os pontos a ajustar. Para uma proposta do backend, solicite a confirmação do frontend pelo autor. Implemente a interface após o acordo e marque `implementado (BE)` depois da entrega e dos testes do backend.
+- O autor disponibiliza o backend real para a validação no frontend. Registre `validado` e feche a FEAT somente após receber a confirmação de que os cenários do contrato passaram.
+- Ao alterar `docs/README.md`, `docs/ROADMAP.md` ou `docs/CONTRATO.md`, incremente a versão e registre a mudança no histórico do arquivo. O autor copia o arquivo inteiro para o outro repositório.
+- Termine a resposta com um **Aviso de frontend** copiável quando houver proposta ou alteração de contrato, mudança em documento compartilhado, dependência do frontend ou uma entrega pronta para validação integrada. Pause a parte que depende do retorno e avance no trabalho independente da mesma tarefa.
 
-- Fluxos pedidos por nome ("faz a /tarefa T-xx", "/contrato FEAT-nn"…) seguem o
-  `SKILL.md` correspondente em `.claude/skills/`; o sumário acima não os substitui.
-- **Registro de tempo** é automático via hook (`.claude/hooks/tempo.mjs`) **no Claude
-  Code**. Em outras IAs, que não executam esses hooks, as horas do devlog ficam
-  **a preencher** pelo autor.
+> **Aviso de frontend — FEAT-nn**
+> - **Motivo** — O que mudou ou precisa de decisão.
+> - **Levar** — Arquivos, versões e seções pertinentes e, quando aplicável, URL do backend e dados de teste.
+> - **Executar no frontend** — Revisão ou cenários contra o backend real, com os resultados esperados.
+> - **Trazer de volta** — Confirmação, resultados ou divergências com cenário, resultado esperado e resultado observado.
+> - **Situação no backend** — O que pode seguir e o que depende do retorno.
 
-## Uso no Codex
+## Retomada e chamada de tarefas
 
-- Quando o autor pedir um fluxo como `/tarefa T-xx`, abra o `SKILL.md` correspondente
-  em `.claude/skills/` e use o texto do pedido como argumento. Consulte os papéis em
-  `.claude/agents/` nas etapas indicadas, mantendo o escopo e a revisão de cada papel.
-- Em alterações de domínio, execute a guarda manualmente com
-  `node .claude/hooks/domain-guard.mjs --all` na verificação. Ao registrar uma etapa
-  feita no Codex, deixe o tempo **a preencher** e preserve os marcos do Claude Code.
+- Use um chat por etapa, incluindo implementação, testes e ajustes da mesma tarefa. Abra outro chat para uma etapa independente.
+- Quando o autor começar o dia de trabalho, concluir uma etapa ou pedir o ponto atual, inclua um prompt curto e copiável para retomada. Confirme a próxima tarefa no roadmap, na spec ou no devlog e aguarde autorização para iniciá-la. Quando houver um Aviso de frontend, deixe-o por último.
+
+> Implemente a `T-xx`. Consulte os critérios de `REQ-xx` e a decisão `D-yy` aplicável. Retome de <entrada do devlog ou ponto atual>. Rode os testes afetados, registre a etapa e entregue o roteiro de verificação.
