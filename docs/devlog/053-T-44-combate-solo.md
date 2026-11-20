@@ -3,7 +3,7 @@
 - Data — 2026-11-20
 - Status — aguardando revisão
 - Spec — v0.61
-- Contrato — v0.60, `proposto (BE)`
+- Contrato — v0.61, `proposto (BE)`
 - Horas — a preencher pelo autor
 
 ## Objetivo
@@ -26,7 +26,7 @@ Planejar a FEAT-13 a partir do ROADMAP v0.60 e dos 23 cenários da FEAT-12 confi
 
 ## Como verificar
 
-Revisar os nove cenários da seção FEAT-13 do contrato. No caso de borda de Reflexão fatal com inventário cheio, a resposta esperada tem `victory`, `playerDown: true` e uma escolha de recompensa recuperável. Após a escolha, o save segue consultável e o jogador caído fica sem ações de aventura.
+Revisar os cenários da seção FEAT-13 do contrato. No caso de borda de Reflexão fatal com inventário cheio, o resultado é `victory` com `playerDown: true`. O GET em sessão ativa deve manter `resolveReward` como única ação disponível enquanto houver escolha. Após a última escolha, as ações ficam vazias.
 
 ## Problemas e checks
 
@@ -34,7 +34,9 @@ A FEAT-13 precisa terminar o combate com 0 PV antes de existir respawn. A decis�
 
 ## Ponte com o frontend
 
-Levar CONTRATO v0.60 e ROADMAP v0.61 completos. A T-44 aguarda confirmação do contrato. A T-45 depende desse acordo e de autorização para iniciar.
+O retorno à proposta v0.60 pediu precisão nos formatos legados e executáveis, nas escolhas por custo e no lote de transições. A v0.61 define essas interfaces e explicita `prepare/useAbility` como opção gratuita independente das outras operações de Preparar. A projeção de recompensa pendente tem prioridade sobre o bloqueio de jogador caído.
+
+Levar CONTRATO v0.61 completo. O ROADMAP v0.61 continua sendo a referência da etapa. A T-44 aguarda confirmação do contrato. A T-45 depende desse acordo e de autorização para iniciar.
 
 ## Commit sugerido
 

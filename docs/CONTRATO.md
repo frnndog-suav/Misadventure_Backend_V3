@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.60 · **Data:** 2026-11-20
+> **Versão do contrato:** 0.61 · **Data:** 2026-11-20
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -2400,6 +2400,8 @@ Base: ROADMAP v0.60, SPEC-BACKEND v0.61 (REQ-117 a REQ-123) e devlog 052. A inte
 
 ```ts
 type AbilityForm = 'targeted' | 'projectile' | 'area' | 'continuous' | 'channeled' | 'passive'
+type LegacyAbility = { name: string; text: string; id?: never }
+type Ability = LegacyAbility | ExecutableAbility
 interface ExecutableAbility {
   id: string
   name: string
@@ -2411,12 +2413,14 @@ interface ExecutableAbility {
   effects: Effect[]
   cooldown: number
   timing: 'combat' | 'outsideCombat' | 'both'
+  classRestriction: PlayerClass[]
   usesPerTurn: number
   target: 'self' | 'opponent' | 'ally' | 'allOpponents'
   duration: Duration | null
   channel: { chargesRequired: number; releaseForm: 'targeted' | 'projectile' | 'area' } | null
 }
 type CombatOutcome = { text: string; steps: RandomEventOutcomeStep[] }
+type CombatOutcomeContent = (RuleText & { steps?: never }) | CombatOutcome
 type EnemyAbilityPriority = 'selfBuff' | 'continuous' | 'selfBuffOrContinuous' | 'supportWoundedAlly' | 'highestPower'
 interface EnemyCombatRules {
   abilityUsesPerTurn?: number
@@ -2427,7 +2431,9 @@ interface EnemyCombatRules {
 
 `Ability` aceita a forma legada de nome e texto e a forma executável acima. IDs de habilidade são únicos dentro do equipamento ou bloco inimigo. `power: null` indica ausência de ataque principal. `cooldown` e `power`, quando presentes, são inteiros não negativos. `usesPerTurn` e `chargesRequired` são inteiros positivos. `channel` é obrigatório para Canalizada e nulo para as demais. Cada uso de Canalizada paga os custos declarados e avança uma carga. Na carga final aplica-se `releaseForm`. Um golpe acima do percentual configurado da vida no início da canalização zera as cargas. Contínua declara duração e só pode haver uma ativa por equipamento. Passiva tem custo vazio, usa a disponibilidade da origem e não dispara gatilho de uso. Área ofensiva usa `allOpponents`; o backend resolve todos os oponentes vivos. Usos fora de combate só são oferecidos com alvos e condições resolvíveis naquela fase.
 
-`CombatEventCard` conserva seus blocos atuais, inclusive `count`, e ganha `escapeThreshold?: number | null`. `goodOutcome` e `badOutcome` passam a aceitar `CombatOutcome` além do texto legado. Cada bloco inimigo pode declarar `combatRules?: EnemyCombatRules`. Regras próprias prevalecem sobre o perfil. A ordem da lista de prioridade define os critérios. Entre habilidades da mesma prioridade, usar a ordem de `preferredAbilityIds`, quando houver, e depois a ordem impressa. Em `highestPower`, comparar Poder primeiro. IDs de preferência precisam existir no bloco. A publicação de um deck explícito exige cartas com desfechos e habilidades inimigas executáveis. `CONTENT_INVALID` aponta o campo inválido, inclusive o índice do bloco e da habilidade quando pertinente. As operações de edição, importação e publicação mantêm as proteções de referência e de conteúdo em uso.
+A presença da chave `id` seleciona a variante executável e exige todos os seus campos obrigatórios, inclusive ID não vazio. Sem `id`, o objeto aceita somente `name` e `text`. `classRestriction: []` permite qualquer classe. Uma lista não vazia exige ao menos uma das classes listadas ativa para disponibilizar a habilidade, inclusive passiva. Habilidades de inimigos exigem lista vazia. A restrição da habilidade é independente da restrição do equipamento.
+
+`CombatEventCard` conserva seus blocos atuais, inclusive `count`, e ganha `escapeThreshold?: number | null`. Ausência ou `null` usa `combatEscapeThreshold` do laboratório. Um inteiro de 0 a 20 sobrescreve esse padrão. `noEscape` continua impedindo a tentativa voluntária. `goodOutcome` e `badOutcome` são `CombatOutcomeContent`. Com a chave `steps`, o valor deve conter uma lista de passos válidos; `steps: []` é executável e resolve sem passos. Sem a chave, aceita-se somente `text`. Cada bloco inimigo pode declarar `combatRules?: EnemyCombatRules`. Regras próprias prevalecem sobre o perfil. A ordem da lista de prioridade define os critérios. Entre habilidades da mesma prioridade, usar a ordem de `preferredAbilityIds`, quando houver, e depois a ordem impressa. Em `highestPower`, comparar Poder primeiro. IDs de preferência precisam existir no bloco. A publicação de um deck explícito exige cartas com desfechos e habilidades inimigas executáveis. `CONTENT_INVALID` aponta o campo inválido, inclusive o índice do bloco e da habilidade quando pertinente. As operações de edição, importação e publicação mantêm as proteções de referência e de conteúdo em uso.
 
 `LabConfig` e o PATCH correspondente ganham os campos abaixo. GET e reset retornam valores e limites. Configurações existentes recebem os padrões ao migrar. O custo de fuga reutiliza `escapeVigorPercent`. Uma tentativa manual bem-sucedida exige total estritamente maior que o limiar.
 
@@ -2458,13 +2464,22 @@ type CombatAction =
   | { type: 'activateCombatEffect'; combatId: string; turnId: string;
       effectId: string; targetId?: string; payment?: EventPayment }
 
+type CombatPaymentCost = { costIndex: number; text: string } & (
+  | { type: 'automatic' }
+  | { type: 'handCards'; count: number; eligibleCopyIds: string[] }
+  | { type: 'equipmentSlots'; count: number; eligibleSlots: EquipmentSlot[] }
+  | { type: 'resources'; count: number; eligibleResources: { cardId: string; maxCopies: number }[] }
+)
 interface CombatOption {
   targetIds: string[]
   vigorCost: number
-  eligibleHandCopyIds: string[]
-  eligibleEquipmentSlots: EquipmentSlot[]
-  eligibleResourceCardIds: string[]
-  handPayment: { text: string } | null
+  paymentCosts: CombatPaymentCost[]
+}
+type CombatEffectOption = CombatOption & {
+  effectId: string
+  text: string
+  origin: { type: 'inventory'; cardId: string; effectIndex: number }
+    | { type: 'equipment'; cardId: string; equipmentSlot: EquipmentSlot; effectIndex: number }
 }
 interface CombatState {
   id: string
@@ -2481,7 +2496,7 @@ interface CombatState {
   }[]
   attackTargetIds: string[]
   abilities: (CombatOption & { equipmentSlot: EquipmentSlot; abilityId: string })[]
-  effects: (CombatOption & { effectId: string })[]
+  effects: CombatEffectOption[]
   abilityStates: {
     actorId: string; equipmentSlot: EquipmentSlot | null; abilityId: string
     cooldownRemaining: number; usesRemaining: number; charges: number | null; active: boolean
@@ -2499,13 +2514,38 @@ interface CombatResult {
 }
 ```
 
-`Party` ganha `combat: CombatState | null` e `lastCombatResult: CombatResult | null`. `PlayerState` ganha `down: boolean`. IDs de combate, participantes e turnos são estáveis durante recarga. O ID do jogador na ordem é `memberId`. Inimigos derrotados continuam projetados com 0 PV e saem da seleção de alvos. A ordem só é recalculada por ciclo ou alterada por efeito explícito. `blockIndex` e `copyIndex` começam em zero. A lista de opções contém somente ações elegíveis; `targetId` é obrigatório para alvo individual escolhido, omitido para alvo próprio ou conjunto fixo. O servidor valida o pagamento completo conforme a carta e reaproveita os IDs de cópia da FEAT-12. Habilidades fora de combate usam `prepare` com `operation: 'useAbility'`, `equipmentSlot`, `abilityId` e `payment?: EventPayment`. `PlayerState` projeta `usableAbilities: (CombatOption & { equipmentSlot: EquipmentSlot; abilityId: string })[]` nesses momentos. A janela de encontro aleatório fecha no primeiro pagamento.
+`Party` ganha `combat: CombatState | null` e `lastCombatResult: CombatResult | null`. `PlayerState` ganha `down: boolean`. IDs de combate, participantes e turnos são estáveis durante recarga. O ID do jogador na ordem é `memberId`. Inimigos derrotados continuam projetados com 0 PV e saem da seleção de alvos. A ordem só é recalculada por ciclo ou alterada por efeito explícito. `blockIndex` e `copyIndex` começam em zero. A lista de opções contém somente ações elegíveis. Envie `targetId` para alvo individual escolhido e omita-o para alvo próprio ou conjunto fixo.
 
-As intenções entram em `POST /parties/:partyId/actions` e retornam `200 Party`. A ordem de `availableActions` para o membro é `activateCombatEffect`, `useAbility`, `escapeCombat`, `combatAttack`, `endCombatTurn`, filtrada pela janela e elegibilidade. Todas custam 0 PA. A preparação acaba no primeiro ataque. Enquanto houver combate, Preparar de aventura, ações de zona, fim de vez e encerramento de sessão ficam bloqueados. Turnos inimigos são resolvidos na mesma resposta da ação que os disparar, até a próxima decisão do jogador ou o desfecho. O solo dispensa prazo de decisão.
+Cada entrada de `paymentCosts` corresponde ao índice a partir de zero do custo da carta. `text` é a instrução ou descrição em pt-BR pronta para exibir. Entradas `automatic` incluem saldos, descarte integral e sorteios feitos pelo backend. Nas demais, `count` é a quantidade exata de escolhas, ou de cópias para recursos. Para recursos, selecione de 1 a `maxCopies` por ID usado, com soma igual a `count` naquela entrada. Monte o `EventPayment` juntando as escolhas manuais, somando cópias do mesmo recurso por `cardId` e usando cada cópia de mão e slot uma vez. Omita `payment` quando todas as entradas forem automáticas ou a lista estiver vazia. O backend encontra uma alocação válida do lote aos custos na ordem da carta, com os critérios de cada custo e o saldo compartilhado. Candidatos e limites projetados por custo podem se sobrepor. Uma combinação incompatível recebe `paymentInvalid` sem cobrança parcial.
 
-Para exibir as transições automáticas, a resposta de ação de grupo ganha `combatUpdates: CombatUpdate[]`, em ordem de resolução, vazio nas demais ações. Cada item contém `combatId`, `type` e, quando houver agente, `actorId`. Tipos propostos: `combatStarted`, `combatTurnStarted` (inclui `turnId`, `cycle`), `combatAbilityUsed` (inclui `abilityId`), `combatEffectActivated` (inclui `effectId`), `combatDamageResolved` (inclui `targetId`, `source: 'attack' | 'ability' | 'effect'`, `hit`, `damage`, `reflectedDamage`, `targetHealth`, `actorHealth`), `combatEscapeAttempted` (inclui `naturalRoll: number | null`, `total: number | null`, `threshold`, `vigorSpent`, `succeeded`) e `combatEnded` (inclui `result: CombatResult`). O frontend usa o snapshot para renderizar o estado e a lista ordenada para apresentar o que ocorreu naquela resposta.
+`CombatEffectOption.text` vem do efeito na carta e `origin` identifica sua origem e índice. `effectId` é opaco e identifica essa origem e efeito no combate. Envie o ID da opção do turno atual. O backend valida a origem e a disponibilidade novamente.
 
-Ao terminar o combate, `combat` vira nulo e o resultado permanece disponível até o próximo combate. Se houver recompensa pendente, o fluxo de manter/deixar usa o contrato da FEAT-12. `PendingReward.source` ganha `{ type: 'combatEvent'; combatId: string }`. A carta fica reservada até o desfecho terminar. Na vitória com queda do jogador por Reflexão, o jogador pode decidir as recompensas. Depois do desfecho, um jogador caído pode consultar o save e encerrar/reabrir a sessão, com `availableActions: []`. A retomada após o nocaute será definida na FEAT-14.
+Habilidades fora de combate usam `{ type: 'prepare', operation: 'useAbility', equipmentSlot, abilityId, payment?: EventPayment }`, com aplicação ao próprio jogador ou sem seleção de alvo. São gratuitas e elegíveis para o membro da vez, inclusive com 0 PA, se a habilidade declara `outsideCombat` ou `both`, a origem funciona e a classe, os usos, a recarga e os custos permitem. `PlayerState.usableAbilities` usa `(CombatOption & { equipmentSlot: EquipmentSlot; abilityId: string })[]` e fica vazio em combate, fora da vez, com recompensa pendente ou após a primeira parte aceita do encontro. Quando a lista tem uma opção, `availableActions` inclui `prepare` mesmo se equipar, desequipar ou ativar efeito estiverem indisponíveis. Na antecipação e no encontro sem pagamento, essa inclusão habilita apenas as operações de Preparar permitidas pela fase. Uma tentativa após o primeiro pagamento recebe 409 `eventPaymentStarted` antes de conferir a habilidade e seus custos.
+
+A ordem de `availableActions` para o membro é `activateCombatEffect`, `useAbility`, `escapeCombat`, `combatAttack`, `endCombatTurn`, filtrada pela janela e elegibilidade. Todas custam 0 PA. A preparação acaba no primeiro ataque. Enquanto houver combate, Preparar de aventura, ações de zona, fim de vez e encerramento de sessão ficam bloqueados. Turnos inimigos são resolvidos na mesma resposta da ação que os disparar, até a próxima decisão do jogador ou o desfecho. O solo dispensa prazo de decisão.
+
+```ts
+type CombatParticipant =
+  | { type: 'player'; id: string; name: string }
+  | { type: 'enemy'; id: string; name: string; blockIndex: number; copyIndex: number }
+type CombatUpdate = { combatId: string } & (
+  | { type: 'combatStarted'; cardId: string; cardTitle: string; participants: CombatParticipant[] }
+  | { type: 'combatTurnStarted'; actorId: string; turnId: string; cycle: number }
+  | { type: 'combatAbilityUsed'; actorId: string; abilityId: string; equipmentSlot: EquipmentSlot | null }
+  | { type: 'combatEffectActivated'; actorId: string; effectId: string }
+  | { type: 'combatDamageResolved'; actorId: string | null; targetId: string;
+      source: 'attack' | 'ability' | 'effect'; hit: boolean | null; damage: number;
+      reflectedDamage: number; targetHealth: number; actorHealth: number | null }
+  | { type: 'combatEscapeAttempted'; actorId: string; naturalRoll: number | null;
+      total: number | null; threshold: number; vigorSpent: number; succeeded: boolean }
+  | { type: 'combatEnded'; result: CombatResult }
+)
+type PartyActionResponse = Party & { combatUpdates: CombatUpdate[] }
+```
+
+`POST /parties/:partyId/actions` retorna `200 PartyActionResponse`. O lote fica no nível superior, lista as transições daquela ação em ordem de resolução e vem vazio quando a ação não gera transição de combate. `GET /parties/:partyId` retorna `200 Party` sem a chave `combatUpdates`. O lote não é parte do snapshot nem reaparece ao recarregar. `combatStarted` vem primeiro e inclui o membro e todas as cópias de inimigo na ordem impressa. Seus IDs são os usados nos itens seguintes, inclusive quando a revelação inicia e termina o combate na mesma resposta com `combat: null`. Para dano de efeito, `hit` é nulo; quando o dano não tem combatente de origem, `actorId` e `actorHealth` são nulos.
+
+Ao terminar o combate, `combat` vira nulo e o resultado permanece disponível até o próximo combate. Se houver recompensa pendente, o fluxo de manter/deixar usa o contrato da FEAT-12. `PendingReward.source` ganha `{ type: 'combatEvent'; combatId: string }`. A carta fica reservada até o desfecho terminar. Na vitória com queda do jogador por Reflexão, `down: true` e `availableActions: ['resolveReward']` coexistem para o dono da escolha em sessão ativa, inclusive após GET ou reabertura de sessão. `resolveReward` valida a escolha sem passar pelo bloqueio de jogador caído. A cada escolha resolvida, a projeção mantém `resolveReward` se abrir outra, ou muda para `[]` ao concluir o desfecho. Depois, o jogador caído pode consultar o save e encerrar/reabrir a sessão. A retomada após o nocaute será definida na FEAT-14.
 
 **Recusas.** Reutiliza 400 `ACTION_INVALID` para payload malformado e 409 `ACTION_NOT_ALLOWED` para intenção incompatível com estado. Motivos novos: `combatInProgress`, `staleCombat`, `staleCombatTurn`, `wrongCombatPhase`, `combatTargetUnavailable`, `combatAbilityUnavailable`, `playerDown`. Reutiliza `choicePending`, `notEnoughVigor`, `paymentInvalid`, `escapeForbidden` e motivos de efeitos aplicáveis. Conferir sessão, combate e turno antes de janela, alvo e pagamento. Recusas preservam save, RNG e `savedAt`. O encerramento de sessão durante combate usa 409 `ACTION_NOT_ALLOWED` com `combatInProgress`.
 
@@ -2516,11 +2556,14 @@ Ao terminar o combate, `combat` vira nulo e o resultado permanece disponível at
 | Revelação de deck misto em save v8 | Ordem relativa original preservada, reserva de combate entra no fundo, escolha antiga permanece aberta e RNG só avança por sorteios das ações. |
 | Celeridade empatada e dois inimigos idênticos | Inimigos agem primeiro na ordem impressa e têm IDs distintos. Mudança de Celeridade só reordena no ciclo seguinte. |
 | 0 PA, habilidade com custo e ataque | Habilidade paga uma vez, ataque básico continua disponível e cartas gastas como custo permanecem descartadas. Recarga bloqueia uso pelo intervalo de §17.1. |
-| Habilidade fora de combate | A opção aparece em Preparar, antecipação e encontro quando elegível. O primeiro pagamento fecha a janela do encontro. Entrar no combate zera a recarga anterior. |
+| Habilidade fora de combate como única opção de Preparar, com 0 PA | `usableAbilities` contém a habilidade e `availableActions` inclui `prepare`. Após o primeiro pagamento no encontro, a lista fica vazia e repetir o uso retorna 409 `eventPaymentStarted`. Entrar no combate zera a recarga anterior. |
+| Catálogo legado e habilidade restrita | Habilidade com `id` sem campo obrigatório ou desfecho com `steps: null` retorna `CONTENT_INVALID`. Variantes legadas continuam legíveis e `steps: []` é executável. Habilidade restrita fica indisponível com a classe inativa, mesmo com equipamento em uso. Limiar ausente ou nulo usa o padrão e `0` é uma sobrescrita. |
+| Pagamento automático e escolha de mão, slot e recursos | O frontend monta o lote pelas quantidades projetadas. Uma escolha compartilhada que excede o saldo ou repete uma cópia recebe `paymentInvalid` sem consumir o sorteio automático, mudar o estado ou salvar. |
+| Revelação com vitória ou derrota imediata | O POST traz `combat: null` e o lote começa em `combatStarted` com carta e participantes, segue em ordem de resolução e termina em `combatEnded`. O GET mantém o resultado e omite o lote. |
 | Área, Precisão zero, elemento e Reflexão | Área dispensa rolagem, ataque dirigido com Precisão zero erra sem RNG, e a resposta traz dano final e refletido na ordem de resolução. |
 | Suporte com aliado ferido e Canalizada após dano | IA usa a habilidade de apoio elegível e mantém o ataque básico. Dano recebido altera as cargas conforme a habilidade. |
 | Fuga falha e limite em Sem fuga | Falha custa Vigor e concede ataque livre. Limite encerra sem rolagem, cobra a perda de Pico e pula recompensas e coisa ruim. |
-| Último inimigo, Reflexão fatal e inventário cheio | Vitória com `playerDown: true`, escolha de recompensa resolvível após recarga e membro caído bloqueado para ações após o desfecho. Em derrota, coisa ruim executada uma única vez. |
+| Último inimigo, Reflexão fatal e inventário cheio | Vitória com `playerDown: true`. Com escolha pendente, GET em sessão ativa traz `down: true` e `availableActions: ['resolveReward']`. Manter ou deixar avança o desfecho. Após a última escolha, `availableActions: []`. Em derrota, coisa ruim executada uma única vez. |
 | Turno obsoleto após recarga | 409 `staleCombatTurn` e preservação de estado, RNG e `savedAt`. A intenção com o turno atual prossegue. |
 
 ## 4. Códigos de erro
@@ -2613,3 +2656,4 @@ Ao terminar o combate, `combat` vira nulo e o resultado permanece disponível at
 | 0.58 | 2026-11-20 | BE | FEAT-12 `implementado (BE)`: ações HTTP, projeção e save v8 validados pelo autor. Vasculhar com inventário cheio segue a FEAT-12. Validação integrada pendente. |
 | 0.59 | 2026-11-20 | FE | FEAT-12 validada na T-62 com MSW desligado. Interface com as fixtures e 23 cenários determinísticos contra API v0.58. Prazos multiplayer seguem a FEAT-26. |
 | 0.60 | 2026-11-20 | BE | FEAT-13 `proposto (BE)` na T-44. Catálogo, laboratório, ações, estado, desfechos e cenários determinísticos de combate solo. |
+| 0.61 | 2026-11-20 | BE | FEAT-13 permanece `proposto (BE)` após revisão do frontend. Define variantes de conteúdo, restrição de classe, opções de pagamento, elegibilidade de Preparar, lote do POST e recompensa após Reflexão fatal. |
