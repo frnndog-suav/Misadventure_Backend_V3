@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.54 · **Data:** 2026-11-20
+> **Versão do contrato:** 0.56 · **Data:** 2026-11-20
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -2158,7 +2158,7 @@ Seja `G` criado com `{ "name": "Os Teimosos", "characterName": "Lia", "playerCla
 
 Só nos e2e do backend: Pico abaixo do requisito com passivo, `removeDebuffs`/`removeBuffs`, as demais durações executadas (vencimento no `move` e na virada da rodada), `donateLife`/`reducePeak`/`payGold` com `Quantity` em fórmula e `minimumNotMet`, `random` no descarte, saves antigos e cada regra de `CONTENT_INVALID`.
 
-### FEAT-12 — Eventos aleatórios — `proposto (BE)`
+### FEAT-12 — Eventos aleatórios — `acordado`
 
 Regras de README 3.4, 6.5–6.6, 11.3, 12.2, 12.6, 13 e 14–15. Usa `POST /parties/:partyId/actions` e a resposta `200 Party`. O GET devolve o mesmo estado persistido, inclusive após recarga ou retomada da sessão.
 
@@ -2202,7 +2202,7 @@ type RandomEventAction =
   | { type: 'escapeEvent'; encounterId: string }
 
 interface EventPayment {
-  handCards?: string[] // ids das cópias na mão, nunca ids de catálogo
+  handCards?: string[] // IDs de cópia quando o jogador precisa escolher
   equipmentSlots?: EquipmentSlot[]
   resources?: { cardId: string; copies: number }[] // agregados por cardId no inventário
 }
@@ -2228,6 +2228,7 @@ interface RandomEventEncounter {
     status: 'unpaid' | 'partial' | 'paid' | 'check'
     remaining?: { specific: Partial<Record<Attribute, number>>; any: number } | { copies: number }
     payable: boolean
+    handCardSelection: 'choose' | 'random' | null
     eligibleHandCopyIds: string[]
     eligibleEquipmentSlots: EquipmentSlot[]
     eligibleResourceCardIds: string[]
@@ -2264,9 +2265,13 @@ interface RandomEventResult {
 
 `availableActions` lista apenas os tipos válidos no estado corrente, na ordem da tabela para escolhas abertas, e é vazio para os demais membros. Fora de escolhas, `startEvent` entra imediatamente antes de `endTurn`. Em antecipação e no início do encontro, `activatableEffects` usa os mesmos IDs e intenção da FEAT-11, filtrados por fase e disponibilidade. Habilidades de combate dependem da FEAT-13. Fora desses momentos, Preparar, ações de zona e `endTurn` são bloqueados enquanto houver escolha. Cada ação de encontro e recompensa é gratuita e continua disponível com 0 PA.
 
+**Usar um consumível no encontro** é ativar seu efeito com `{ type: 'prepare', operation: 'activate', cardId, effectIndex, payment? }`, conforme a FEAT-11. Antes da primeira parte aceita, o membro da vez recebe `prepare` em `availableActions` quando há ativação elegível. A entrada correspondente em `activatableEffects` traz `source: 'inventory'`, `cardId`, `effectIndex` e `handPayment`. Quando `handPayment` é `null`, omita `payment`. A ativação aplica o efeito, consome uma cópia pelo custo `consumeSelf` e a envia ao limbo. É gratuita e seus custos ficam fora de `randomEventEncounter.payments`. Após a primeira parte aceita, `prepare` sai de `availableActions`, `activatableEffects` fica vazio e a mesma intenção recebe `409 eventPaymentStarted`, conferido antes da posse e dos custos do efeito.
+
 Erros preservam a ordem 404 grupo → 400 `ACTION_INVALID` forma → 409 sessão → 409 `ACTION_NOT_ALLOWED` regra. Motivos novos em `details.reason`: `choicePending` para ação de zona/encerrar vez com escolha aberta, `eventDeckEmpty`, `staleEncounter`, `wrongEventPhase`, `eventPaymentStarted` para fuga ou Preparar após primeira parte, `escapeForbidden` por símbolo ou Pico zero sem fuga automática, `requirementPaid`, `requirementNotPayable` para verificação ou ID desconhecido, `requirementsNotPaid` se `resolveEvent` ainda exige pagamentos, `eventMinimumNotMet`, `staleReward` e `rewardDoesNotFit`. Reutiliza `noActionPoints`, `notEnoughVigor` e `paymentInvalid`. ID obsoleto é conferido antes da fase e a fase antes das condições específicas. Todo erro deixa save, relógios, ledger e RNG intactos.
 
-Cada envio para atributo ou descarte de atributo usa exatamente uma cópia. O backend valida cada escolha em relação ao saldo e às restrições cumulativas do requisito, inclusive igualdade ou distinção. As demais partes são integrais, com custos calculados pelo backend e seleção apenas quando exigida (slots, recursos ou cartas). Custos aleatórios são escolhidos pelo RNG do save. Atributos entregues ou descartados vão para o descarte próprio; manipulação usa o destino da operação e recursos/equipamentos pagos vão ao limbo.
+Cada envio para atributo ou descarte de atributo usa exatamente uma cópia. `handCardSelection: 'choose'` pede `payment.handCards` com um único `copyId` de `eligibleHandCopyIds` nessas partes. Cartas com o mesmo `cardId` mantêm IDs distintos. `handCardSelection: 'random'` em `discardFromHand` com `random: true` devolve `eligibleHandCopyIds: []`. Nesse caso cada envio contém apenas `type`, `encounterId` e `requirementId`. Enviar `payment` é recusado com `409 paymentInvalid`. O backend sorteia uma cópia elegível da mão pelo RNG do save e registra `{ copyId, cardId }` em `payments[].handCards` quando aceita a parte. `handCardSelection: null` indica que o requisito dispensa escolha de cartas da mão. O backend aplica o saldo e as restrições cumulativas do requisito, inclusive igualdade ou distinção, a cada cópia escolhida ou sorteada. Após a primeira de duas partes aceitas, a resposta traz `status: 'partial'` e `remaining: { copies: 1 }`.
+
+As demais partes são integrais, com custos calculados pelo backend e seleção apenas quando exigida (slots, recursos ou cartas). Em manipulação que exige selecionar cartas da mão, `handCardSelection: 'choose'` orienta o envio de todos os IDs exigidos em uma única parte. Atributos entregues ou descartados vão para o descarte próprio. Manipulação usa o destino da operação e recursos ou equipamentos pagos vão ao limbo.
 
 **Última parte.** Proposta para fechar a transação de pagamento: simula a última parte, inclusive efeitos dos custos sobre Vigor e modificadores, e nesse estado verifica todos os mínimos. Se algum falhar, responde `409 eventMinimumNotMet` com `details.checks: { requirementId, stat, minimum, actual }[]` na ordem da carta, contendo as falhas. A última parte e qualquer sorteio desse envio são revertidos. As partes aceitas anteriormente ficam no ledger e a fase continua `encounter`. Pode tentar outra cópia válida ou desistir. `resolveEvent` faz a mesma checagem quando só há verificações. Um envio final aceito transita automaticamente para êxito. Desistir ou falhar na fuga aciona revés. As fontes de Pico do Apêndice A são aplicadas uma vez e `peakDelta` mostra a variação efetiva do encontro.
 
@@ -2336,6 +2341,10 @@ Exemplo dos campos executáveis de `cart` no cenário da última parte:
 | Após o 409, `{"type":"giveUpEvent","encounterId":"e1"}`, com desfecho vazio e uma carta no topo de atributos. | 200, encontro `null`, ouro 10, `lastRandomEvent.resolution: "setback"`, `cause: "gaveUp"`, `peakDelta: -1`, `replacement: {"requested":1,"drawn":1}`. |
 | Variante do pagamento final com Vigor inicial 8, mesmos custos, desfecho vazio e uma carta no topo de atributos. | 200, `lastRandomEvent.resolution: "success"`, recibo `{"requirementId":"vigor","vigor":3}`, Vigor 5, `peakDelta: 1`, reposição 1 de 1 e encontro `null`. |
 | Só falta uma carta de Força, mínimo de Vigor 5 e Vigor atual 4. A mão tem `h1` e `h2` com o mesmo `cardId`. `{"type":"payEventRequirement","encounterId":"e1","requirementId":"attrs","payment":{"handCards":["h2"]}}`. | 409 `eventMinimumNotMet`, check `actual: 4`. GET mantém `h1` e `h2` na mão, sem recibo para `h2`. Desistir repõe apenas as cópias aceitas em pedidos anteriores. |
+| Com `h1` e `h2` do catálogo `fixture.strength-basic`, `attrs` pede duas Forças. Envie `{"type":"payEventRequirement","encounterId":"e1","requirementId":"attrs","payment":{"handCards":["h2"]}}`. | 200. `handCopies` contém `[{"copyId":"h1","cardId":"fixture.strength-basic"}]`, `attrs` fica `partial` com uma Força faltando e `payments` recebe `{"requirementId":"attrs","handCards":[{"copyId":"h2","cardId":"fixture.strength-basic"}]}`. |
+| Antes da primeira parte, com 0 PA, vida 10 de 20 e duas unidades de `fixture.healing-potion` no inventário. `availableActions` inclui `prepare` e `activatableEffects` inclui `{"source":"inventory","cardId":"fixture.healing-potion","effectIndex":0,"handPayment":null}`. Envie `{"type":"prepare","operation":"activate","cardId":"fixture.healing-potion","effectIndex":0}`. | 200 com vida 15, uma poção no inventário, uma no limbo, 0 PA, fase `encounter` e `payments: []`. Em seguida, pague uma parte intermediária e repita a ativação. A ação deixa de aparecer e recebe 409 `eventPaymentStarted`, com a segunda poção e a vida preservadas. |
+| Requisito `discard` com `kind: "discardFromHand"`, `random: true`, duas cartas quaisquer, sem exclusões nem restrição de igualdade. A mão tem `h1`, `h2`, `h3`. RNG controlado escolhe `h2` primeiro e `h3` em seguida. Mínimo de Vigor 5, Vigor atual 4. Envie `{"type":"payEventRequirement","encounterId":"e1","requirementId":"discard"}`. | 200. `handCopies` retém `h1` e `h3`. O requisito retorna `{"requirementId":"discard","status":"partial","remaining":{"copies":1},"payable":true,"handCardSelection":"random","eligibleHandCopyIds":[],"eligibleEquipmentSlots":[],"eligibleResourceCardIds":[],"amountDue":null}`. O recibo registra `h2` e seu `cardId`. |
+| Repita `{"type":"payEventRequirement","encounterId":"e1","requirementId":"discard"}` no mesmo estado. | 409 `{"error":{"code":"ACTION_NOT_ALLOWED","message":"Esta ação não é permitida agora.","details":{"reason":"eventMinimumNotMet","checks":[{"requirementId":"min-vigor","stat":"vigor","minimum":5,"actual":4}]}}}`. A tentativa que sorteou `h3` é revertida. GET mantém `h1` e `h3`, o recibo de `h2`, o saldo de uma cópia e o mesmo `savedAt`. O teste do save confirma RNG idêntico ao estado posterior à primeira parte. Repetir a tentativa usa o mesmo sorteio. Com Vigor 5 desde o início, o segundo envio retorna 200 com êxito, recibos de `h2` e `h3` e duas cópias pedidas na reposição. |
 | Evento só com Esquiva mínima 80, Esquiva efetiva 79. `{"type":"resolveEvent","encounterId":"e1"}`. | 409 `eventMinimumNotMet`, check `actual: 79`. Com Esquiva 80, 200 com êxito e reposição 0 de 0. |
 | Pico 10, Vigor 6, 0 PA, limiar 10, rolagem 10. `{"type":"escapeEvent","encounterId":"e1"}`. | 200 com revés e `escape: {"vigorSpent":2,"naturalRoll":10,"total":10,"threshold":10,"succeeded":false,"actionPointsLost":0,"nextTurnActionPointDebtAdded":1}`. Com 1 PA perde 1 agora e não cria dívida. Na próxima vez de `m1`, com 3 PA configurados, inicia com 2 e dívida 0. Com rolagem 11, resolução `escaped`, Vigor 4, Pico 10 e dívida 0. |
 | Carta Sem fuga e outra com custo 2, Vigor disponível 1. Mesmo pedido de fuga. | Respectivamente 409 `escapeForbidden` e 409 `notEnoughVigor`, sem rolar ou cobrar. |
@@ -2429,3 +2438,5 @@ Exemplo dos campos executáveis de `cart` no cenário da última parte:
 | 0.52 | 2026-11-19 | BE | FEAT-11 `implementado (BE)`: efeitos e status no catálogo e no grupo, ativação em Preparar, save v7 compatível com v2 a v6 e cenários Supertest. O cenário do amuleto explicita `initialGold: 0`. |
 | 0.53 | 2026-11-20 | FE | FEAT-11 `validado`: cenários HTTP e telas do catálogo, editor e partida conferidos contra o backend real v0.52, com MSW desligado. Sem mudança de formato. |
 | 0.54 | 2026-11-20 | BE | FEAT-12 `proposto (BE)`: encontro persistido, requisitos e desfechos executáveis, pagamentos por cópia, checagem da última parte, fuga e dívida de PA, reposição, prazos, decks por tipo de zona e recompensas pendentes por origem. Substitui a recusa provisória da FEAT-32 para Vasculhar sem espaço. |
+| 0.55 | 2026-11-20 | BE | FEAT-12 `proposto (BE)`: explicita o uso de consumível via `prepare/activate` antes da primeira parte, a seleção da mão em `handCardSelection`, o descarte aleatório de uma cópia por envio e a reversão da última parte e do RNG. Acrescenta cenários de ativação, sorteio e pagamento com IDs de cópias duplicadas. |
+| 0.56 | 2026-11-20 | BE | FEAT-12 `acordado`: frontend aceitou a v0.55 integralmente. Os cenários acordados incluem a reversão do RNG na última parte recusada e o consumo da cópia escolhida entre duplicatas. |
