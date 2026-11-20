@@ -498,6 +498,13 @@ function checkZoneDecks(
   })
 }
 
+export function isEventDeckCard(card: TCard): boolean {
+  return (
+    card.type === 'combatEvent' ||
+    (card.type === 'randomEvent' && card.escapeThreshold !== undefined)
+  )
+}
+
 function checkRandomEvent(
   card: TRandomEventCard,
   cardsById: ReadonlyMap<string, TCard>,

@@ -9,6 +9,7 @@ import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_err
 import { ContentReferencedError } from '@/domain/catalog/application/use-cases/_errors/content-referenced-error'
 import {
   checkCatalogIntegrity,
+  isEventDeckCard,
   isRewardCard,
 } from '@/domain/catalog/enterprise/catalog-integrity'
 import {
@@ -275,7 +276,16 @@ export class ImportCollectionUseCase {
       ...removed,
       ...keptCards.filter((card) => !isRewardCard(card)).map((card) => card.id),
     ])
-    if (isCitedInRewardDeck(outsideCards, leaving)) {
+    const leavingEvents = new Set([
+      ...removed,
+      ...keptCards
+        .filter((card) => !isEventDeckCard(card))
+        .map((card) => card.id),
+    ])
+    if (
+      isCitedInRewardDeck(outsideCards, leaving, 'reward') ||
+      isCitedInRewardDeck(outsideCards, leavingEvents, 'event')
+    ) {
       return new ContentReferencedError('rewardDeck')
     }
     return null

@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common'
 import { eq } from 'drizzle-orm'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
+import { GameConfigRepository } from '@/domain/lab/application/repositories/game-config-repository'
 import { type Database, DRIZZLE } from '../../database.tokens'
 import { DrizzlePartyMapper } from '../mappers/drizzle-party-mapper'
 import { parties } from '../schema'
@@ -11,7 +12,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 /** Um save = uma linha; cada gravação é um único comando, logo atômica (D-31, REQ-22). */
 @Injectable()
 export class DrizzlePartiesRepository implements PartiesRepository {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly gameConfigRepository: GameConfigRepository
+  ) {}
 
   async create(party: Party): Promise<void> {
     await this.db.insert(parties).values(DrizzlePartyMapper.toDrizzle(party))
@@ -46,7 +50,14 @@ export class DrizzlePartiesRepository implements PartiesRepository {
   }> {
     const cardIds = new Set<string>()
     const playerClasses = new Set<string>()
-    for (const party of await this.findAll()) {
+    const [savedParties, gameConfig] = await Promise.all([
+      this.findAll(),
+      this.gameConfigRepository.get(),
+    ])
+    for (const entry of gameConfig?.values.reserveDeck ?? []) {
+      if (entry.type === 'card') cardIds.add(entry.cardId)
+    }
+    for (const party of savedParties) {
       const inUse = party.contentInUse()
       for (const id of inUse.cardIds) cardIds.add(id)
       for (const playerClass of inUse.playerClasses)

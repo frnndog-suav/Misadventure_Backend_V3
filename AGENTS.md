@@ -61,6 +61,7 @@ Use o mapa para selecionar as consultas da tarefa e mantenha o conteúdo técnic
 
 ## Coordenação com o frontend
 
+- Somente o autor executa testes do projeto frontend. O Codex jamais os executa, inclusive por meio de scripts, automações ou ferramentas. Quando precisar de um teste no frontend, avise o autor, indique o cenário e o resultado esperado e aguarde o retorno antes de prosseguir com a parte que depende desse teste.
 - Trabalhe neste repositório. O autor leva as propostas, os arquivos, os avisos e os resultados entre os lados. Consulte `docs/ROADMAP.md` §2 para sincronização e conflitos.
 - Confira a situação da seção em `docs/CONTRATO.md` §0. Ao receber uma proposta do frontend, confira sua compatibilidade com a spec e as regras. Confirme o acordo ou devolva os pontos a ajustar. Para uma proposta do backend, solicite a confirmação do frontend pelo autor. Implemente a interface após o acordo e marque `implementado (BE)` depois da entrega e dos testes do backend.
 - O autor disponibiliza o backend real para a validação no frontend. Registre `validado` e feche a FEAT somente após receber a confirmação de que os cenários do contrato passaram.

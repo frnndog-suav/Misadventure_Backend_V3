@@ -490,6 +490,8 @@ describe('Cofre e Vasculhar (e2e)', () => {
       rewardDecks?: unknown
     }
     const config = { ...state.config }
+    delete config.escapeVigorPercent
+    delete config.reserveDeck
     delete config.vaultCapacity
     delete config.vaultDeckSlots
     delete config.vaultGoldCapacity

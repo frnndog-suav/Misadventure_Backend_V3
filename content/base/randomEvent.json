@@ -3,9 +3,34 @@
     "id": "base.abandoned-cart",
     "title": "Carroça Abandonada",
     "flavorText": "Há rodas quebradas e nenhum dono à vista.",
-    "requirements": [{ "text": "Teste de Sabedoria." }],
-    "goodOutcome": { "text": "O grupo encontra provisões intactas." },
-    "badOutcome": { "text": "A carroça desaba e fere quem a vasculha." },
-    "noEscape": false
+    "requirements": [
+      {
+        "id": "inspect-cart",
+        "text": "Entregue 1 símbolo de Sabedoria.",
+        "kind": "attributes",
+        "specific": { "wisdom": 1 },
+        "any": 0
+      }
+    ],
+    "goodOutcome": {
+      "text": "O grupo encontra provisões intactas.",
+      "steps": [{ "type": "drawRewards", "count": 1 }]
+    },
+    "badOutcome": {
+      "text": "A carroça desaba e fere quem a vasculha.",
+      "steps": [
+        {
+          "type": "effect",
+          "effect": {
+            "text": "Perca 2 de vida.",
+            "activation": [{ "kind": "loseLife", "amount": 2 }],
+            "duration": { "kind": "immediate" },
+            "mark": null
+          }
+        }
+      ]
+    },
+    "noEscape": false,
+    "escapeThreshold": null
   }
 ]

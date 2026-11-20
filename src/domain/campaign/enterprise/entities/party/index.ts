@@ -188,7 +188,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   }
 
   get config(): TGameConfigValues {
-    return { ...this.props.config }
+    return structuredClone(this.props.config)
   }
 
   get rngState(): RngState {
@@ -231,6 +231,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.props.dimension.dimensionCardId,
       ...this.props.dimension.map.zones.map((zone) => zone.zoneId),
       ...this.props.rewardDecks.flatMap((deck) => deck.cards),
+      ...this.props.config.reserveDeck.flatMap((entry) =>
+        entry.type === 'card' ? [entry.cardId] : []
+      ),
     ])
     const playerClasses = new Set<string>()
     for (const member of this.props.members) {
@@ -349,7 +352,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         members,
         hostMemberId: host.id,
         status: 'idle',
-        config: { ...input.config },
+        config: structuredClone(input.config),
         rngState: rng.state(),
         dimension: { dimensionCardId: dimension.id, startingCityZoneId, map },
         rewardDecks,
@@ -391,7 +394,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       {
         ...props,
         members: [...props.members],
-        config: { ...props.config },
+        config: structuredClone(props.config),
         rewardDecks: props.rewardDecks.map((deck) => ({
           zoneType: deck.zoneType,
           cards: [...deck.cards],

@@ -503,6 +503,8 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
     for (const key of Object.keys(NEW_KEYS)) delete config[key]
     delete config.inventoryCapacity
     delete config.purseCapacity
+    delete config.escapeVigorPercent
+    delete config.reserveDeck
     delete config.vaultCapacity
     delete config.vaultDeckSlots
     delete config.vaultGoldCapacity

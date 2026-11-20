@@ -144,19 +144,25 @@ function randomEventRewardCitations(
 /** REQ-82: alguma Carta de Dimensão cita uma destas cartas em `rewardDecks`? */
 export function isCitedInRewardDeck(
   cards: readonly TCard[],
-  cardIds: ReadonlySet<string>
+  cardIds: ReadonlySet<string>,
+  deckType?: 'reward' | 'event'
 ): boolean {
-  return cards.some(
-    (card) =>
-      (card.type === 'dimension' &&
-        [...card.rewardDecks, ...(card.eventDecks ?? [])].some((deck) =>
-          deck.cards.some((entry) => cardIds.has(entry.cardId))
-        )) ||
-      (card.type === 'randomEvent' &&
-        randomEventRewardCitations(card).some(({ cardId }) =>
-          cardIds.has(cardId)
-        ))
-  )
+  return cards.some((card) => {
+    if (card.type === 'dimension') {
+      const decks = [
+        ...(deckType !== 'event' ? card.rewardDecks : []),
+        ...(deckType !== 'reward' ? (card.eventDecks ?? []) : []),
+      ]
+      return decks.some((deck) =>
+        deck.cards.some(({ cardId }) => cardIds.has(cardId))
+      )
+    }
+    return (
+      deckType !== 'event' &&
+      card.type === 'randomEvent' &&
+      randomEventRewardCitations(card).some(({ cardId }) => cardIds.has(cardId))
+    )
+  })
 }
 
 /**

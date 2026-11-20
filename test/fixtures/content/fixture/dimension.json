@@ -6,6 +6,15 @@
     "releaseOrder": 1,
     "arrivalZoneTitle": "Porto Cinzento",
     "effects": [],
+    "eventDecks": [
+      {
+        "zoneType": "urban",
+        "cards": [
+          { "cardId": "fixture.wounded-traveler", "copies": 1 },
+          { "cardId": "fixture.howling-wolves", "copies": 1 }
+        ]
+      }
+    ],
     "rewardDecks": [
       {
         "zoneType": "urban",

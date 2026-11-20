@@ -6,6 +6,15 @@
     "releaseOrder": 1,
     "arrivalZoneTitle": "Vila do Porto",
     "effects": [],
-    "rewardDecks": []
+    "rewardDecks": [],
+    "eventDecks": [
+      {
+        "zoneType": "urban",
+        "cards": [
+          { "cardId": "base.abandoned-cart", "copies": 1 },
+          { "cardId": "base.goblin-ambush", "copies": 1 }
+        ]
+      }
+    ]
   }
 ]

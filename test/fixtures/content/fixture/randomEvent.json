@@ -3,9 +3,45 @@
     "id": "fixture.wounded-traveler",
     "title": "Viajante Ferido",
     "flavorText": "Um estranho jaz à beira da trilha.",
-    "requirements": [{ "text": "Possuir uma Poção de Cura." }],
-    "goodOutcome": { "text": "O viajante agradece e revela um atalho." },
-    "badOutcome": { "text": "Era uma emboscada; o grupo perde suprimentos." },
-    "noEscape": false
+    "requirements": [
+      {
+        "id": "offer-potion",
+        "text": "Entregue 1 poção do inventário.",
+        "kind": "offerResources",
+        "requirements": [{ "resource": "tag:poção", "count": 1 }],
+        "constraint": "none",
+        "exclude": []
+      }
+    ],
+    "goodOutcome": {
+      "text": "O viajante agradece e revela um atalho.",
+      "steps": [
+        {
+          "type": "effect",
+          "effect": {
+            "text": "Compre 1 carta de atributo.",
+            "activation": [{ "kind": "drawCards", "count": 1 }],
+            "duration": { "kind": "immediate" },
+            "mark": null
+          }
+        }
+      ]
+    },
+    "badOutcome": {
+      "text": "Era uma emboscada; o grupo perde suprimentos.",
+      "steps": [
+        {
+          "type": "effect",
+          "effect": {
+            "text": "Perca 2 de ouro.",
+            "activation": [{ "kind": "loseGold", "amount": 2 }],
+            "duration": { "kind": "immediate" },
+            "mark": null
+          }
+        }
+      ]
+    },
+    "noEscape": false,
+    "escapeThreshold": null
   }
 ]

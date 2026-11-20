@@ -57,11 +57,9 @@ describe('DrizzlePartyMapper', () => {
       rewardDecks: [{ zoneType: 'urban', cards: ['fixture.healing-potion'] }],
     })
     const row = DrizzlePartyMapper.toDrizzle(party)
-    const {
-      escapeVigorPercent: _escape,
-      reserveDeck: _reserve,
-      ...legacyConfig
-    } = row.state.config
+    const legacyConfig = { ...row.state.config }
+    delete legacyConfig.escapeVigorPercent
+    delete legacyConfig.reserveDeck
     const v6 = {
       ...row.state,
       schemaVersion: 6,

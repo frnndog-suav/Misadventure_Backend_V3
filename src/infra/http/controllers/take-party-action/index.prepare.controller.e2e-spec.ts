@@ -367,6 +367,8 @@ describe('Preparar — equip e unequip (e2e)', () => {
     const config = { ...state.config }
     delete config.inventoryCapacity
     delete config.purseCapacity
+    delete config.escapeVigorPercent
+    delete config.reserveDeck
     delete config.vaultCapacity
     delete config.vaultDeckSlots
     delete config.vaultGoldCapacity

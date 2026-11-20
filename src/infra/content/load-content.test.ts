@@ -180,6 +180,29 @@ describe('loadContent', () => {
     expect(result.content.collections).toEqual([
       { id: 'fixture', name: 'Coleção de Teste', description: '' },
     ])
+    expect(
+      result.content.cards.find(
+        ({ card }) => card.id === 'fixture.wounded-traveler'
+      )?.card
+    ).toMatchObject({
+      escapeThreshold: null,
+      requirements: [{ id: 'offer-potion', kind: 'offerResources' }],
+    })
+    expect(
+      result.content.cards.find(
+        ({ card }) => card.id === 'fixture.test-dimension'
+      )?.card
+    ).toMatchObject({
+      eventDecks: [
+        {
+          zoneType: 'urban',
+          cards: [
+            { cardId: 'fixture.wounded-traveler', copies: 1 },
+            { cardId: 'fixture.howling-wolves', copies: 1 },
+          ],
+        },
+      ],
+    })
     expect(result.content.cards.every((e) => e.status === 'published')).toBe(
       true
     )
