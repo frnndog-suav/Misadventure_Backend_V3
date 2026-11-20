@@ -65,7 +65,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 045 | T-37 | Passivos e status em `effectiveModifiers`, expiração por vez, rodada e movimento (REQ-102, REQ-103, D-105) | concluída |
 | 046 | T-38 | Preparar: ativação, pagamento atômico, efeitos e ações disponíveis, status em memória (REQ-101, REQ-104 a REQ-107, D-106) | concluída |
 | 047 | T-39 | FEAT-11 ponta a ponta: ativação HTTP, save v7, projeção de efeitos e status, Supertest, CONTRATO v0.52 e ROADMAP v0.54 | aguardando revisão |
-| 048 | FEAT-12 | Contrato de eventos aleatórios acordado, CONTRATO v0.56 e ROADMAP v0.58 | concluída |
+| 048 | FEAT-12 | Contrato de eventos aleatórios e configuração do laboratório acordados, CONTRATO v0.57 e ROADMAP v0.58 | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

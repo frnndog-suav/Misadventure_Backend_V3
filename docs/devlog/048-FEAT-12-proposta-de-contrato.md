@@ -2,7 +2,7 @@
 
 - **Data** — 2026-11-20
 - **Status** — concluída
-- **Contrato** — v0.56, `acordado`
+- **Contrato** — v0.57, `acordado`
 - **Roadmap** — v0.58
 - **Horas** — a preencher pelo autor
 
@@ -30,4 +30,8 @@ O frontend confirmou a recusa atômica da última parte, a seleção por cópia,
 
 ## Commit sugerido
 
-`docs/feat-12 contract agreed (contract v0.56)`
+`docs/feat-12 agree lab config limits (contract v0.57)`
+
+## Complemento da configuração do laboratório
+
+O frontend aceitou os dois formatos de `LabConfig.limits` e o caminho `reserveDeck.0.weight` para peso zero. `docs/CONTRATO.md` v0.57 registra os tipos, o pedido e a resposta esperada. `git diff --check` passou. A validação HTTP fica para a implementação do backend. No frontend, a associação do erro à linha da reserva fica na T-59. Encontro e Vasculhar podem seguir com MSW.
