@@ -48,6 +48,8 @@ export type TPlayerState = Readonly<{
   /** Na ordem em que foram compradas. */
   hand: readonly string[]
   handCopies?: readonly THandCopy[]
+  abilityUsage?: Readonly<Record<string, { uses: number; cooldown: number }>>
+  brokenEquipment?: readonly TEquipmentSlot[]
   handCopySequence?: number
   nextTurnActionPointDebt?: number
   lastRandomEvent?: TEventResult | null

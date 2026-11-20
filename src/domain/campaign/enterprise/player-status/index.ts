@@ -18,6 +18,18 @@ type TStatusDuration = Extract<
       | 'untilPartyEnd'
       | 'untilEventEnd'
       | 'untilEventPhaseEnd'
+      | 'untilOwnCombatTurnEnd'
+      | 'forOwnCombatTurns'
+      | 'forCombatCycles'
+      | 'untilDamageTaken'
+      | 'untilAttackMade'
+      | 'untilAttackMissed'
+      | 'untilAbilityUsed'
+      | 'forAbilitiesUsed'
+      | 'whileAbilityActive'
+      | 'untilNextCombatEnd'
+      | 'forCombats'
+      | 'untilCombatWon'
   }
 >
 
@@ -64,10 +76,88 @@ export function statusAfterTurn(
     case 'untilPartyEnd':
     case 'untilEventEnd':
     case 'untilEventPhaseEnd':
+    case 'untilOwnCombatTurnEnd':
+    case 'forOwnCombatTurns':
+    case 'forCombatCycles':
+    case 'untilDamageTaken':
+    case 'untilAttackMade':
+    case 'untilAttackMissed':
+    case 'untilAbilityUsed':
+    case 'forAbilitiesUsed':
+    case 'whileAbilityActive':
+    case 'untilNextCombatEnd':
+    case 'forCombats':
+    case 'untilCombatWon':
       return status
     default: {
       const _exhaustive: never = duration
       return _exhaustive
     }
   }
+}
+
+export function combatStatusesAfterTurn(
+  statuses: readonly TPlayerStatus[],
+  ownTurnEnded: boolean,
+  cycleEnded: boolean
+) {
+  return statuses.flatMap((status) => {
+    const { kind } = status.duration
+    if (ownTurnEnded && kind === 'untilOwnCombatTurnEnd') return []
+    if (
+      (ownTurnEnded && kind === 'forOwnCombatTurns') ||
+      (cycleEnded && kind === 'forCombatCycles')
+    ) {
+      const remaining = (status.remaining ?? 1) - 1
+      return remaining > 0 ? [{ ...status, remaining }] : []
+    }
+    return [status]
+  })
+}
+
+export function combatStatusesAfterEnd(
+  statuses: readonly TPlayerStatus[],
+  won: boolean
+) {
+  return statuses.flatMap((status) => {
+    switch (status.duration.kind) {
+      case 'untilOwnCombatTurnEnd':
+      case 'forOwnCombatTurns':
+      case 'forCombatCycles':
+      case 'untilNextCombatEnd':
+      case 'whileAbilityActive':
+        return []
+      case 'untilCombatWon':
+        return won ? [] : [status]
+      case 'forCombats': {
+        const remaining = (status.remaining ?? status.duration.count) - 1
+        return remaining > 0 ? [{ ...status, remaining }] : []
+      }
+      default:
+        return [status]
+    }
+  })
+}
+
+export function statusesAfterAbility(
+  statuses: readonly TPlayerStatus[],
+  element:
+    import('@/domain/catalog/enterprise/value-objects/card').TElement | null
+) {
+  return statuses.flatMap((status) => {
+    if (
+      status.activation.some(({ kind }) => kind === 'changeNextAbilityElement')
+    )
+      return []
+    if (
+      status.duration.kind === 'untilAbilityUsed' &&
+      (status.duration.element === null || status.duration.element === element)
+    )
+      return []
+    if (status.duration.kind === 'forAbilitiesUsed') {
+      const remaining = (status.remaining ?? status.duration.count) - 1
+      return remaining > 0 ? [{ ...status, remaining }] : []
+    }
+    return [status]
+  })
 }

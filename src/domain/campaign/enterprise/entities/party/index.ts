@@ -12,12 +12,19 @@ import type {
   TClassDefinition,
   TDimensionCard,
   TEquipmentCard,
+  TEquipmentSlot,
+  TExecutableAbility,
   TItemCard,
   TRandomEventOutcomeStep,
   TStarterDeckEntry,
   TZoneAction,
   TZoneCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
+import { EQUIPMENT_SLOTS } from '@/domain/catalog/enterprise/value-objects/card'
+import type {
+  TEffect,
+  TTrigger,
+} from '@/domain/catalog/enterprise/value-objects/effect'
 import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
 import {
@@ -29,19 +36,33 @@ import {
 import { connectedZones } from '../../connected-zones'
 import {
   combatAttackTargets,
+  combatAbilityUsage,
   combatIsTerminal,
   createCombat,
+  enemyDefeatNotices,
+  registerCombatAbility,
+  resolvePlayerAbility,
   resolveCombatTurn,
   type TCombatRefusal,
   type TCombatState,
+  type CombatNotice,
 } from '../../combat'
+import {
+  adventureAbilityKey,
+  abilityWithModifiers,
+  abilityEffectDuration,
+  abilityEffectStatus,
+  applyAbilityEffect,
+  equippedAbility,
+  matchesAbilityUse,
+} from '../../combat/abilities'
+import { describeAbilityPayment, payAbility } from '../../combat/payment'
 import { effectiveModifiers } from '../../effective-modifiers'
 import { applyActivations } from '../../effect-activation'
 import type { TPartyEvent } from '../../events/party-events'
 import { addToInventory, type TInventorySlot } from '../../inventory'
 import { assembleMap, type TPartyMap } from '../../map-assembly'
 import type {
-  TActivateOperation,
   TPrepareOperation,
   TRecoverOption,
   TVaultOperation,
@@ -64,7 +85,12 @@ import {
   type TExecutableEvent,
 } from '../../random-event'
 import type { TPartyTurn } from '../../party-turn'
-import { statusAfterTurn, type TPlayerStatus } from '../../player-status'
+import {
+  combatStatusesAfterEnd,
+  statusAfterTurn,
+  statusesAfterAbility,
+  type TPlayerStatus,
+} from '../../player-status'
 import {
   drawReserve,
   type TPendingReward,
@@ -298,10 +324,308 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   private eventCatalog: ReadonlyMap<string, TCard> = new Map()
 
   get combat() {
+    return this.describeCombat(this.eventCatalog)
+  }
+
+  describeCombat(cards: ReadonlyMap<string, TCard>) {
     const state = this.props.combat
     if (!state) return null
-    const health = this.props.members[this.actorIndex()].player.health
-    return { ...state, attackTargetIds: combatAttackTargets(state, health) }
+    const player = this.props.members[this.actorIndex()].player
+    return {
+      id: state.id,
+      card: state.card,
+      memberId: state.memberId,
+      cycle: state.cycle,
+      maxCycles: state.maxCycles,
+      order: state.order,
+      turn: state.turn,
+      enemies: state.enemies.map((enemy) => ({
+        id: enemy.id,
+        blockIndex: enemy.blockIndex,
+        copyIndex: enemy.copyIndex,
+        health: enemy.health,
+        maxHealth: enemy.maxHealth,
+        vigor: enemy.vigor,
+        element: enemy.element,
+        effectiveModifiers: enemy.effectiveModifiers,
+        statuses: enemy.statuses,
+      })),
+      attackTargetIds: combatAttackTargets(state, player.health),
+      abilities: this.abilityOptions(player, cards, state),
+      effects: this.combatEffectOptions(state, player, cards).map(
+        ({ effectId, text, origin, vigorCost, paymentCosts, targetIds }) => ({
+          effectId,
+          text,
+          origin,
+          vigorCost,
+          paymentCosts,
+          targetIds,
+        })
+      ),
+      abilityStates: [
+        ...EQUIPMENT_SLOTS.flatMap((slot) => {
+          const id = player.equipment[slot]
+          const card = id ? cards.get(id) : null
+          return card?.type === 'equipment'
+            ? card.abilities.flatMap((ability) =>
+                ability.id === undefined
+                  ? []
+                  : [
+                      this.describeAbilityState(
+                        state,
+                        state.memberId,
+                        slot,
+                        ability,
+                        ability.form === 'passive' &&
+                          equippedAbility(
+                            player,
+                            cards,
+                            slot,
+                            ability.id,
+                            true
+                          ) !== null
+                      ),
+                    ]
+              )
+            : []
+        }),
+        ...state.enemies.flatMap((enemy) =>
+          state.card.enemies[enemy.blockIndex].abilities.flatMap((ability) =>
+            ability.id === undefined
+              ? []
+              : [
+                  this.describeAbilityState(
+                    state,
+                    enemy.id,
+                    null,
+                    ability,
+                    ability.form === 'passive'
+                  ),
+                ]
+          )
+        ),
+      ],
+    }
+  }
+
+  private describeAbilityState(
+    state: TCombatState,
+    actorId: string,
+    equipmentSlot: TEquipmentSlot | null,
+    ability: TExecutableAbility,
+    passive: boolean
+  ) {
+    const usage = combatAbilityUsage(state, actorId, equipmentSlot, ability.id)
+    return {
+      actorId,
+      equipmentSlot,
+      abilityId: ability.id,
+      cooldownRemaining: Math.max(
+        0,
+        (usage?.cooldown ?? 0) - Number(Boolean(usage?.uses))
+      ),
+      usesRemaining:
+        ability.form === 'passive'
+          ? 0
+          : Math.max(0, ability.usesPerTurn - (usage?.uses ?? 0)),
+      charges: ability.form === 'channeled' ? (usage?.charges ?? 0) : null,
+      active: passive || (usage?.activeUntilCycle ?? 0) > state.cycle,
+    }
+  }
+
+  adventureAbilityOptions(
+    cards: ReadonlyMap<string, TCard> = this.eventCatalog
+  ) {
+    if (
+      this.status !== 'inSession' ||
+      this.props.combat ||
+      this.pendingRewards.length ||
+      this.eventEncounter?.outcome ||
+      this.eventEncounter?.payments.length
+    )
+      return []
+    return this.abilityOptions(
+      this.props.members[this.actorIndex()].player,
+      cards
+    )
+  }
+
+  private abilityOptions(
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>,
+    state?: TCombatState
+  ) {
+    if (
+      player.health === 0 ||
+      (state &&
+        (state.turn.actorId !== state.memberId ||
+          state.turn.phase !== 'prepare' ||
+          combatIsTerminal(state, player.health)))
+    )
+      return []
+    const enemies =
+      state?.enemies.filter(({ health }) => health > 0).map(({ id }) => id) ??
+      []
+    return EQUIPMENT_SLOTS.flatMap((equipmentSlot) => {
+      const cardId = player.equipment[equipmentSlot]
+      const card = cardId ? cards.get(cardId) : undefined
+      if (card?.type !== 'equipment') return []
+      return card.abilities.flatMap((ability) => {
+        if (
+          ability.id === undefined ||
+          ability.form === 'passive' ||
+          ability.target === 'ally' ||
+          !equippedAbility(
+            player,
+            cards,
+            equipmentSlot,
+            ability.id,
+            Boolean(state)
+          )
+        )
+          return []
+        const usage = state
+          ? combatAbilityUsage(state, state.memberId, equipmentSlot, ability.id)
+          : player.abilityUsage?.[
+              adventureAbilityKey(equipmentSlot, card.id, ability.id)
+            ]
+        if (
+          (usage?.cooldown ?? 0) > 0 ||
+          (usage?.uses ?? 0) >= ability.usesPerTurn ||
+          (state && this.continuousAbilityActive(state, equipmentSlot, ability))
+        )
+          return []
+        const payment = describeAbilityPayment(
+          player,
+          card.id,
+          abilityWithModifiers(ability, player, cards, enemies.length).cost,
+          cards,
+          this.rngState,
+          enemies.length
+        )
+        if (!payment) return []
+        return [
+          {
+            ...payment,
+            equipmentSlot,
+            abilityId: ability.id,
+            targetIds:
+              ability.target === 'opponent' || ability.target === 'allOpponents'
+                ? enemies
+                : [],
+          },
+        ]
+      })
+    })
+  }
+
+  private continuousAbilityActive(
+    state: TCombatState,
+    slot: TEquipmentSlot,
+    ability: TExecutableAbility
+  ) {
+    return (
+      ability.form === 'continuous' &&
+      state.abilityUsage?.some(
+        (entry) =>
+          entry.actorId === state.memberId &&
+          entry.equipmentSlot === slot &&
+          (entry.activeUntilCycle ?? 0) > state.cycle
+      )
+    )
+  }
+
+  private combatEffectOptions(
+    state: TCombatState,
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>
+  ) {
+    if (
+      state.turn.actorId !== state.memberId ||
+      state.turn.phase !== 'prepare' ||
+      combatIsTerminal(state, player.health)
+    )
+      return []
+    const sources = [
+      ...player.inventory.flatMap(({ cardId }) => {
+        const card = cards.get(cardId)
+        return card?.type === 'item' ? [{ card, equipmentSlot: null }] : []
+      }),
+      ...EQUIPMENT_SLOTS.flatMap((equipmentSlot) => {
+        const cardId = player.equipment[equipmentSlot]
+        const card = cardId ? cards.get(cardId) : null
+        return card?.type === 'equipment' &&
+          !player.brokenEquipment?.includes(equipmentSlot) &&
+          (card.peakRequirement === null || player.peak >= card.peakRequirement)
+          ? [{ card, equipmentSlot }]
+          : []
+      }),
+    ]
+    return sources.flatMap(({ card, equipmentSlot }) =>
+      card.effects.flatMap((effect, effectIndex) => {
+        if (effect.trigger !== null || !effect.cost.length) return []
+        const nullified = player.statuses.some(({ activation }) =>
+          activation.some(
+            (entry) =>
+              entry.kind === 'nullifyEffects' &&
+              ((equipmentSlot &&
+                entry.target === 'equipment' &&
+                (!entry.slots.length || entry.slots.includes(equipmentSlot))) ||
+                (card.type === 'item' &&
+                  entry.target === 'item' &&
+                  (!entry.itemCategories.length ||
+                    entry.itemCategories.includes(card.itemCategory))))
+          )
+        )
+        if (nullified) return []
+        const payment = describeAbilityPayment(
+          player,
+          card.id,
+          effect.cost,
+          cards,
+          this.rngState,
+          state.enemies.filter(({ health }) => health > 0).length
+        )
+        if (!payment) return []
+        const targetsEnemy = effect.activation.some(
+          ({ kind }) =>
+            kind === 'effectDamage' ||
+            kind === 'enemyModifierFlat' ||
+            kind === 'defeatEnemy' ||
+            kind === 'removeEnemyElement' ||
+            kind === 'skipEnemyTurn' ||
+            kind === 'swapCombatOrder' ||
+            kind === 'elementVulnerability'
+        )
+        return [
+          {
+            ...payment,
+            effect,
+            text: effect.text,
+            targetIds: targetsEnemy
+              ? state.enemies
+                  .filter(({ health }) => health > 0)
+                  .map(({ id }) => id)
+              : [],
+            effectId: JSON.stringify([
+              state.turn.id,
+              equipmentSlot,
+              card.id,
+              effectIndex,
+            ]),
+            origin:
+              equipmentSlot === null
+                ? { type: 'inventory' as const, cardId: card.id, effectIndex }
+                : {
+                    type: 'equipment' as const,
+                    equipmentSlot,
+                    cardId: card.id,
+                    effectIndex,
+                  },
+          },
+        ]
+      })
+    )
   }
 
   eventActionBlock(
@@ -318,7 +642,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       case 'prepare':
         if (encounter.outcome) return 'choicePending'
         if (encounter.payments.length) return 'eventPaymentStarted'
-        return action.operation === 'activate' ? null : 'choicePending'
+        return action.operation === 'activate' ||
+          action.operation === 'useAbility'
+          ? null
+          : 'choicePending'
       default:
         return 'choicePending'
     }
@@ -347,34 +674,148 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   }
 
   combatActions(): TCombatAction['type'][] {
-    const state = this.props.combat
-    if (!state || state.turn.actorId !== state.memberId) return []
-    const health = this.props.members[this.actorIndex()].player.health
-    if (combatIsTerminal(state, health)) return []
-    return combatAttackTargets(state, health).length
-      ? ['combatAttack', 'endCombatTurn']
-      : ['endCombatTurn']
+    const state = this.combat
+    if (
+      !state ||
+      state.turn.actorId !== state.memberId ||
+      combatIsTerminal(
+        state,
+        this.props.members[this.actorIndex()].player.health
+      )
+    )
+      return []
+    const actions: TCombatAction['type'][] = []
+    if (state.effects.length) actions.push('activateCombatEffect')
+    if (state.abilities.length) actions.push('useAbility')
+    if (state.attackTargetIds.length) actions.push('combatAttack')
+    actions.push('endCombatTurn')
+    return actions
   }
 
   private combatPlayer(
     player: TPlayerState,
-    cards: ReadonlyMap<string, TCard>
-  ) {
-    const equipment = Object.values(player.equipment).flatMap((id) => {
+    cards: ReadonlyMap<string, TCard>,
+    power?: number,
+    projectile = false,
+    battle: TCombatState | null | undefined = this.props.combat
+  ): Parameters<typeof resolveCombatTurn>[1] {
+    const equipment = EQUIPMENT_SLOTS.flatMap((slot) => {
+      if (player.brokenEquipment?.includes(slot)) return []
+      const id = player.equipment[slot]
       const card = id ? cards.get(id) : undefined
       return card?.type === 'equipment' ? [card] : []
     })
+    const conditional = battle
+      ? this.conditionalCombatStatuses(player, cards, battle)
+      : []
     return {
       health: player.health,
+      snapshot: player,
+      withSnapshot: (state) =>
+        this.combatPlayer(state, cards, power, projectile, battle),
+      statuses: player.statuses,
+      projectileAccuracyIncluded: projectile,
+      brokenEquipment: player.brokenEquipment,
+      equippedSlots: EQUIPMENT_SLOTS.filter(
+        (slot) => player.equipment[slot] !== null
+      ),
+      react: (fighter, state, notices, rng) => {
+        const triggered = this.resolveCombatReactions(
+          fighter.snapshot ?? player,
+          cards,
+          rng.state(),
+          state,
+          notices
+        )
+        return {
+          fighter: this.combatPlayer(
+            triggered.player,
+            cards,
+            power,
+            projectile,
+            state
+          ),
+          rng: SeededRng.fromState(triggered.rngState),
+        }
+      },
+      refresh: (health, statuses, brokenEquipment) =>
+        this.combatPlayer(
+          { ...player, health, statuses, brokenEquipment },
+          cards,
+          power,
+          projectile,
+          battle
+        ),
+      shield: equipment.some(
+        (card) =>
+          card.slot === 'shield' &&
+          (card.peakRequirement === null || player.peak >= card.peakRequirement)
+      ),
       modifiers: effectiveModifiers({
         ...player,
         equipment,
+        statuses: [...player.statuses, ...conditional],
+        abilityOwner: player,
         combat: {
+          power,
+          projectileAccuracyBonusPercent: projectile
+            ? this.config.projectileAccuracyBonusPercent
+            : 0,
           exhaustionPenaltyPercent:
             player.vigor === 0 ? this.config.exhaustionPenaltyPercent : 0,
         },
       }),
     }
+  }
+
+  private conditionalCombatStatuses(
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>,
+    state: TCombatState
+  ) {
+    const living = state.enemies.filter(({ health }) => health > 0).length
+    const used =
+      state.abilityUsage?.filter(({ actorId }) => actorId === state.memberId) ??
+      []
+    const first = used[0]?.element
+    const same =
+      first !== undefined &&
+      first !== null &&
+      used.every(({ element }) => element === first)
+    return this.abilityTriggerSources(player, cards).flatMap((origin) =>
+      origin.effects.flatMap((effect, index) => {
+        const trigger = effect.trigger
+        if (!trigger || effect.cost.length !== 0) return []
+        let matches = trigger.kind === 'whileUsedAbilitiesSameElement' && same
+        if (trigger.kind === 'whileEnemyCount') {
+          const { count, op } = trigger
+          matches = {
+            eq: living === count,
+            lt: living < count,
+            lte: living <= count,
+            gt: living > count,
+            gte: living >= count,
+          }[op]
+        }
+        if (!matches) return []
+        const status = abilityEffectStatus(
+          {
+            ...effect,
+            duration: { kind: 'infinite' },
+            mark:
+              'mark' in effect
+                ? (effect.mark ?? 'buff')
+                : effect.polarity === 'positive'
+                  ? 'buff'
+                  : 'debuff',
+          },
+          origin.id,
+          `${state.id}:conditional:${origin.id}:${index}`,
+          index
+        )
+        return status ? [status] : []
+      })
+    )
   }
 
   takeCombatAction(
@@ -388,6 +829,20 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const index = this.actorIndex()
     const player = this.props.members[index].player
     if (player.health === 0) return left('playerDown')
+    if (
+      action.type === 'useAbility' ||
+      action.type === 'activateCombatEffect'
+    ) {
+      if (
+        state.turn.actorId !== state.memberId ||
+        state.turn.phase !== 'prepare' ||
+        combatIsTerminal(state, player.health)
+      )
+        return left('wrongCombatPhase')
+      return action.type === 'useAbility'
+        ? this.useCombatAbility(action, state, index, player, cards, at)
+        : this.activateCombatEffect(action, state, index, player, cards, at)
+    }
     if (!this.combatActions().includes(action.type))
       return left('wrongCombatPhase')
     const targetId =
@@ -406,12 +861,594 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       rng,
       targetId
     )
-    this.props.combat = resolved.state
-    this.props.rngState = rng.state()
-    if (resolved.health !== player.health)
-      this.replaceActor(index, { ...player, health: resolved.health })
+    this.props.combat = this.combatAfterResolution(
+      resolved.state,
+      resolved.health
+    )
+    this.props.rngState = resolved.rngState
+    this.eventCatalog = cards
+    this.replaceActor(
+      index,
+      this.afterCombatResolution(
+        {
+          ...(resolved.snapshot ?? player),
+          health: resolved.health,
+          statuses: resolved.statuses,
+          brokenEquipment: resolved.brokenEquipment,
+        },
+        resolved.state
+      )
+    )
     this.props.savedAt = at
     return right(undefined)
+  }
+
+  private afterCombatResolution(player: TPlayerState, state: TCombatState) {
+    if (!combatIsTerminal(state, player.health)) return player
+    return {
+      ...player,
+      abilityUsage: undefined,
+      statuses: combatStatusesAfterEnd(
+        player.statuses,
+        state.enemies.every(({ health }) => health === 0)
+      ),
+    }
+  }
+
+  private combatAfterResolution(state: TCombatState, health: number) {
+    return combatIsTerminal(state, health)
+      ? { ...state, abilityUsage: [] }
+      : state
+  }
+
+  private useCombatAbility(
+    action: Extract<TCombatAction, { type: 'useAbility' }>,
+    state: TCombatState,
+    index: number,
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>,
+    at: Date
+  ): Either<TCombatRefusal, void> {
+    const source = equippedAbility(
+      player,
+      cards,
+      action.equipmentSlot,
+      action.abilityId,
+      true
+    )
+    if (!source || source.ability.form === 'passive')
+      return left('combatAbilityUnavailable')
+    const { card } = source
+    const living = state.enemies.filter(({ health }) => health > 0)
+    const ability = abilityWithModifiers(
+      source.ability,
+      player,
+      cards,
+      living.length
+    )
+    const usage = combatAbilityUsage(
+      state,
+      state.memberId,
+      action.equipmentSlot,
+      ability.id
+    )
+    if (
+      (usage?.cooldown ?? 0) > 0 ||
+      (usage?.uses ?? 0) >= ability.usesPerTurn ||
+      this.continuousAbilityActive(state, action.equipmentSlot, ability)
+    )
+      return left('combatAbilityUnavailable')
+    const targets =
+      ability.target === 'opponent'
+        ? living.filter(({ id }) => id === action.targetId)
+        : ability.target === 'allOpponents'
+          ? living
+          : []
+    if (
+      ability.target === 'ally' ||
+      (ability.target === 'opponent'
+        ? targets.length === 0
+        : action.targetId !== undefined)
+    )
+      return left('combatTargetUnavailable')
+    const paid = payAbility(
+      player,
+      card.id,
+      ability.cost,
+      cards,
+      this.rngState,
+      action.payment,
+      { enemyCount: living.length }
+    )
+    if (paid.isLeft()) return left(paid.value.reason)
+    let rng = SeededRng.fromState(paid.value.rngState)
+    const registered = registerCombatAbility(
+      state,
+      state.memberId,
+      action.equipmentSlot,
+      ability,
+      player.health,
+      card.id
+    )
+    let changed = {
+      ...paid.value.player,
+      statuses: statusesAfterAbility(
+        paid.value.player.statuses,
+        ability.element
+      ) as readonly TPlayerStatus[],
+    }
+    let combat: TCombatState = registered.state
+    const notices: CombatNotice[] = []
+    if (!registered.charging) {
+      const active = this.prepareAbilityEffects(
+        changed,
+        cards,
+        card,
+        action.equipmentSlot,
+        ability,
+        rng.state(),
+        living.length
+      )
+      changed = active.player
+      rng = SeededRng.fromState(active.rngState)
+      const effects = active.effects
+      if (ability.target === 'self') {
+        changed = effects.reduce(
+          (current, effect, effectIndex) =>
+            applyAbilityEffect(
+              current,
+              abilityEffectDuration(ability, effect),
+              card.id,
+              `${state.turn.id}:${action.equipmentSlot}:${ability.id}:${usage?.uses ?? 0}:${effectIndex}`,
+              this.config.purseCapacity,
+              effectIndex
+            ),
+          changed
+        )
+      } else {
+        const resolved = resolvePlayerAbility(
+          combat,
+          this.combatPlayer(
+            changed,
+            cards,
+            ability.power ?? undefined,
+            (ability.channel?.releaseForm ?? ability.form) === 'projectile',
+            combat
+          ),
+          { ...ability, effects },
+          targets,
+          this.config,
+          rng
+        )
+        combat = resolved.state
+        changed = {
+          ...changed,
+          health: resolved.health,
+          statuses: changed.statuses.filter(
+            ({ duration }) =>
+              (!resolved.attacked || duration.kind !== 'untilAttackMade') &&
+              (!resolved.missed || duration.kind !== 'untilAttackMissed') &&
+              (!resolved.reflected || duration.kind !== 'untilDamageTaken')
+          ),
+        }
+        if (resolved.advantageHit) notices.push({ type: 'elementalAdvantage' })
+      }
+      combat = this.applyCombatTurnEffects(combat, effects)
+    }
+    const triggered = this.resolveAbilityTriggers(
+      changed,
+      cards,
+      rng.state(),
+      (trigger) =>
+        matchesAbilityUse(trigger, card, action.equipmentSlot, ability),
+      `${state.turn.id}:${action.equipmentSlot}:${ability.id}:${usage?.uses ?? 0}`
+    )
+    const reactions = this.resolveCombatReactions(
+      triggered.player,
+      cards,
+      triggered.rngState,
+      combat,
+      [...notices, ...enemyDefeatNotices(state, combat)]
+    )
+    changed = reactions.player
+    this.eventCatalog = cards
+    this.props.combat = this.combatAfterResolution(combat, changed.health)
+    this.props.rngState = reactions.rngState
+    this.replaceActor(index, this.afterCombatResolution(changed, combat))
+    this.props.savedAt = at
+    return right(undefined)
+  }
+
+  private applyCombatTurnEffects(
+    state: TCombatState,
+    effects: readonly TEffect[]
+  ) {
+    const extraAttacks = effects
+      .flatMap(({ activation }) => activation)
+      .reduce(
+        (count, effect) =>
+          effect.kind === 'extraAttack' ? count + effect.count : count,
+        0
+      )
+    return extraAttacks > 0
+      ? {
+          ...state,
+          turn: {
+            ...state.turn,
+            attacksRemaining: state.turn.attacksRemaining + extraAttacks,
+          },
+        }
+      : state
+  }
+
+  private activateCombatEffect(
+    action: Extract<TCombatAction, { type: 'activateCombatEffect' }>,
+    state: TCombatState,
+    index: number,
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>,
+    at: Date
+  ): Either<TCombatRefusal, void> {
+    const option = this.combatEffectOptions(state, player, cards).find(
+      ({ effectId }) => effectId === action.effectId
+    )
+    if (!option) return left('notActivatable')
+    const target = state.enemies.find(
+      ({ id, health }) => id === action.targetId && health > 0
+    )
+    if (option.targetIds.length ? !target : action.targetId !== undefined)
+      return left('combatTargetUnavailable')
+    const { origin, effect } = option
+    const paid = payAbility(
+      player,
+      origin.cardId,
+      effect.cost,
+      cards,
+      this.rngState,
+      action.payment,
+      { enemyCount: state.enemies.filter(({ health }) => health > 0).length }
+    )
+    if (paid.isLeft()) return left(paid.value.reason)
+    const rng = SeededRng.fromState(paid.value.rngState)
+    const changed = paid.value.player
+    const resolved = target
+      ? resolvePlayerAbility(
+          state,
+          this.combatPlayer(changed, cards),
+          {
+            id: option.effectId,
+            form: 'targeted',
+            channel: null,
+            element: null,
+            power: null,
+            effects: [effect],
+            duration: null,
+          },
+          [target],
+          this.config,
+          rng
+        )
+      : {
+          state,
+          health: changed.health,
+          player: applyAbilityEffect(
+            changed,
+            effect,
+            origin.cardId,
+            option.effectId,
+            this.config.purseCapacity,
+            origin.effectIndex
+          ),
+        }
+    this.props.combat = this.combatAfterResolution(
+      this.applyCombatTurnEffects(resolved.state, [effect]),
+      resolved.health
+    )
+    const reactions = this.resolveCombatReactions(
+      'player' in resolved
+        ? resolved.player
+        : { ...changed, health: resolved.health },
+      cards,
+      rng.state(),
+      resolved.state,
+      enemyDefeatNotices(state, resolved.state)
+    )
+    this.replaceActor(
+      index,
+      this.afterCombatResolution(reactions.player, this.props.combat)
+    )
+    this.props.rngState = reactions.rngState
+    this.props.savedAt = at
+    this.eventCatalog = cards
+    return right(undefined)
+  }
+
+  useAdventureAbility(
+    operation: Extract<TPrepareOperation, { operation: 'useAbility' }>,
+    zone: TZoneCard | null,
+    dimension: TDimensionCard | null,
+    cards: ReadonlyMap<string, TCard>,
+    at: Date
+  ): Either<
+    | TCombatRefusal
+    | 'eventPaymentStarted'
+    | 'choicePending'
+    | 'sessionNotActive',
+    void
+  > {
+    if (this.status !== 'inSession') return left('sessionNotActive')
+    const blocked = this.eventActionBlock({ type: 'prepare', ...operation })
+    if (
+      blocked === 'combatInProgress' ||
+      blocked === 'eventPaymentStarted' ||
+      blocked === 'choicePending'
+    )
+      return left(blocked)
+    const index = this.actorIndex()
+    const player = this.props.members[index].player
+    if (player.health === 0) return left('playerDown')
+    const source = equippedAbility(
+      player,
+      cards,
+      operation.equipmentSlot,
+      operation.abilityId,
+      false
+    )
+    if (!source || source.ability.form === 'passive')
+      return left('combatAbilityUnavailable')
+    const { card } = source
+    const ability = abilityWithModifiers(source.ability, player, cards)
+    const key = adventureAbilityKey(
+      operation.equipmentSlot,
+      card.id,
+      ability.id
+    )
+    const previous = player.abilityUsage?.[key]
+    if (
+      (previous?.cooldown ?? 0) > 0 ||
+      (previous?.uses ?? 0) >= ability.usesPerTurn
+    )
+      return left('combatAbilityUnavailable')
+    const paid = payAbility(
+      player,
+      card.id,
+      ability.cost,
+      cards,
+      this.rngState,
+      operation.payment
+    )
+    if (paid.isLeft()) return left(paid.value.reason)
+    let changed = {
+      ...paid.value.player,
+      statuses: statusesAfterAbility(
+        paid.value.player.statuses,
+        ability.element
+      ) as readonly TPlayerStatus[],
+    }
+    let rngState = paid.value.rngState ?? this.rngState
+    const usage = (previous?.uses ?? 0) + 1
+    const statusId = JSON.stringify([
+      this.turn.round,
+      this.turn.memberId.toString(),
+      key,
+      usage,
+    ])
+    const active = this.prepareAbilityEffects(
+      changed,
+      cards,
+      card,
+      operation.equipmentSlot,
+      ability,
+      rngState
+    )
+    changed = active.player
+    rngState = active.rngState
+    active.effects.forEach((effect, effectIndex) => {
+      changed = applyAbilityEffect(
+        changed,
+        abilityEffectDuration(ability, effect),
+        card.id,
+        `${statusId}:ability:${effectIndex}`,
+        this.config.purseCapacity,
+        effectIndex
+      )
+    })
+    const triggered = this.resolveAbilityTriggers(
+      changed,
+      cards,
+      rngState,
+      (trigger) =>
+        matchesAbilityUse(trigger, card, operation.equipmentSlot, ability),
+      statusId,
+      zone,
+      dimension
+    )
+    changed = triggered.player
+    rngState = triggered.rngState
+    this.replaceActor(index, {
+      ...changed,
+      abilityUsage: {
+        ...player.abilityUsage,
+        [key]: {
+          uses: usage,
+          cooldown: ability.cooldown + (ability.cooldown > 0 ? 1 : 0),
+        },
+      },
+    })
+    this.props.rngState = rngState
+    this.eventCatalog = cards
+    this.props.savedAt = at
+    return right(undefined)
+  }
+
+  private prepareAbilityEffects(
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>,
+    card: TEquipmentCard,
+    slot: TEquipmentSlot,
+    ability: TExecutableAbility,
+    initialRng: RngState,
+    enemyCount = 0
+  ) {
+    let changed = player
+    let rngState = initialRng
+    const effects = ability.effects.flatMap((effect) => {
+      if (
+        effect.trigger !== null &&
+        !matchesAbilityUse(effect.trigger, card, slot, ability)
+      )
+        return []
+      const paid = payAbility(
+        changed,
+        card.id,
+        effect.cost,
+        cards,
+        rngState,
+        undefined,
+        { enemyCount }
+      )
+      if (paid.isLeft()) return []
+      changed = paid.value.player
+      rngState = paid.value.rngState
+      return [effect]
+    })
+    return { effects, player: changed, rngState }
+  }
+
+  private resolveAbilityTriggers(
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>,
+    initialRng: RngState,
+    matches: (trigger: TTrigger | null) => boolean,
+    statusId: string,
+    foundZone?: TZoneCard | null,
+    foundDimension?: TDimensionCard | null
+  ) {
+    let changed = player
+    let rngState = initialRng
+    const sources = this.abilityTriggerSources(
+      player,
+      cards,
+      foundZone,
+      foundDimension
+    )
+    for (const origin of sources) {
+      origin.effects.forEach((effect, effectIndex) => {
+        if (!matches(effect.trigger)) return
+        const paid = payAbility(
+          changed,
+          origin.id,
+          effect.cost,
+          cards,
+          rngState
+        )
+        if (paid.isLeft()) return
+        rngState = paid.value.rngState
+        changed = applyAbilityEffect(
+          paid.value.player,
+          {
+            ...effect,
+            mark:
+              'mark' in effect
+                ? effect.mark
+                : effect.polarity === 'positive'
+                  ? 'buff'
+                  : 'debuff',
+          },
+          origin.id,
+          `${statusId}:trigger:${origin.id}:${effectIndex}`,
+          this.config.purseCapacity,
+          effectIndex
+        )
+      })
+    }
+    return { player: changed, rngState }
+  }
+
+  private abilityTriggerSources(
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>,
+    foundZone?: TZoneCard | null,
+    foundDimension?: TDimensionCard | null
+  ) {
+    const zone = foundZone ?? cards.get(player.zoneId)
+    const dimension =
+      foundDimension ?? cards.get(this.dimension.dimensionCardId)
+    return [
+      ...(dimension?.type === 'dimension' ? [dimension] : []),
+      ...(zone?.type === 'zone' ? [zone] : []),
+      ...EQUIPMENT_SLOTS.flatMap((slot) => {
+        const id = player.equipment[slot]
+        const equipped = id ? cards.get(id) : undefined
+        return equipped?.type === 'equipment' &&
+          !player.brokenEquipment?.includes(slot) &&
+          player.peak >= (equipped.peakRequirement ?? 0)
+          ? [equipped]
+          : []
+      }),
+    ]
+  }
+
+  private resolveCombatReactions(
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>,
+    rngState: RngState,
+    state: TCombatState,
+    notices: readonly CombatNotice[]
+  ) {
+    if (player.health === 0 || !notices.length) return { player, rngState }
+    const defeats = notices.flatMap((notice) =>
+      notice.type === 'enemyDefeated' ? [notice.id] : []
+    )
+    const defeated = state.enemies.filter(({ health }) => health === 0)
+    const countDefeated = (distinct: boolean, previous: boolean) => {
+      const enemies = previous
+        ? defeated.filter(({ id }) => !defeats.includes(id))
+        : defeated
+      return distinct
+        ? new Set(enemies.map(({ blockIndex }) => blockIndex)).size
+        : enemies.length
+    }
+    return this.resolveAbilityTriggers(
+      player,
+      cards,
+      rngState,
+      (trigger) => {
+        switch (trigger?.kind) {
+          case 'onAttackedByEnemyBehavior':
+            return notices.some(
+              (notice) =>
+                notice.type === 'enemyAttack' &&
+                notice.behavior === trigger.behavior
+            )
+          case 'onElementDamageTaken':
+            return notices.some(
+              (notice) =>
+                notice.type === 'elementDamage' &&
+                (trigger.element === null || notice.element === trigger.element)
+            )
+          case 'onElementalAdvantageHit':
+            return notices.some(
+              (notice) => notice.type === 'elementalAdvantage'
+            )
+          case 'onEnemyDefeated':
+            return trigger.count === 1
+              ? defeats.length > 0
+              : countDefeated(trigger.distinct, true) < trigger.count &&
+                  countDefeated(trigger.distinct, false) >= trigger.count
+          case 'onEnemyCategoryDefeated':
+            return defeated.some(
+              ({ id, blockIndex }) =>
+                defeats.includes(id) &&
+                state.card.enemies[blockIndex].enemyCategory ===
+                  trigger.category
+            )
+          default:
+            return false
+        }
+      },
+      `${state.turn.id}:reaction:${player.statuses.length}`
+    )
   }
 
   takeEventAction(
@@ -532,7 +1569,27 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         this.props.eventEncounter = { ...encounter, phase: 'encounter', card }
       } else {
         const current = this.props.members[index].player
-        const fighter = this.combatPlayer(current, cards)
+        const started = this.resolveAbilityTriggers(
+          current,
+          cards,
+          rng.state(),
+          (trigger) => {
+            if (trigger?.kind === 'onEngageEnemyElement')
+              return card.enemies.some(
+                ({ element }) => element === trigger.element
+              )
+            if (trigger?.kind === 'onEngageEnemyType')
+              return card.enemies.some(({ enemyTypes }) =>
+                enemyTypes.some((type) => trigger.enemyTypes.includes(type))
+              )
+            return false
+          },
+          `${encounter.id}:combat-start`,
+          zone,
+          dimension
+        )
+        const combatRng = SeededRng.fromState(started.rngState)
+        const fighter = this.combatPlayer(started.player, cards)
         const state = createCombat(
           encounter.id,
           card,
@@ -542,12 +1599,36 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         )
         const resolved =
           state.turn.actorId === state.memberId
-            ? { state, health: current.health }
-            : resolveCombatTurn(state, fighter, this.config, rng)
+            ? {
+                state,
+                health: started.player.health,
+                statuses: started.player.statuses,
+                brokenEquipment: started.player.brokenEquipment,
+                snapshot: started.player,
+                rngState: combatRng.state(),
+              }
+            : resolveCombatTurn(state, fighter, this.config, combatRng)
         this.props.eventEncounter = null
-        this.props.combat = resolved.state
-        if (resolved.health !== current.health)
-          this.replaceActor(index, { ...current, health: resolved.health })
+        this.props.combat = this.combatAfterResolution(
+          resolved.state,
+          resolved.health
+        )
+        this.replaceActor(
+          index,
+          this.afterCombatResolution(
+            {
+              ...(resolved.snapshot ?? started.player),
+              health: resolved.health,
+              statuses: resolved.statuses,
+              brokenEquipment: resolved.brokenEquipment,
+              abilityUsage: undefined,
+            },
+            resolved.state
+          )
+        )
+        complete()
+        this.props.rngState = resolved.rngState
+        return right(undefined)
       }
       return complete()
     }
@@ -1560,10 +2641,23 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       member.id.equals(memberId)
     )
     const nextPlayer = this.props.members[nextIndex].player
+    if (nextPlayer.abilityUsage) {
+      this.replaceActor(nextIndex, {
+        ...nextPlayer,
+        abilityUsage: Object.fromEntries(
+          Object.entries(nextPlayer.abilityUsage)
+            .filter(([, value]) => value.cooldown > 1)
+            .map(([key, value]) => [
+              key,
+              { uses: 0, cooldown: value.cooldown - 1 },
+            ])
+        ),
+      })
+    }
     const debt = nextPlayer.nextTurnActionPointDebt ?? 0
     if (debt > 0)
       this.replaceActor(nextIndex, {
-        ...nextPlayer,
+        ...this.props.members[nextIndex].player,
         nextTurnActionPointDebt: 0,
       })
 
@@ -2000,18 +3094,18 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
    * nada muda. O RNG não é usado.
    */
   prepare(
-    operation: TPrepareOperation,
+    operation: Exclude<TPrepareOperation, { operation: 'useAbility' }>,
     catalog: { cards: readonly TCard[] },
     at: Date,
     ids: IdGenerator
   ): Either<TPrepareRefusal, void>
   prepare(
-    operation: Exclude<TPrepareOperation, TActivateOperation>,
+    operation: Extract<TPrepareOperation, { operation: 'equip' | 'unequip' }>,
     catalog: { cards: readonly TCard[] },
     at: Date
   ): Either<TPrepareRefusal, void>
   prepare(
-    operation: TPrepareOperation,
+    operation: Exclude<TPrepareOperation, { operation: 'useAbility' }>,
     catalog: { cards: readonly TCard[] },
     at: Date,
     ids?: IdGenerator

@@ -72,7 +72,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 052 | T-43 | [Save e ações HTTP da FEAT-12](052-T-43-save-e-http.md) | concluída |
 | 053 | T-44 | [Critérios e proposta de contrato do combate solo](053-T-44-combate-solo.md) | concluída |
 | 054 | T-45 | [Catálogo, laboratório e decks de combate](054-T-45-catalogo-laboratorio-decks.md) | concluída |
-| 055 | T-46 | [Estado de combate e dano](055-T-46-estado-de-combate-e-dano.md) | aguardando revisão |
+| 055 | T-46 | [Estado de combate e dano](055-T-46-estado-de-combate-e-dano.md) | concluída |
+| 056 | T-47 | [Habilidades, efeitos e IA](056-T-47-habilidades-efeitos-e-ia.md) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

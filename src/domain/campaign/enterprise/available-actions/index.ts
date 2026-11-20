@@ -25,7 +25,8 @@ export function availableActions(
   scavengeTargets: readonly string[] = [],
   activatableEffects: readonly TActivatableEffect[] = [],
   canStartEvent = false,
-  encounter = party.randomEventEncounter
+  encounter = party.randomEventEncounter,
+  canUseAbility = party.adventureAbilityOptions().length > 0
 ): TPartyActionType[] {
   const { turn } = party
   if (!turn.memberId.equals(memberId)) return []
@@ -45,7 +46,10 @@ export function availableActions(
       if (encounter.escape?.unavailableReason === null)
         actions.push('escapeEvent')
     }
-    if (encounter.payments.length === 0 && activatableEffects.length > 0)
+    if (
+      encounter.payments.length === 0 &&
+      (activatableEffects.length > 0 || canUseAbility)
+    )
       actions.push('prepare')
     return actions
   }
@@ -64,6 +68,7 @@ export function availableActions(
   if (
     member &&
     (activatableEffects.length > 0 ||
+      canUseAbility ||
       member.player.inventory.some((slot) =>
         equipmentCardIds.has(slot.cardId)
       ) ||

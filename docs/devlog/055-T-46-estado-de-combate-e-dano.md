@@ -1,7 +1,7 @@
 # 055 — T-46 — Estado de combate e dano
 
 - Data — 2026-11-20
-- Status — aguardando revisão
+- Status — concluída
 - Spec — v0.62
 - Contrato — v0.62, acordado
 - Horas — a preencher pelo autor
@@ -38,7 +38,7 @@ Após a implementação, esperam-se 28 testes passando. Ambas as origens do deck
 ## Checks e pendências
 
 - Antes da implementação, o autor confirmou 20 testes passando, duas revelações recusadas com `eventDeckEmpty` e falha ao importar o módulo `combat` ainda ausente.
-- Após a implementação, `npm.cmd run typecheck` e `git diff --check` passaram. A execução dos testes pelo autor está pendente.
+- Após a implementação, `npm.cmd run typecheck` e `git diff --check` passaram. O autor confirmou que as duas suítes passaram sem erros e registrou a implementação no commit `3353c2b`.
 
 ## Commit sugerido
 

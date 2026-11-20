@@ -53,7 +53,9 @@ type TExecutableCost = Extract<
 export function quantityOf(
   quantity: TQuantity,
   player: TPlayerState,
-  cards: ReadonlyMap<string, TCard>
+  cards: ReadonlyMap<string, TCard>,
+  enemyCount = 0,
+  usePassiveAbilities = false
 ): number | null {
   if (typeof quantity === 'number') return quantity
 
@@ -67,7 +69,17 @@ export function quantityOf(
       return sum + (card && matches(card) ? quantity : 0)
     }, 0)
   const modifiers = (equipment: readonly TEquipmentCard[]) =>
-    Object.values(effectiveModifiers({ ...player, equipment }))
+    Object.values(
+      effectiveModifiers({
+        ...player,
+        equipment,
+        abilityOwner: usePassiveAbilities ? player : undefined,
+        combat:
+          usePassiveAbilities && enemyCount > 0
+            ? { exhaustionPenaltyPercent: 0 }
+            : undefined,
+      })
+    )
 
   let base: number
   switch (quantity.base) {
@@ -109,7 +121,7 @@ export function quantityOf(
       base = Math.min(...modifiers(equipped))
       break
     case 'perEnemy':
-      base = 0
+      base = enemyCount
       break
     default: {
       const exhaustive: never = quantity.base
@@ -145,7 +157,9 @@ export function payEffectCosts(
   cardId: string,
   costs: readonly TExecutableCost[],
   catalog: ReadonlyMap<string, TCard>,
-  request?: { handCards: readonly string[] | undefined; rngState: RngState }
+  request?: { handCards: readonly string[] | undefined; rngState: RngState },
+  enemyCount = 0,
+  usePassiveAbilities = false
 ): Either<TPaymentRefusal, TPayment> {
   const selectedCount = costs.reduce(
     (sum, cost) =>
@@ -272,7 +286,13 @@ export function payEffectCosts(
       case 'payGold':
       case 'spendVigor':
       case 'donateLife': {
-        const amount = quantityOf(cost.amount, player, catalog)
+        const amount = quantityOf(
+          cost.amount,
+          player,
+          catalog,
+          enemyCount,
+          usePassiveAbilities
+        )
         if (amount === null) return left({ reason: 'minimumNotMet' })
         const { field, refusal } = RESOURCE_COSTS[cost.kind]
         if (

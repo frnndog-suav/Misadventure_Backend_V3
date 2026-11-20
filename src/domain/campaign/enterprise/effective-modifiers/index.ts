@@ -1,9 +1,12 @@
 import {
   MODIFIERS,
   type TEquipmentCard,
+  type TEquipmentSlot,
+  type TExecutableAbility,
   type TModifier,
 } from '@/domain/catalog/enterprise/value-objects/card'
 
+import type { TPlayerState } from '../entities/party-member'
 import type { TPlayerStatus } from '../player-status'
 
 export type TEffectiveModifiersInput = Readonly<{
@@ -13,12 +16,53 @@ export type TEffectiveModifiersInput = Readonly<{
   /** Cartas dos equipamentos em uso (o agregado não conhece o catálogo, D-76). */
   equipment: readonly TEquipmentCard[]
   statuses?: readonly TPlayerStatus[]
-  combat?: Readonly<{ power?: number; exhaustionPenaltyPercent: number }>
+  abilityOwner?: Pick<TPlayerState, 'playerClasses' | 'brokenEquipment'>
+  combat?: Readonly<{
+    power?: number
+    exhaustionPenaltyPercent: number
+    projectileAccuracyBonusPercent?: number
+  }>
 }>
 
 /** Um equipamento em uso funciona se não tem requisito ou o Pico o cumpre (7.3 item 8). */
 export function equipmentWorks(card: TEquipmentCard, peak: number): boolean {
   return card.peakRequirement === null || peak >= card.peakRequirement
+}
+
+export function abilitySourceWorks(
+  card: TEquipmentCard,
+  slot: TEquipmentSlot,
+  player: Pick<TPlayerState, 'peak' | 'brokenEquipment' | 'statuses'>
+): boolean {
+  return (
+    equipmentWorks(card, player.peak) &&
+    !player.brokenEquipment?.includes(slot) &&
+    !player.statuses.some(({ activation }) =>
+      activation.some(
+        (effect) =>
+          effect.kind === 'nullifyAbilities' &&
+          (!effect.slots.length || effect.slots.includes(slot)) &&
+          (!effect.tags.length ||
+            effect.tags.some((tag) => card.tags.includes(tag)))
+      )
+    )
+  )
+}
+
+export function abilityMatchesOwner(
+  ability: TExecutableAbility,
+  playerClasses: TPlayerState['playerClasses'],
+  inCombat: boolean
+) {
+  return (
+    (ability.timing === 'both' ||
+      ability.timing === (inCombat ? 'combat' : 'outsideCombat')) &&
+    (ability.classRestriction.length === 0 ||
+      playerClasses.some(
+        ({ playerClass, deckLockMet }) =>
+          deckLockMet && ability.classRestriction.includes(playerClass)
+      ))
+  )
 }
 
 /**
@@ -30,9 +74,14 @@ export function effectiveModifiers({
   peak,
   equipment,
   statuses = [],
+  abilityOwner,
   combat,
 }: TEffectiveModifiersInput): Record<TModifier, number> {
-  const working = equipment.filter((card) => equipmentWorks(card, peak))
+  const working = equipment.filter(
+    (card) =>
+      equipmentWorks(card, peak) &&
+      !abilityOwner?.brokenEquipment?.includes(card.slot)
+  )
   const equipmentBonuses = working.flatMap((card) => card.modifiers)
   const passives = working.flatMap((card) =>
     card.effects.filter(
@@ -46,14 +95,41 @@ export function effectiveModifiers({
     )
   )
   const disabledIds = new Set(
-    equipment.filter((card) => !equipmentWorks(card, peak)).map(({ id }) => id)
+    equipment.filter((card) => !working.includes(card)).map(({ id }) => id)
   )
   const activeStatuses = statuses.filter(
     ({ sourceCardId }) => !disabledIds.has(sourceCardId)
   )
-  const activations = [...passives, ...activeStatuses].flatMap(
-    (effect) => effect.activation
-  )
+  const passiveAbilities = abilityOwner
+    ? working
+        .filter((card) =>
+          abilitySourceWorks(card, card.slot, {
+            peak,
+            statuses,
+            ...abilityOwner,
+          })
+        )
+        .flatMap((card) =>
+          card.abilities.flatMap((ability) =>
+            ability.id !== undefined &&
+            ability.form === 'passive' &&
+            abilityMatchesOwner(
+              ability,
+              abilityOwner.playerClasses,
+              Boolean(combat)
+            )
+              ? ability.effects.filter(
+                  (effect) => effect.trigger === null && !effect.cost.length
+                )
+              : []
+          )
+        )
+    : []
+  const activations = [
+    ...passives,
+    ...passiveAbilities,
+    ...activeStatuses,
+  ].flatMap((effect) => effect.activation)
   const result = {} as Record<TModifier, number>
   for (const modifier of MODIFIERS) {
     let fixed = equipmentBonuses
@@ -61,6 +137,8 @@ export function effectiveModifiers({
       .reduce((sum, entry) => sum + entry.value, 0)
     if (modifier === 'attack') fixed += combat?.power ?? 0
     let percent = -(combat?.exhaustionPenaltyPercent ?? 0)
+    if (modifier === 'accuracy')
+      percent += combat?.projectileAccuracyBonusPercent ?? 0
     for (const activation of activations) {
       if (activation.kind === 'modifierFlat') {
         for (const change of activation.changes) {

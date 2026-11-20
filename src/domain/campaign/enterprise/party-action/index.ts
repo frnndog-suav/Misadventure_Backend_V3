@@ -18,6 +18,13 @@ export type TPrepareOperation =
   | { operation: 'equip'; cardId: string }
   | { operation: 'unequip'; slot: TEquipmentSlot }
   | TActivateOperation
+  | ({ operation: 'useAbility' } & TAbilityIntent)
+
+type TAbilityIntent = {
+  abilityId: string
+  equipmentSlot: TEquipmentSlot
+  payment?: TEventPayment
+}
 
 export type TActivateOperation = {
   operation: 'activate'
@@ -46,7 +53,15 @@ export type TRandomEventAction =
     }
 
 export type TCombatAction = { combatId: string; turnId: string } & (
-  { type: 'combatAttack'; targetId: string } | { type: 'endCombatTurn' }
+  | { type: 'combatAttack'; targetId: string }
+  | { type: 'endCombatTurn' }
+  | ({ type: 'useAbility'; targetId?: string } & TAbilityIntent)
+  | {
+      type: 'activateCombatEffect'
+      effectId: string
+      targetId?: string
+      payment?: TEventPayment
+    }
 )
 
 /** Uma operação do Usar cofre (README 6.4; REQ-84 a REQ-87). */
@@ -88,7 +103,10 @@ export type TActionIssue =
       field: 'operation'
       reason: 'required' | 'notString' | 'unknownOperation'
     }
-  | { field: 'slot'; reason: 'required' | 'notString' | 'unknownSlot' }
+  | {
+      field: 'slot' | 'equipmentSlot'
+      reason: 'required' | 'notString' | 'unknownSlot'
+    }
   | {
       /** `build.i`, `operations.i.cards.j.copies`, o campo a mais etc. */
       field: string
@@ -131,6 +149,8 @@ export function parsePartyAction(
 
   switch (body.type) {
     case 'combatAttack':
+    case 'useAbility':
+    case 'activateCombatEffect':
     case 'endCombatTurn':
       return combatEnabled
         ? parseCombatAction(body.type, body)
@@ -144,7 +164,7 @@ export function parsePartyAction(
     case 'adjustDeck':
       return parseAdjustDeck(body)
     case 'prepare':
-      return parsePrepare(body, effectActivationEnabled)
+      return parsePrepare(body, effectActivationEnabled, combatEnabled)
     case 'useVault':
       return parseUseVault(body)
     case 'scavenge':
@@ -187,6 +207,53 @@ function parseCombatAction(
         field,
         reason: body[field] === undefined ? 'required' : 'notString',
       })
+  }
+  if (type === 'useAbility') {
+    const intent = readAbilityIntent(body, issues)
+    const targetId = body.targetId
+    if (targetId !== undefined && typeof targetId !== 'string')
+      issues.push({ field: 'targetId', reason: 'notString' })
+    issues.push(
+      ...extraKeys(body, [
+        'type',
+        ...fields,
+        'abilityId',
+        'equipmentSlot',
+        'targetId',
+        'payment',
+      ])
+    )
+    if (!intent || issues.length) return left(issues)
+    return right({
+      type,
+      ...intent,
+      combatId: body.combatId as string,
+      turnId: body.turnId as string,
+      ...(typeof targetId === 'string' ? { targetId } : {}),
+    })
+  }
+  if (type === 'activateCombatEffect') {
+    const { effectId, targetId } = body
+    if (typeof effectId !== 'string')
+      issues.push({
+        field: 'effectId',
+        reason: effectId === undefined ? 'required' : 'notString',
+      })
+    if (targetId !== undefined && typeof targetId !== 'string')
+      issues.push({ field: 'targetId', reason: 'notString' })
+    const payment = readEventPayment(body.payment, issues)
+    issues.push(
+      ...extraKeys(body, ['type', ...fields, 'effectId', 'targetId', 'payment'])
+    )
+    if (issues.length || typeof effectId !== 'string') return left(issues)
+    return right({
+      type,
+      effectId,
+      combatId: body.combatId as string,
+      turnId: body.turnId as string,
+      ...(typeof targetId === 'string' ? { targetId } : {}),
+      ...(payment ? { payment } : {}),
+    })
   }
   issues.push(...extraKeys(body, ['type', ...fields]))
   if (issues.length) return left(issues)
@@ -483,7 +550,8 @@ function isEquipmentSlot(value: string): value is TEquipmentSlot {
  */
 function parsePrepare(
   body: Record<string, unknown>,
-  effectActivationEnabled: boolean
+  effectActivationEnabled: boolean,
+  combatEnabled: boolean
 ): Either<TActionIssue[], TPartyAction> {
   const { operation } = body
   if (operation === undefined) {
@@ -495,6 +563,23 @@ function parsePrepare(
 
   const issues: TActionIssue[] = []
   switch (operation) {
+    case 'useAbility': {
+      if (!combatEnabled)
+        return left([{ field: 'operation', reason: 'unknownOperation' }])
+      const intent = readAbilityIntent(body, issues)
+      issues.push(
+        ...extraKeys(body, [
+          'type',
+          'operation',
+          'abilityId',
+          'equipmentSlot',
+          'payment',
+        ])
+      )
+      return intent && !issues.length
+        ? right({ type: 'prepare', operation, ...intent })
+        : left(issues)
+    }
     case 'equip': {
       const { cardId } = body
       if (cardId === undefined) {
@@ -531,6 +616,28 @@ function parsePrepare(
     default:
       return left([{ field: 'operation', reason: 'unknownOperation' }])
   }
+}
+
+function readAbilityIntent(
+  body: Record<string, unknown>,
+  issues: TActionIssue[]
+): TAbilityIntent | null {
+  const { abilityId, equipmentSlot } = body
+  for (const field of ['abilityId', 'equipmentSlot'] as const) {
+    if (typeof body[field] !== 'string')
+      issues.push({
+        field,
+        reason: body[field] === undefined ? 'required' : 'notString',
+      })
+  }
+  if (typeof equipmentSlot === 'string' && !isEquipmentSlot(equipmentSlot))
+    issues.push({ field: 'equipmentSlot', reason: 'unknownSlot' })
+  const payment = readEventPayment(body.payment, issues)
+  return typeof abilityId === 'string' &&
+    typeof equipmentSlot === 'string' &&
+    isEquipmentSlot(equipmentSlot)
+    ? { abilityId, equipmentSlot, ...(payment ? { payment } : {}) }
+    : null
 }
 
 function parseActivate(

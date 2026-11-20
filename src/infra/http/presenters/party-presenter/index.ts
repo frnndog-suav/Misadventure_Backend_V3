@@ -214,7 +214,8 @@ function playerToHTTP(
       targets,
       effects,
       party.canStartEvent(zone, dimension, cards, false),
-      encounter
+      encounter,
+      false
     ),
     build: copiesToHTTP(player.build),
     buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),

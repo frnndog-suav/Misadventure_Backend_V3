@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { SeededRng, type RngState } from '@/core/rng/seeded-rng'
-import type { TRandomEventRequirement } from '@/domain/catalog/enterprise/value-objects/card'
+import type {
+  TCard,
+  TExecutableAbility,
+  TRandomEventRequirement,
+} from '@/domain/catalog/enterprise/value-objects/card'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import { availableActions } from '../../../enterprise/available-actions'
 import { shuffle } from '../../../enterprise/shuffle'
@@ -15,9 +19,12 @@ import {
   makeCombatEventCard,
   makeDimensionCard,
   makeEffect,
+  makeEnemy,
+  makeEquipmentCard,
   makeItemCard,
   makeRandomEventCard,
   makeUrbanZoneCard,
+  makeZoneEffect,
 } from '../../../../../../test/factories/make-card'
 import {
   makeParty,
@@ -77,6 +84,238 @@ const randomDiscard = {
   constraint: 'none',
   random: true,
 } as const
+
+function executableAbility(
+  overrides: Partial<TExecutableAbility> = {}
+): TExecutableAbility {
+  return {
+    id: 'fixture.ability',
+    name: 'Habilidade de teste',
+    text: 'Habilidade de teste.',
+    form: 'targeted',
+    element: null,
+    cost: [],
+    power: null,
+    effects: [],
+    cooldown: 0,
+    timing: 'combat',
+    classRestriction: [],
+    usesPerTurn: 1,
+    target: 'self',
+    duration: null,
+    channel: null,
+    ...overrides,
+  }
+}
+
+describe('TakePartyActionUseCase — habilidades e IA (T-47)', () => {
+  it.each([
+    { attack: 4, charges: 1, remainingHealth: 19 },
+    { attack: 5, charges: 0, remainingHealth: 30 },
+  ])(
+    'REQ-119: dano $attack deixa $charges carga(s) de Canalizada',
+    async ({ attack, charges, remainingHealth }) => {
+      const ability = executableAbility({
+        form: 'channeled',
+        target: 'allOpponents',
+        channel: { chargesRequired: 2, releaseForm: 'area' },
+        power: 16,
+      })
+      const weapon = makeEquipmentCard({ abilities: [ability], modifiers: [] })
+      const enemy = makeEnemy({ count: 1, health: 30 })
+      const combatCard = makeCombatEventCard({
+        goodOutcome: emptyOutcome,
+        badOutcome: emptyOutcome,
+        enemies: [
+          { ...enemy, modifiers: { ...enemy.modifiers, attack, defense: 0 } },
+        ],
+      })
+      const player = makePlayerState()
+      const game = setup({
+        combatOnly: true,
+        combatCard,
+        additionalCards: [weapon],
+        player: {
+          peak: 0,
+          health: 20,
+          equipment: { ...player.equipment, weapon: weapon.id },
+          modifiers: { ...player.modifiers, defense: 0, evasion: 0 },
+        },
+      })
+      await game.reveal()
+      const state = game.party().combat!
+      const useAbility = {
+        type: 'useAbility',
+        combatId: state.id,
+        turnId: state.turn.id,
+        abilityId: ability.id,
+        equipmentSlot: 'weapon',
+      }
+      const charged = await game.accept(useAbility)
+      expect(charged.combat).toMatchObject({
+        turn: { id: state.turn.id },
+        enemies: [{ health: 30 }],
+        abilityStates: expect.arrayContaining([
+          expect.objectContaining({ abilityId: ability.id, charges: 1 }),
+        ]),
+      })
+      const next = await game.accept({
+        type: 'endCombatTurn',
+        combatId: state.id,
+        turnId: state.turn.id,
+      })
+      expect(next.members[0].player.health).toBe(20 - attack)
+      expect(next.combat).toMatchObject({
+        abilityStates: expect.arrayContaining([
+          expect.objectContaining({ abilityId: ability.id, charges }),
+        ]),
+      })
+      const releasedOrRecharged = await game.accept({
+        ...useAbility,
+        turnId: next.combat!.turn.id,
+      })
+      expect(releasedOrRecharged.combat).toMatchObject({
+        enemies: [{ health: remainingHealth }],
+      })
+    }
+  )
+
+  it('REQ-119: valida o lote antes de cobrar e resolve gatilhos da dimensão, zona e jogador em ordem na antecipação', async () => {
+    const ability = executableAbility({
+      timing: 'outsideCombat',
+      cost: [
+        { kind: 'payGold', amount: 2 },
+        {
+          ...randomDiscard,
+          requirements: [{ attribute: 'any', count: 1 }],
+          random: false,
+        },
+      ],
+    })
+    const trigger = {
+      kind: 'onAbilityUsed',
+      slots: ['weapon'],
+      excludeSlots: [],
+      tags: [],
+      cardId: null,
+    } as const
+    const weapon = makeEquipmentCard({
+      abilities: [ability],
+      effects: [
+        makeEffect({
+          trigger,
+          cost: [],
+          activation: [{ kind: 'heal', amount: 1 }],
+        }),
+      ],
+    })
+    const game = setup({
+      additionalCards: [weapon],
+      dimensionEffects: [
+        makeZoneEffect({
+          trigger,
+          polarity: 'positive',
+          activation: [{ kind: 'heal', amount: 5 }],
+        }),
+      ],
+      zone: {
+        ...harbor,
+        effects: [
+          makeZoneEffect({
+            trigger,
+            activation: [{ kind: 'loseLife', amount: 3 }],
+          }),
+        ],
+      },
+      player: {
+        peak: 0,
+        health: 17,
+        hand: [strength.id],
+        equipment: { ...makePlayerState().equipment, weapon: weapon.id },
+      },
+    })
+    await game.start()
+    const [copy] = game.handCopies()
+    const useAbility = {
+      type: 'prepare',
+      operation: 'useAbility',
+      equipmentSlot: 'weapon',
+      abilityId: ability.id,
+    }
+    await game.refuse(
+      { ...useAbility, payment: { handCards: ['missing-copy'] } },
+      { reason: 'paymentInvalid' }
+    )
+    expect(game.playerState()).toMatchObject({ gold: 10, health: 17 })
+    expect(game.handCopies()).toEqual([copy])
+    const used = await game.accept({
+      ...useAbility,
+      payment: { handCards: [copy.copyId] },
+    })
+    expect(used.turn.actionPoints).toBe(0)
+    expect(game.playerState()).toMatchObject({
+      gold: 8,
+      health: 18,
+      discard: [strength.id],
+      deck: [endurance.id],
+    })
+    expect(game.handCopies()).toEqual([])
+  })
+
+  it('REQ-121: Suporte cura o aliado ferido de menor vida, desempata pela ordem impressa e ainda ataca', async () => {
+    const heal = executableAbility({
+      target: 'ally',
+      effects: [
+        makeEffect({ cost: [], activation: [{ kind: 'heal', amount: 1 }] }),
+      ],
+    })
+    const enemy = makeEnemy({ count: 1 })
+    const ally = {
+      ...enemy,
+      modifiers: { ...enemy.modifiers, attack: 2, celerity: 12 },
+    }
+    const combatCard = makeCombatEventCard({
+      goodOutcome: emptyOutcome,
+      badOutcome: emptyOutcome,
+      enemies: [
+        { ...ally, health: 10 },
+        ally,
+        ally,
+        {
+          ...enemy,
+          health: 12,
+          behavior: 'support',
+          abilities: [heal],
+          modifiers: { ...enemy.modifiers, attack: 2, celerity: 10 },
+        },
+      ],
+    })
+    const player = makePlayerState()
+    const game = setup({
+      combatOnly: true,
+      combatCard,
+      player: {
+        peak: 0,
+        health: 20,
+        modifiers: {
+          ...player.modifiers,
+          defense: 0,
+          evasion: 0,
+          reflection: 1,
+        },
+      },
+    })
+
+    await game.reveal()
+
+    expect(game.playerState().health).toBe(16)
+    expect(game.party().combat).toMatchObject({
+      cycle: 1,
+      turn: { actorId: 'member-1', phase: 'prepare' },
+      enemies: [{ health: 9 }, { health: 8 }, { health: 7 }, { health: 11 }],
+    })
+  })
+})
 
 describe('TakePartyActionUseCase — recompensas de encontro (T-42)', () => {
   it('REQ-114/REQ-115: pausa na primeira cópia, valida o descarte e retoma pela reserva uma vez', async () => {
@@ -306,6 +545,9 @@ function setup({
   outcome = emptyOutcome,
   rewardCards = [],
   rewardConfig = GAME_CONFIG_DEFAULTS,
+  additionalCards = [],
+  dimensionEffects = [],
+  zone = harbor,
 }: {
   requirements?: readonly TRandomEventRequirement[]
   player?: Partial<TPlayerState>
@@ -319,6 +561,9 @@ function setup({
   outcome?: ReturnType<typeof makeRandomEventCard>['goodOutcome']
   rewardCards?: string[]
   rewardConfig?: typeof GAME_CONFIG_DEFAULTS
+  additionalCards?: TCard[]
+  dimensionEffects?: ReturnType<typeof makeDimensionCard>['effects']
+  zone?: typeof harbor
 } = {}) {
   const event = makeRandomEventCard({
     requirements,
@@ -329,6 +574,7 @@ function setup({
   })
   const dimension = makeDimensionCard({
     id: 'fixture.test-dimension',
+    effects: dimensionEffects,
     eventDecks: [
       {
         zoneType: 'urban',
@@ -371,12 +617,13 @@ function setup({
     event,
     combatCard,
     dimension,
-    harbor,
+    zone,
     strength,
     endurance,
     potion,
     ore,
     spare,
+    ...additionalCards,
   ]
   const sut = new TakePartyActionUseCase(
     repository,

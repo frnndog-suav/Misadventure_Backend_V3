@@ -88,10 +88,13 @@ export class TakePartyActionUseCase {
       return left(new ActionNotAllowedError(blocked))
     switch (action.type) {
       case 'combatAttack':
+      case 'useAbility':
+      case 'activateCombatEffect':
       case 'endCombatTurn': {
         const { cards } = await this.findEventCatalog(party)
         const result = party.takeCombatAction(action, cards, this.clock.now())
-        if (result.isLeft()) return left(new ActionNotAllowedError(result.value))
+        if (result.isLeft())
+          return left(new ActionNotAllowedError(result.value))
         break
       }
       case 'resolveReward': {
@@ -211,6 +214,23 @@ export class TakePartyActionUseCase {
         break
       }
       case 'prepare': {
+        if (action.operation === 'useAbility') {
+          const { zone, dimension, cards } = await this.findEventCatalog(party)
+          const result = party.useAdventureAbility(
+            action,
+            zone,
+            dimension,
+            cards,
+            this.clock.now()
+          )
+          if (result.isLeft())
+            return left(
+              result.value === 'sessionNotActive'
+                ? new PartySessionNotActiveError()
+                : new ActionNotAllowedError(result.value)
+            )
+          break
+        }
         const catalog = { cards: await this.findPrepareCatalog(party, action) }
         const at = this.clock.now()
         let prepared: ReturnType<Party['prepare']>
@@ -383,6 +403,8 @@ export class TakePartyActionUseCase {
     )) {
       if (card) cards.set(card.id, card)
     }
+    if (zone) cards.set(zone.id, zone)
+    if (dimension) cards.set(dimension.id, dimension)
     return { zone, dimension, cards }
   }
 
@@ -393,7 +415,7 @@ export class TakePartyActionUseCase {
    */
   private async findPrepareCatalog(
     party: Party,
-    operation: TPrepareOperation
+    operation: Exclude<TPrepareOperation, { operation: 'useAbility' }>
   ): Promise<TCard[]> {
     const actor = party.members.find((member) =>
       member.id.equals(party.turn.memberId)

@@ -223,7 +223,7 @@ function matchesDiscard(
   return matches(0, slots, [])
 }
 
-function resourceMatches(card: TCard, filter: string): boolean {
+export function resourceMatches(card: TCard, filter: string): boolean {
   if (card.type !== 'item' && card.type !== 'equipment') return false
   if (filter === 'any' || filter === card.type) return true
   if (filter.startsWith('tag:')) return card.tags.includes(filter.slice(4))
