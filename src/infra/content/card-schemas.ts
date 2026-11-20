@@ -20,7 +20,12 @@ import {
 } from '@/domain/catalog/enterprise/value-objects/card'
 import { CONTENT_STATUSES } from '@/domain/catalog/enterprise/value-objects/content'
 
-import { effectSchema, zoneEffectSchema } from './effect-schemas'
+import {
+  costSchema,
+  durationSchema,
+  effectSchema,
+  zoneEffectSchema,
+} from './effect-schemas'
 
 /**
  * Forma dos arquivos de `content/` (D-21). Cada `<tipo>.json` é um array de
@@ -35,6 +40,60 @@ const text = z.string().min(1)
 const flavorText = z.string().min(1).nullable()
 const ruleText = z.strictObject({ text })
 const ability = z.strictObject({ name: text, text })
+
+const eventRequirementBase = { id: text, text }
+const eventRequirement = z.union([
+  z.strictObject({
+    ...eventRequirementBase,
+    kind: z.literal('attributes'),
+    specific: z.partialRecord(
+      z.enum(ATTRIBUTES),
+      z.number().int().nonnegative()
+    ),
+    any: z.number().int().nonnegative(),
+  }),
+  z.strictObject({
+    ...eventRequirementBase,
+    kind: z.literal('minimum'),
+    stat: z.enum(['peak', 'vigor', ...MODIFIERS]),
+    value: z.number().int().nonnegative(),
+  }),
+  ...costSchema.options
+    .filter(
+      (option) =>
+        option.shape.kind.value !== 'consumeSelf' &&
+        option.shape.kind.value !== 'reducePeak'
+    )
+    .map((option) => option.extend(eventRequirementBase)),
+])
+const eventEffect = effectSchema.omit({ trigger: true, cost: true }).extend({
+  duration: z.union([
+    durationSchema,
+    z.strictObject({ kind: z.enum(['untilEventPhaseEnd', 'untilEventEnd']) }),
+  ]),
+})
+const eventOutcome = z.strictObject({
+  text,
+  steps: z
+    .discriminatedUnion('type', [
+      z.strictObject({ type: z.literal('effect'), effect: eventEffect }),
+      z.strictObject({
+        type: z.literal('drawRewards'),
+        count: z.number().int().positive(),
+      }),
+      z.strictObject({ type: z.literal('searchReward'), cardId: text }),
+      z.strictObject({
+        type: z.literal('grantReward'),
+        cardId: text,
+        copies: z.number().int().positive(),
+      }),
+    ])
+    .array(),
+})
+const zoneDeck = z.strictObject({
+  zoneType: z.enum(ZONE_TYPES),
+  cards: z.array(z.strictObject({ cardId: text, copies: z.number() })),
+})
 
 const enemyModifiers = z.strictObject(
   Object.fromEntries(MODIFIERS.map((modifier) => [modifier, z.number()])) as {
@@ -117,9 +176,10 @@ const cardSchemas = {
     id,
     title: text,
     flavorText,
-    requirements: z.array(ruleText),
-    goodOutcome: ruleText,
-    badOutcome: ruleText,
+    requirements: z.array(z.union([ruleText, eventRequirement])),
+    goodOutcome: z.union([ruleText, eventOutcome]),
+    badOutcome: z.union([ruleText, eventOutcome]),
+    escapeThreshold: z.number().int().nonnegative().nullable().optional(),
     noEscape: z.boolean(),
   }),
   combatEvent: z.strictObject({
@@ -138,12 +198,8 @@ const cardSchemas = {
     releaseOrder: z.number(),
     arrivalZoneTitle: text.nullable(),
     effects: z.array(zoneEffectSchema),
-    rewardDecks: z.array(
-      z.strictObject({
-        zoneType: z.enum(ZONE_TYPES),
-        cards: z.array(z.strictObject({ cardId: text, copies: z.number() })),
-      })
-    ),
+    rewardDecks: z.array(zoneDeck),
+    eventDecks: z.array(zoneDeck).optional(),
   }),
 } satisfies Record<TCardType, z.ZodType>
 

@@ -57,9 +57,15 @@ describe('DrizzlePartyMapper', () => {
       rewardDecks: [{ zoneType: 'urban', cards: ['fixture.healing-potion'] }],
     })
     const row = DrizzlePartyMapper.toDrizzle(party)
+    const {
+      escapeVigorPercent: _escape,
+      reserveDeck: _reserve,
+      ...legacyConfig
+    } = row.state.config
     const v6 = {
       ...row.state,
       schemaVersion: 6,
+      config: legacyConfig,
       members: row.state.members.map(({ player, ...member }) => {
         const legacyPlayer: Partial<typeof player> = { ...player }
         delete legacyPlayer.statuses
@@ -148,7 +154,13 @@ describe('DrizzlePartyMapper', () => {
       ...row.state.config,
       actionPointsPerTurn,
     }
-    const removedKeys = ['vaultCapacity', 'vaultDeckSlots', 'vaultGoldCapacity']
+    const removedKeys = [
+      'vaultCapacity',
+      'vaultDeckSlots',
+      'vaultGoldCapacity',
+      'escapeVigorPercent',
+      'reserveDeck',
+    ]
     if (version < 5) removedKeys.push('inventoryCapacity', 'purseCapacity')
     if (version < 4) {
       removedKeys.push(

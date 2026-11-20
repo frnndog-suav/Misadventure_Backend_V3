@@ -35,6 +35,8 @@ describe('GameConfig', () => {
       vaultCapacity: 30,
       vaultDeckSlots: 10,
       vaultGoldCapacity: 2000,
+      escapeVigorPercent: 20,
+      reserveDeck: [{ type: 'gold', amount: 1, weight: 1 }],
     })
     expect(GameConfig.withDefaults().values).toEqual(GAME_CONFIG_DEFAULTS)
   })
@@ -44,6 +46,8 @@ describe('GameConfig', () => {
       vaultCapacity: 30,
       vaultDeckSlots: 10,
       vaultGoldCapacity: 2000,
+      escapeVigorPercent: 20,
+      reserveDeck: [{ type: 'gold', amount: 1, weight: 1 }],
     })
     expect(GAME_CONFIG_LIMITS).toMatchObject({
       vaultCapacity: { min: 0, max: 1000 },

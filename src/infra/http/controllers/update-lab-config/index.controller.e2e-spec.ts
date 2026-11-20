@@ -34,6 +34,8 @@ const DEFAULTS = {
   vaultCapacity: 30,
   vaultDeckSlots: 10,
   vaultGoldCapacity: 2000,
+  escapeVigorPercent: 20,
+  reserveDeck: [{ type: 'gold', amount: 1, weight: 1 }],
 }
 
 function invalid(fields: { field: string | null; reason: string }[]) {
@@ -80,6 +82,28 @@ describe('PATCH /lab/config (e2e)', () => {
     app = await createApp(true)
     const afterRestart = await request(app.getHttpServer()).get('/lab/config')
     expect(afterRestart.body.values).toEqual(response.body.values)
+  })
+
+  it('REQ-108/REQ-109: recusa o peso zero sem substituir a reserva salva', async () => {
+    const server = app.getHttpServer()
+    const patch = {
+      escapeVigorPercent: 35,
+      reserveDeck: [{ type: 'gold', amount: 2, weight: 3 }],
+    }
+    await request(server).patch('/lab/config').send(patch).expect(200)
+    const before = await request(server).get('/lab/config').expect(200)
+    expect(before.body.values).toMatchObject(patch)
+
+    const rejected = await request(server)
+      .patch('/lab/config')
+      .send({ reserveDeck: [{ type: 'gold', amount: 1, weight: 0 }] })
+      .expect(400)
+    expect(rejected.body).toEqual(
+      invalid([{ field: 'reserveDeck.0.weight', reason: 'outOfRange' }])
+    )
+
+    const after = await request(server).get('/lab/config').expect(200)
+    expect(after.body).toEqual(before.body)
   })
 
   it('REQ-05: {} é aceito e não muda nada', async () => {

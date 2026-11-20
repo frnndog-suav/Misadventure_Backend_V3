@@ -1,7 +1,13 @@
 // Único lugar dos valores ajustáveis do Apêndice A (D-11) e dos seus limites (D-12).
 // Cada FEAT seguinte acrescenta aqui as suas chaves.
 
+export type TReserveDeckEntry =
+  | { type: 'gold'; amount: number; weight: number }
+  | { type: 'card'; cardId: string; weight: number }
+
 export interface TGameConfigValues {
+  escapeVigorPercent: number
+  reserveDeck: readonly Readonly<TReserveDeckEntry>[]
   minPlayers: number // README 1.3
   maxPlayers: number // README 1.3
   actionPointsPerTurn: number // README 11.1
@@ -35,12 +41,18 @@ export interface TGameConfigValues {
 
 export type TGameConfigKey = keyof TGameConfigValues
 
+export type TNumericGameConfigKey = Exclude<TGameConfigKey, 'reserveDeck'>
+
 export interface TGameConfigLimit {
   min: number
   max: number
 }
 
 export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
+  escapeVigorPercent: 20,
+  reserveDeck: Object.freeze([
+    Object.freeze({ type: 'gold' as const, amount: 1, weight: 1 }),
+  ]),
   minPlayers: 1,
   maxPlayers: 6,
   actionPointsPerTurn: 3,
@@ -74,8 +86,12 @@ export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
 
 /** Inteiros, inclusivos. Além deles, `minPlayers ≤ maxPlayers`. */
 export const GAME_CONFIG_LIMITS: Readonly<
-  Record<TGameConfigKey, Readonly<TGameConfigLimit>>
+  Record<TNumericGameConfigKey, Readonly<TGameConfigLimit>> & {
+    reserveDeck: Readonly<{ minEntries: number; minWeight: number }>
+  }
 > = Object.freeze({
+  escapeVigorPercent: { min: 0, max: 100 },
+  reserveDeck: { minEntries: 1, minWeight: 1 },
   minPlayers: { min: 1, max: 6 },
   maxPlayers: { min: 1, max: 6 },
   actionPointsPerTurn: { min: 1, max: 10 },

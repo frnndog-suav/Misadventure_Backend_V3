@@ -1,4 +1,5 @@
 import type {
+  TCost,
   TEffect,
   TZoneEffect,
 } from '@/domain/catalog/enterprise/value-objects/effect'
@@ -277,16 +278,48 @@ export type TItemCard = Readonly<{
   scavengeTool: string | null
 }>
 
+export type TRandomEventRequirement = Readonly<{ id: string; text: string }> &
+  (
+    | {
+        kind: 'attributes'
+        specific: Partial<Record<TAttribute, number>>
+        any: number
+      }
+    | { kind: 'minimum'; stat: 'peak' | 'vigor' | TModifier; value: number }
+    | Extract<
+        TCost,
+        { kind: Exclude<TCost['kind'], 'consumeSelf' | 'reducePeak'> }
+      >
+  )
+
+export type TRandomEventOutcomeStep =
+  | {
+      type: 'effect'
+      effect: Omit<TEffect, 'trigger' | 'cost' | 'duration'> & {
+        duration:
+          TEffect['duration'] | { kind: 'untilEventPhaseEnd' | 'untilEventEnd' }
+      }
+    }
+  | { type: 'drawRewards'; count: number }
+  | { type: 'searchReward'; cardId: string }
+  | { type: 'grantReward'; cardId: string; copies: number }
+
+type TRandomEventOutcome = Readonly<{
+  text: string
+  steps: readonly TRandomEventOutcomeStep[]
+}>
+
 export type TRandomEventCard = Readonly<{
   type: 'randomEvent'
   id: string
   collectionId: string
   title: string
   flavorText: string | null
-  requirements: readonly TRuleText[]
-  goodOutcome: TRuleText
-  badOutcome: TRuleText
+  requirements: readonly (TRuleText | TRandomEventRequirement)[]
+  goodOutcome: TRuleText | TRandomEventOutcome
+  badOutcome: TRuleText | TRandomEventOutcome
   noEscape: boolean
+  escapeThreshold?: number | null
 }>
 
 export type TEnemy = Readonly<{
@@ -333,6 +366,7 @@ export type TDimensionCard = Readonly<{
   arrivalZoneTitle: string | null
   effects: readonly TZoneEffect[]
   rewardDecks: readonly TRewardDeck[]
+  eventDecks?: readonly TRewardDeck[]
 }>
 
 export type TCard =

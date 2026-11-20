@@ -50,7 +50,7 @@ export class PublishCardUseCase {
         card,
         card.id,
         await loadOtherDimensions(this.contentStore, card.collectionId),
-        card.type === 'dimension'
+        card.type === 'dimension' || card.type === 'randomEvent'
           ? cardsOutside(allCards, card.collectionId)
           : []
       ),

@@ -44,9 +44,9 @@ import { UpdateLabConfigController } from './controllers/update-lab-config/index
     },
     {
       provide: UpdateGameConfigUseCase,
-      inject: [GameConfigRepository],
-      useFactory: (repo: GameConfigRepository) =>
-        new UpdateGameConfigUseCase(repo),
+      inject: [GameConfigRepository, CardCatalog],
+      useFactory: (repo: GameConfigRepository, catalog: CardCatalog) =>
+        new UpdateGameConfigUseCase(repo, catalog),
     },
     {
       provide: ResetGameConfigUseCase,

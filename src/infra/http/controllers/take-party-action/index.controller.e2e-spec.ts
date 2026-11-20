@@ -363,11 +363,13 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
         return { ...m, player }
       }
     )
-    const legacyConfig: Record<string, number> = {
+    const legacyConfig: Record<string, unknown> = {
       ...GAME_CONFIG_DEFAULTS,
       actionPointsPerTurn: 4,
     }
-    for (const key of V4_KEYS) delete legacyConfig[key]
+    for (const key of [...V4_KEYS, 'escapeVigorPercent', 'reserveDeck']) {
+      delete legacyConfig[key]
+    }
     await db
       .update(parties)
       .set({

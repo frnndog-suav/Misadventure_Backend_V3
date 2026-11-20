@@ -1,9 +1,11 @@
-﻿import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { GameConfig } from '@/domain/lab/enterprise/value-objects/game-config'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
+import { InMemoryCardCatalog } from '../../../../../../test/fakes/in-memory-card-catalog'
 import { InMemoryGameConfigRepository } from '../../../../../../test/repositories/in-memory-game-config-repository'
 
+import { GetGameConfigUseCase } from '../get-game-config'
 import { LabConfigInvalidError } from '../_errors/lab-config-invalid-error'
 import { UpdateGameConfigUseCase } from '.'
 
@@ -13,7 +15,43 @@ let sut: UpdateGameConfigUseCase
 describe('UpdateGameConfigUseCase', () => {
   beforeEach(() => {
     repository = new InMemoryGameConfigRepository()
-    sut = new UpdateGameConfigUseCase(repository)
+    sut = new UpdateGameConfigUseCase(repository, new InMemoryCardCatalog())
+  })
+
+  it('REQ-108: salva o percentual de fuga e a reserva e os devolve na consulta', async () => {
+    const patch = {
+      escapeVigorPercent: 35,
+      reserveDeck: [{ type: 'gold', amount: 2, weight: 3 }],
+    }
+
+    expect((await sut.execute({ patch })).isRight()).toBe(true)
+    const { config } = (await new GetGameConfigUseCase(repository).execute())
+      .value
+    expect(config.values).toMatchObject(patch)
+  })
+
+  it('REQ-109: recusa peso zero no índice zero e preserva a configuração consultada', async () => {
+    repository.item = GameConfig.create({
+      ...GAME_CONFIG_DEFAULTS,
+      initialGold: 50,
+    })
+    const getConfig = new GetGameConfigUseCase(repository)
+    const before = await getConfig.execute()
+
+    const result = await sut.execute({
+      patch: { reserveDeck: [{ type: 'gold', amount: 1, weight: 0 }] },
+    })
+
+    expect(result.isLeft()).toBe(true)
+    if (result.isLeft()) {
+      expect(result.value.code).toBe('LAB_CONFIG_INVALID')
+      expect(result.value.message).toBe('Configuração do laboratório inválida.')
+      expect(result.value.details).toEqual({
+        fields: [{ field: 'reserveDeck.0.weight', reason: 'outOfRange' }],
+      })
+    }
+    const after = await getConfig.execute()
+    expect(after.value.config.values).toEqual(before.value.config.values)
   })
 
   it('REQ-05: ajuste parcial é salvo e devolvido', async () => {

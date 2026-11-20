@@ -618,6 +618,74 @@ export function checkEffects(card: TEffectCard, report: TEffectReport): void {
   })
 }
 
+/** Variantes de FEAT-11 executáveis fora de combate e durações do encontro. */
+const EVENT_ACTIVATIONS = [
+  'gainGold',
+  'loseGold',
+  'heal',
+  'loseLife',
+  'restoreVigor',
+  'gainPeak',
+  'modifierFlat',
+  'modifierPercent',
+  'drawCards',
+  'removeDebuffs',
+  'removeBuffs',
+]
+const EVENT_DURATIONS = [
+  'immediate',
+  'untilEndOfTurn',
+  'untilStartOfNextTurn',
+  'forOwnTurns',
+  'untilEndOfRound',
+  'forRounds',
+  'untilLeaveZone',
+  'infinite',
+  'untilPartyEnd',
+]
+
+export function checkEventCost(
+  value: unknown,
+  path: string,
+  report: TEffectReport
+): void {
+  checkNode(value, COSTS, path, report)
+  if (isRec(value) && isRec(value.amount) && value.amount.base === 'perEnemy') {
+    report(`${path}.amount.base`, 'unknownEffectKind')
+  }
+}
+
+export function checkEventOutcomeEffect(
+  effect: {
+    readonly text: string
+    readonly activation: readonly { kind: string }[]
+    readonly duration: { kind: string }
+    readonly mark: unknown
+  },
+  path: string,
+  report: TEffectReport
+): void {
+  if (isBlank(effect.text)) report(`${path}.text`, 'empty')
+  if (effect.activation.length === 0) report(`${path}.activation`, 'empty')
+  effect.activation.forEach((activation, index) => {
+    const field = `${path}.activation[${index}]`
+    if (!EVENT_ACTIVATIONS.includes(activation.kind))
+      report(field, 'unknownEffectKind')
+    else checkNode(activation, ACTIVATIONS, field, report)
+  })
+  const kind = effect.duration.kind
+  if (EVENT_DURATIONS.includes(kind)) {
+    checkNode(effect.duration, DURATIONS, `${path}.duration`, report)
+  } else if (kind !== 'untilEventPhaseEnd' && kind !== 'untilEventEnd') {
+    report(`${path}.duration`, 'unknownEffectKind')
+  }
+
+  if (kind === 'immediate' && effect.mark !== null)
+    report(`${path}.mark`, 'markNotAllowed')
+  if (kind !== 'immediate' && effect.mark === null)
+    report(`${path}.mark`, 'markRequired')
+}
+
 export type TEffectCitation = Readonly<{
   /** Caminho com pontos (`effects.0.trigger.zoneTitle`). */
   path: string

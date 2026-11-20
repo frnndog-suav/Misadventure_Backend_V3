@@ -6,6 +6,7 @@ import {
   GAME_CONFIG_LIMITS,
   type TGameConfigKey,
   type TGameConfigValues,
+  type TReserveDeckEntry,
 } from './defaults'
 
 /** Motivos de CONTRATO FEAT-03 (`LabConfigInvalidDetails`). */
@@ -19,11 +20,11 @@ export type TGameConfigIssue =
 /** Valores ajustáveis do Apêndice A em vigor (D-11). */
 export class GameConfig extends ValueObject<TGameConfigValues> {
   get values(): TGameConfigValues {
-    return { ...this.props }
+    return structuredClone(this.props)
   }
 
   static create(values: TGameConfigValues): GameConfig {
-    return new GameConfig(values)
+    return new GameConfig(structuredClone(values))
   }
 
   static withDefaults(): GameConfig {
@@ -46,6 +47,10 @@ export class GameConfig extends ValueObject<TGameConfigValues> {
     for (const [field, value] of Object.entries(input)) {
       if (!isGameConfigKey(field)) {
         issues.push({ field, reason: 'unknownKey' })
+        continue
+      }
+      if (field === 'reserveDeck') {
+        next.reserveDeck = validateReserveDeck(value, issues)
         continue
       }
       if (typeof value !== 'number' || !Number.isInteger(value)) {
@@ -73,6 +78,60 @@ export class GameConfig extends ValueObject<TGameConfigValues> {
 
     return right(new GameConfig(next))
   }
+}
+
+function validateReserveDeck(
+  input: unknown,
+  issues: TGameConfigIssue[]
+): TReserveDeckEntry[] {
+  const { minEntries, minWeight } = GAME_CONFIG_LIMITS.reserveDeck
+  if (!Array.isArray(input) || input.length < minEntries) {
+    issues.push({ field: 'reserveDeck', reason: 'outOfRange' })
+    return []
+  }
+
+  const entries: TReserveDeckEntry[] = []
+  for (const [index, entry] of input.entries()) {
+    const path = `reserveDeck.${index}`
+    if (
+      !isPlainObject(entry) ||
+      (entry.type !== 'gold' && entry.type !== 'card')
+    ) {
+      issues.push({ field: `${path}.type`, reason: 'outOfRange' })
+      continue
+    }
+    const weight = positiveInteger(
+      entry.weight,
+      minWeight,
+      `${path}.weight`,
+      issues
+    )
+    if (entry.type === 'gold') {
+      const amount = positiveInteger(entry.amount, 1, `${path}.amount`, issues)
+      entries.push({ type: 'gold', amount, weight })
+    } else if (typeof entry.cardId !== 'string' || entry.cardId.trim() === '') {
+      issues.push({ field: `${path}.cardId`, reason: 'outOfRange' })
+    } else {
+      entries.push({ type: 'card', cardId: entry.cardId, weight })
+    }
+  }
+  return entries
+}
+
+function positiveInteger(
+  value: unknown,
+  min: number,
+  field: string,
+  issues: TGameConfigIssue[]
+): number {
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    issues.push({ field, reason: 'notInteger' })
+    return min
+  }
+  if (!Number.isSafeInteger(value) || value < min) {
+    issues.push({ field, reason: 'outOfRange' })
+  }
+  return value
 }
 
 function isPlainObject(input: unknown): input is Record<string, unknown> {

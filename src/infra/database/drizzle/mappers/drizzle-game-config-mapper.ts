@@ -2,7 +2,7 @@ import { GameConfig } from '@/domain/lab/enterprise/value-objects/game-config'
 import {
   GAME_CONFIG_DEFAULTS,
   GAME_CONFIG_LIMITS,
-  type TGameConfigKey,
+  type TNumericGameConfigKey,
   type TGameConfigValues,
 } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
@@ -10,7 +10,9 @@ interface TGameConfigRow {
   values: unknown
 }
 
-const KEYS = Object.keys(GAME_CONFIG_DEFAULTS) as TGameConfigKey[]
+const KEYS = Object.keys(GAME_CONFIG_DEFAULTS).filter(
+  (key) => key !== 'reserveDeck'
+) as TNumericGameConfigKey[]
 
 export class DrizzleGameConfigMapper {
   /**
@@ -34,6 +36,12 @@ export class DrizzleGameConfigMapper {
       }
     }
 
+    const reserve = GameConfig.withDefaults().applyPatch({
+      reserveDeck: saved.reserveDeck,
+    })
+    if (reserve.isRight()) {
+      values.reserveDeck = reserve.value.values.reserveDeck
+    }
     return GameConfig.create(values)
   }
 
@@ -45,6 +53,12 @@ export class DrizzleGameConfigMapper {
       if (current[key] !== GAME_CONFIG_DEFAULTS[key]) {
         adjusted[key] = current[key]
       }
+    }
+    if (
+      JSON.stringify(current.reserveDeck) !==
+      JSON.stringify(GAME_CONFIG_DEFAULTS.reserveDeck)
+    ) {
+      adjusted.reserveDeck = current.reserveDeck
     }
     return adjusted
   }

@@ -54,6 +54,9 @@ const CATALOG_MESSAGES: Record<TCatalogIssueReason, string> = {
   notKebabCase: 'Use só letras minúsculas, números e hífens.',
   notARewardCard:
     'O deck de recompensas só tem cartas de atributo, equipamento ou item.',
+  notAnEventCard: 'Use uma carta de evento aleatório ou de combate.',
+  randomEventNotExecutable:
+    'Informe regras executáveis para o evento aleatório.',
   unknownEffectKind: 'Variação de efeito desconhecida.',
   exactlyOneRequired: 'Informe exatamente um dos dois campos.',
   filterRequired: 'Informe pelo menos um filtro.',
@@ -161,6 +164,8 @@ export function contentIssueMessage(issue: TContentIssue): string {
     case 'scavengeZoneTypesNotAllowed':
     case 'notKebabCase':
     case 'notARewardCard':
+    case 'notAnEventCard':
+    case 'randomEventNotExecutable':
     case 'unknownEffectKind':
     case 'exactlyOneRequired':
     case 'filterRequired':

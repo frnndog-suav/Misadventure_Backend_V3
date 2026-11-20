@@ -24,6 +24,7 @@ import {
   GAME_CONFIG_DEFAULTS,
   type TGameConfigKey,
   type TGameConfigValues,
+  type TNumericGameConfigKey,
 } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
 // REQ-107: saves v2 a v6 ganham a lista de status na leitura.
@@ -67,20 +68,45 @@ const isV5ConfigKey = (key: TGameConfigKey): key is TV5ConfigKey =>
 const isV6ConfigKey = (key: TGameConfigKey): key is TV6ConfigKey =>
   (V6_CONFIG_KEYS as readonly string[]).includes(key)
 
-const configKeys = Object.keys(GAME_CONFIG_DEFAULTS) as TGameConfigKey[]
+type TLegacyConfigKey = Exclude<TNumericGameConfigKey, 'escapeVigorPercent'>
+
+const configKeys = Object.keys(GAME_CONFIG_DEFAULTS).filter(
+  (key) => key !== 'reserveDeck' && key !== 'escapeVigorPercent'
+) as TLegacyConfigKey[]
 
 const configSchema = z.strictObject(
   Object.fromEntries(
     configKeys.map((key) => [key, z.number().int()])
-  ) as Record<TGameConfigKey, z.ZodNumber>
+  ) as Record<TLegacyConfigKey, z.ZodNumber>
 )
+
+const currentConfigSchema = configSchema.extend({
+  escapeVigorPercent: z.number().int().min(0).max(100).optional(),
+  reserveDeck: z
+    .array(
+      z.discriminatedUnion('type', [
+        z.strictObject({
+          type: z.literal('gold'),
+          amount: z.number().int().positive(),
+          weight: z.number().int().positive(),
+        }),
+        z.strictObject({
+          type: z.literal('card'),
+          cardId: z.string().min(1),
+          weight: z.number().int().positive(),
+        }),
+      ])
+    )
+    .min(1)
+    .optional(),
+})
 
 const v5ConfigSchema = z.strictObject(
   Object.fromEntries(
     configKeys
       .filter((key) => !isV6ConfigKey(key))
       .map((key) => [key, z.number().int()])
-  ) as Record<Exclude<TGameConfigKey, TV6ConfigKey>, z.ZodNumber>
+  ) as Record<Exclude<TLegacyConfigKey, TV6ConfigKey>, z.ZodNumber>
 )
 
 const v4ConfigSchema = z.strictObject(
@@ -88,7 +114,10 @@ const v4ConfigSchema = z.strictObject(
     configKeys
       .filter((key) => !isV5ConfigKey(key) && !isV6ConfigKey(key))
       .map((key) => [key, z.number().int()])
-  ) as Record<Exclude<TGameConfigKey, TV5ConfigKey | TV6ConfigKey>, z.ZodNumber>
+  ) as Record<
+    Exclude<TLegacyConfigKey, TV5ConfigKey | TV6ConfigKey>,
+    z.ZodNumber
+  >
 )
 
 const legacyConfigSchema = z.strictObject(
@@ -100,7 +129,7 @@ const legacyConfigSchema = z.strictObject(
       )
       .map((key) => [key, z.number().int()])
   ) as Record<
-    Exclude<TGameConfigKey, TV4ConfigKey | TV5ConfigKey | TV6ConfigKey>,
+    Exclude<TLegacyConfigKey, TV4ConfigKey | TV5ConfigKey | TV6ConfigKey>,
     z.ZodNumber
   >
 )
@@ -295,7 +324,7 @@ const stateSchema = z
     }),
     z.strictObject({
       schemaVersion: z.literal(SCHEMA_VERSION),
-      ...stateFields(configSchema, playerSchema),
+      ...stateFields(currentConfigSchema, playerSchema),
       turn: turnSchema,
       rewardDecks: rewardDecksSchema.optional(),
     }),
@@ -332,7 +361,7 @@ export class DrizzlePartyMapper {
     const status = partyStatusSchema.parse(row.status)
     const state = stateSchema.parse(row.state)
     const turnOrder = state.turnOrder.map((m) => new UniqueEntityID(m))
-    const config: TGameConfigValues =
+    const savedConfig =
       state.schemaVersion === 6 || state.schemaVersion === SCHEMA_VERSION
         ? state.config
         : state.schemaVersion === 5
@@ -343,6 +372,11 @@ export class DrizzlePartyMapper {
               ...V5_CONFIG_DEFAULTS,
               ...V6_CONFIG_DEFAULTS,
             }
+
+    const config: TGameConfigValues = {
+      ...GAME_CONFIG_DEFAULTS,
+      ...savedConfig,
+    }
 
     return Party.restore(
       {
@@ -437,7 +471,7 @@ export class DrizzlePartyMapper {
           },
         })),
         hostMemberId: party.hostMemberId.toString(),
-        config: party.config,
+        config: { ...party.config, reserveDeck: [...party.config.reserveDeck] },
         rngState: [a, b, c, d],
         dimension: {
           dimensionCardId,

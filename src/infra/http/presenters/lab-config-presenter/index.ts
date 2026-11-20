@@ -2,8 +2,6 @@ import type { GameConfig } from '@/domain/lab/enterprise/value-objects/game-conf
 import {
   GAME_CONFIG_DEFAULTS,
   GAME_CONFIG_LIMITS,
-  type TGameConfigKey,
-  type TGameConfigLimit,
   type TGameConfigValues,
 } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
@@ -11,14 +9,14 @@ import {
 export interface TLabConfigHttp {
   values: TGameConfigValues
   defaults: TGameConfigValues
-  limits: Record<TGameConfigKey, TGameConfigLimit>
+  limits: typeof GAME_CONFIG_LIMITS
 }
 
 export class LabConfigPresenter {
   static toHTTP(config: GameConfig): TLabConfigHttp {
     return {
       values: config.values,
-      defaults: { ...GAME_CONFIG_DEFAULTS },
+      defaults: structuredClone(GAME_CONFIG_DEFAULTS),
       limits: structuredClone(GAME_CONFIG_LIMITS),
     }
   }

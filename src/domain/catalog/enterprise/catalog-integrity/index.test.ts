@@ -45,6 +45,52 @@ describe('checkCatalogIntegrity', () => {
     ).toEqual([])
   })
 
+  it('REQ-110: preserva a carta legada no catalogo e recusa sua inclusao no deck', () => {
+    const legacy = makeRandomEventCard()
+    expect(check([legacy])).toEqual([])
+    const dimension = makeDimensionCard({
+      eventDecks: [
+        { zoneType: 'urban', cards: [{ cardId: legacy.id, copies: 1 }] },
+      ],
+    })
+    expect(check([dimension, legacy])).toContainEqual(
+      expect.objectContaining({
+        field: 'eventDecks[0].cards[0].cardId',
+        reason: 'randomEventNotExecutable',
+      })
+    )
+  })
+
+  it('REQ-110/REQ-111: aceita um deck misto com evento executavel e combate', () => {
+    const executable = makeRandomEventCard({
+      requirements: [
+        {
+          id: 'vigor',
+          kind: 'minimum',
+          stat: 'vigor',
+          value: 1,
+          text: 'Vigor',
+        },
+      ],
+      goodOutcome: { text: 'Sucesso', steps: [] },
+      badOutcome: { text: 'Reves', steps: [] },
+      escapeThreshold: null,
+    })
+    const combat = makeCombatEventCard()
+    const dimension = makeDimensionCard({
+      eventDecks: [
+        {
+          zoneType: 'urban',
+          cards: [
+            { cardId: executable.id, copies: 2 },
+            { cardId: combat.id, copies: 1 },
+          ],
+        },
+      ],
+    })
+    expect(check([dimension, executable, combat])).toEqual([])
+  })
+
   describe('ids e coleções', () => {
     it('REQ-15: id de coleção repetido', () => {
       expect(check([], [makeCollection(), makeCollection()])).toEqual([

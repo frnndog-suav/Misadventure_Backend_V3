@@ -1,5 +1,7 @@
 import {
   checkEffects,
+  checkEventCost,
+  checkEventOutcomeEffect,
   type TEffectIssueReason,
 } from '@/domain/catalog/enterprise/effect-rules'
 import {
@@ -16,6 +18,7 @@ import {
   type TDimensionCard,
   type TEquipmentCard,
   type TItemCard,
+  type TRandomEventCard,
   type TZoneCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
@@ -61,6 +64,8 @@ export type TCatalogIssueReason =
   | 'notKebabCase'
   // REQ-82
   | 'notARewardCard'
+  | 'notAnEventCard'
+  | 'randomEventNotExecutable'
   // REQ-99
   | TEffectIssueReason
 
@@ -188,7 +193,7 @@ export function checkCatalogIntegrity({
         checkEffects(card, report)
         break
       case 'randomEvent':
-        if (card.requirements.length === 0) report('requirements', 'empty')
+        checkRandomEvent(card, cardsById, report)
         break
       case 'combatEvent':
         checkCombatEvent(card, report)
@@ -205,7 +210,8 @@ export function checkCatalogIntegrity({
           report('releaseOrder', 'duplicateValue')
         }
         releaseOrders.add(card.releaseOrder)
-        checkRewardDecks(card, cardsById, report)
+        checkZoneDecks(card.rewardDecks, 'rewardDecks', cardsById, report)
+        checkZoneDecks(card.eventDecks ?? [], 'eventDecks', cardsById, report)
         checkEffects(card, report)
         break
       default: {
@@ -447,14 +453,15 @@ function checkKebab(value: string | null, field: string, report: TReport) {
 }
 
 /** README 3.4, D-74 (REQ-82). As cartas citadas são procuradas em `cardsById`. */
-function checkRewardDecks(
-  card: TDimensionCard,
+function checkZoneDecks(
+  decks: TDimensionCard['rewardDecks'],
+  field: 'rewardDecks' | 'eventDecks',
   cardsById: ReadonlyMap<string, TCard>,
   report: TReport
 ): void {
   const zoneTypes = new Set<string>()
-  card.rewardDecks.forEach((deck, index) => {
-    const path = `rewardDecks[${index}]`
+  decks.forEach((deck, index) => {
+    const path = `${field}[${index}]`
     if (zoneTypes.has(deck.zoneType))
       report(`${path}.zoneType`, 'duplicateValue')
     zoneTypes.add(deck.zoneType)
@@ -469,14 +476,84 @@ function checkRewardDecks(
       const cited = cardsById.get(entry.cardId)
       if (!cited) {
         report(`${entryPath}.cardId`, 'unknownCard')
-      } else if (!isRewardCard(cited)) {
+      } else if (field === 'rewardDecks' && !isRewardCard(cited)) {
         report(`${entryPath}.cardId`, 'notARewardCard')
+      } else if (
+        field === 'eventDecks' &&
+        cited.type !== 'randomEvent' &&
+        cited.type !== 'combatEvent'
+      ) {
+        report(`${entryPath}.cardId`, 'notAnEventCard')
+      } else if (
+        field === 'eventDecks' &&
+        cited.type === 'randomEvent' &&
+        cited.escapeThreshold === undefined
+      ) {
+        report(`${entryPath}.cardId`, 'randomEventNotExecutable')
       }
       if (!isIntegerBetween(entry.copies, 1, Infinity)) {
         report(`${entryPath}.copies`, 'outOfRange')
       }
     })
   })
+}
+
+function checkRandomEvent(
+  card: TRandomEventCard,
+  cardsById: ReadonlyMap<string, TCard>,
+  report: TReport
+): void {
+  if (card.requirements.length === 0) report('requirements', 'empty')
+  const executable = card.escapeThreshold !== undefined
+  const ids = new Set<string>()
+  card.requirements.forEach((requirement, index) => {
+    const path = `requirements[${index}]`
+    if (!('kind' in requirement)) {
+      if (executable) report(path, 'randomEventNotExecutable')
+      return
+    }
+    if (!executable) report('escapeThreshold', 'randomEventNotExecutable')
+    if (requirement.id.trim() === '') report(`${path}.id`, 'empty')
+    if (requirement.text.trim() === '') report(`${path}.text`, 'empty')
+    if (ids.has(requirement.id)) report(`${path}.id`, 'duplicateValue')
+    ids.add(requirement.id)
+    if (
+      requirement.kind === 'attributes' &&
+      requirement.any +
+        Object.values(requirement.specific).reduce(
+          (sum, count) => sum + count,
+          0
+        ) ===
+        0
+    ) {
+      report(path, 'empty')
+    }
+    if (requirement.kind !== 'attributes' && requirement.kind !== 'minimum') {
+      checkEventCost(requirement, path, report)
+    }
+  })
+  for (const field of ['goodOutcome', 'badOutcome'] as const) {
+    const outcome = card[field]
+    if (!('steps' in outcome)) {
+      if (executable) report(field, 'randomEventNotExecutable')
+      continue
+    }
+    if (!executable) report('escapeThreshold', 'randomEventNotExecutable')
+    outcome.steps.forEach((step, index) => {
+      if (step.type === 'effect') {
+        checkEventOutcomeEffect(
+          step.effect,
+          `${field}.steps[${index}].effect`,
+          report
+        )
+      }
+      if (step.type !== 'grantReward' && step.type !== 'searchReward') return
+      const cited = cardsById.get(step.cardId)
+      const path = `${field}.steps[${index}].cardId`
+      if (!cited) report(path, 'unknownCard')
+      else if (!isRewardCard(cited)) report(path, 'notARewardCard')
+    })
+  }
 }
 
 /** Tipos que entram em deck de recompensas (REQ-82). */

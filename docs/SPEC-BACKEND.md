@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.56 · **Data:** 2026-11-19
+> **Versão da spec:** 0.57 · **Data:** 2026-11-20
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -330,6 +330,21 @@ Regras de README 13 (quatro partes; tabela gatilho × custo; "Usar um recurso"; 
 - **REQ-106 — Ações disponíveis (estende REQ-93):** `prepare` entra também quando `activatableEffects` não é vazio (ordem de REQ-93 sem mudança).
 - **REQ-107 — Save v7 (estende REQ-95):** Dado um grupo com status ativos, quando gravado e lido (memória e Drizzle), então `statuses` (com a ordem, cópias e `remaining`) é igual. Um save v6 é lido como v7 com `statuses = []` (como D-70). O que os saves guardam das cartas continua sendo só `cardId`; a conversão de REQ-100 não pede migração de save.
 
+### FEAT-12 — Eventos aleatórios
+
+Base: CONTRATO v0.57 (FEAT-12, `acordado`), devlog 048 e README §§3.4, 6.5–6.6, 11.3, 12.2, 12.6 e 13–15.
+
+- **REQ-108 — Configuração do laboratório:** Dado o laboratório habilitado, quando consultar ou restaurar os padrões, então a resposta inclui `defaults.escapeVigorPercent: 20` e `limits.escapeVigorPercent: { min: 0, max: 100 }`, além de `limits.reserveDeck: { minEntries: 1, minWeight: 1 }`. Dado um PATCH válido, quando gravado, então o GET devolve os novos valores. A reserva tem pelo menos uma entrada ponderada de ouro, consumível ou material básico, com pesos inteiros positivos.
+- **REQ-109 — Erro indexado no laboratório:** Dado `PATCH /lab/config` com corpo `{"reserveDeck":[{"type":"gold","amount":1,"weight":0}]}`, quando validar a primeira entrada, então responde HTTP 400, `LAB_CONFIG_INVALID`, mensagem “Configuração do laboratório inválida.” e `details.fields: [{"field":"reserveDeck.0.weight","reason":"outOfRange"}]`. Um GET posterior devolve a configuração anterior. O índice começa em zero.
+- **REQ-110 — Conteúdo executável:** Dada uma carta legada em `RuleText`, quando lida no catálogo/editor, então continua legível. Quando publicar um deck com evento aleatório legado, então responde `CONTENT_INVALID`. Dada carta executável, quando gravada ou publicada, então valida requisitos, IDs únicos, desfechos ordenados, variantes e referências, aplicando as proteções de conteúdo da FEAT-31. A conversão de `base.abandoned-cart` e `fixture.wounded-traveler` depende de revisão do autor.
+- **REQ-111 — Decks e antecipação:** Dado um deck de tipo de zona com aleatório executável e combate, quando iniciar por 1 PA, então grava a antecipação com carta oculta; ao revelar, compra o aleatório. Quando reciclar o descarte, usa o mesmo tipo de zona e conserva a reserva de cartas de combate para a FEAT-13. Sem carta elegível, omite `startEvent` e retorna `409 eventDeckEmpty` com PA disponível.
+- **REQ-112 — Encontro e pagamento:** Dado um encontro aberto, quando uma parte válida for paga, então persiste o recibo, o saldo e as opções autoritativas, usando `handCardSelection`. Escolher `h2` entre duas cópias do mesmo catálogo preserva `h1`. Descarte aleatório sorteia uma cópia por envio sem `payment`; um `payment` explícito recebe `409 paymentInvalid`. Manipulação e demais custos integrais seguem o contrato. Antes da primeira parte, uma ativação elegível via `prepare/activate` funciona com 0 PA; após a primeira parte, a mesma intenção recebe `409 eventPaymentStarted`.
+- **REQ-113 — Checagem final e desistência:** Dados pagamentos aceitos e Vigor 7, quando a última parte custar 3 e o mínimo for 5, então retorna `409 eventMinimumNotMet` com `actual: 4` e preserva Vigor 7, recibos anteriores, mão, RNG e `savedAt`. Dado evento só de verificações, `resolveEvent` aplica a mesma checagem. Desistir aplica revés, preserva custos pagos e repõe as cópias elegíveis. Uma última parte aceita passa automaticamente ao êxito.
+- **REQ-114 — Fuga, desfecho e reposição:** Dado encontro antes do primeiro pagamento, quando tentar fugir, então aplica custo e teste conforme README §15 e devolve o recibo previsto no contrato. Com limiar 10, total 10 e zero PA, aplica revés e registra dívida de 1 PA para a próxima vez do mesmo membro; total 11 encerra com fuga bem-sucedida. Cobre Sem fuga, Vigor insuficiente e fuga automática. Após êxito ou revés, executa o desfecho uma vez, aplica a variação de Pico e repõe as cópias que saíram da mão para requisitos; custos de efeitos ficam fora da contagem.
+- **REQ-115 — Recompensas e Vasculhar:** Dada uma compra de recompensa, quando esgotar o deck da zona, então recorre à reserva. Busca específica e Vasculhar consultam o deck da zona. Se a recompensa não couber, persiste a escolha; manter valida o lote de descartes atomicamente e deixar aplica o destino da origem. Vasculhar sem espaço gasta 1 PA e retorna `pending` quando encontrar uma cópia que não empilha; entrega por empilhamento retorna `inventory`, deixar retorna `left` e busca sem achado retorna `none`.
+- **REQ-116 — Persistência, recusas e prazos:** Dado um encontro ou recompensa pendente, quando recarregar, então GET devolve o estado, as cópias, os recibos e as ações da fase. Ações concorrentes são serializadas por grupo; IDs obsoletos e demais recusas seguem a precedência do contrato e preservam o save. Saves anteriores recebem campos iniciais, IDs determinísticos e a configuração migrada, preservando a sequência RNG das ações existentes. No solo, o prazo é `null`; a integração FEAT-26 cobre os prazos e os padrões de desistir ou deixar, aplicados uma vez no backend.
+
+
 ### FEAT-31 — Editor de conteúdo (coleções e cartas)
 
 Regras de README 27 (criação de conteúdo), II.6 (editor no laboratório), 3.5 com Apêndice B I5 (validação da dimensão) e Apêndice B T1 (só publicadas entram no jogo; id publicado imutável; nada usado em saves é excluído). Modelo e escopo: D-46 a D-53. Formatos exatos: CONTRATO v0.22, seção FEAT-31 (`acordado`). Tudo vale com o laboratório ligado; desligado, `/lab/content/*` → `404` `NOT_FOUND` (REQ-08). Fora: Carta de Dimensão, classes, `arrowLayout` e conteúdo em uso (FEAT-06: REQ-36, REQ-38 a REQ-40); admin (FEAT-25).
@@ -585,6 +600,14 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 - [x] **T-38 — Domínio do Preparar: ativar (REQ-101, REQ-104 a REQ-106; REQ-107 em memória).** TDD unitário: `Party.prepare` com `activate` (pagamento na ordem, cada ativação executada, tetos, limbo do consumível, status criado com cópia), recusas na ordem de REQ-105, `activatableEffects` com `handPayment` (função pura; textos da D-102, um `it` por forma), status com `text` copiado, parser, `availableActions`, eventos em ordem, RNG só quando usado. **Verificação:** `npx vitest related --run` verde; guarda do domínio.
 - [x] **T-39 — Save v7, rotas e e2e (REQ-97 a REQ-107 de ponta a ponta).** Mapper Drizzle v7 com `statuses` (lê v6 a v2 com `[]`), sem migração SQL (conferir `drizzle-kit` sem diferença); `PartyPresenter` com `statuses` (com `text`) e `activatableEffects` (com `handPayment`); e2e Supertest (um `it` por REQ, estados montados pela doação do laboratório); `client.http`. **Verificação:** `npm run test:e2e` verde; `curl` dos cenários. Ao final: `/contrato` marca FEAT-11 `implementado (BE)` e gera o AVISO DE FRONTEND.
 
+### FEAT-12 — Eventos aleatórios
+
+- [ ] **T-40 — Configuração, catálogo e decks** (REQ-108 a REQ-111). Atualizar configuração, DTOs, publicação, referências e migração de conteúdo após revisão do autor. Verificar GET/PATCH/reset do laboratório, peso zero na primeira entrada, preservação da configuração após erro, leitura legada e deck misto.
+- [ ] **T-41 — Domínio e ações do encontro** (REQ-111 a REQ-114). Implementar antecipação, revelação, disponibilidade por fase, ativação de consumível, pagamentos por cópia, checagem atômica, fuga, desistência e reposição. Testar duplicatas, descarte aleatório e restauração do RNG, PA zero e dívida na próxima vez.
+- [ ] **T-42 — Recompensas pendentes e Vasculhar** (REQ-114 a REQ-115). Implementar reserva, busca, pausa e retomada do desfecho, manter/deixar e recibos. Testar espaço por empilhamento, descarte insuficiente, destinos das três origens e ausência de fallback da reserva no Vasculhar.
+- [ ] **T-43 — Save, projeção HTTP e validação BE** (REQ-108 a REQ-116). Persistir escolhas, decks, RNG, cópias e progresso; projetar `Party` e as recusas na rota de ações. Executar unitários e cenários HTTP determinísticos do contrato, incluindo recarga, save antigo, IDs obsoletos e repetição de escolha. O prazo multiplayer é verificado na integração FEAT-26. Após a validação BE, registrar `implementado (BE)` no contrato e levar ao frontend a URL de teste e os dados dos cenários.
+
+
 ## 8. Histórico
 
 | Versão | Data | Mudança |
@@ -645,6 +668,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.54 | 2026-11-19 | T-37 concluída: passivos e status em `effectiveModifiers` (REQ-102), estado inicial e expiração por vez, rodada e movimento (REQ-103), ordenação dos eventos e compatibilidade com save v6 (D-105). |
 | 0.55 | 2026-11-19 | T-38 concluída: parser, ativação e recusas de Preparar, projeção de efeitos ativáveis e ações disponíveis no domínio, ida e volta dos status em memória e integração HTTP reservada ao save v7 (D-106). |
 | 0.56 | 2026-11-19 | T-39 concluída: ativação via HTTP, projeção de efeitos e status, save v7, compatibilidade v2 a v6, proteção de conteúdo em uso (D-107), Supertest e roteiro em `client.http`. |
+| 0.57 | 2026-11-20 | Planejamento BE da FEAT-12 a partir do CONTRATO v0.57 e devlog 048. REQ-108 a REQ-116 e T-40 a T-43. |
 
 ## Apêndice A — Conteúdo de teste
 

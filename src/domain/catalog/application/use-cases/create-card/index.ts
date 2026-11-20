@@ -56,7 +56,7 @@ export class CreateCardUseCase {
       card,
       undefined,
       await loadOtherDimensions(this.contentStore, collectionId),
-      card.type === 'dimension'
+      card.type === 'dimension' || card.type === 'randomEvent'
         ? cardsOutside(await loadAllCards(this.contentStore), collectionId)
         : []
     )

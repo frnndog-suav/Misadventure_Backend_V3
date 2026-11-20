@@ -33,6 +33,8 @@ const DEFAULTS = {
   vaultCapacity: 30,
   vaultDeckSlots: 10,
   vaultGoldCapacity: 2000,
+  escapeVigorPercent: 20,
+  reserveDeck: [{ type: 'gold', amount: 1, weight: 1 }],
 }
 
 const LIMITS = {
@@ -65,6 +67,8 @@ const LIMITS = {
   vaultCapacity: { min: 0, max: 1000 },
   vaultDeckSlots: { min: 1, max: 100 },
   vaultGoldCapacity: { min: 0, max: 10000000 },
+  escapeVigorPercent: { min: 0, max: 100 },
+  reserveDeck: { minEntries: 1, minWeight: 1 },
 }
 
 describe('GET /lab/config (e2e)', () => {

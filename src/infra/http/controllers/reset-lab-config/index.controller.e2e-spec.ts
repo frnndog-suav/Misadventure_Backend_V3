@@ -17,7 +17,11 @@ describe('POST /lab/config/reset (e2e)', () => {
   it('REQ-07: com ajuste salvo, responde 200 com values igual a defaults e o GET seguinte também', async () => {
     await request(app.getHttpServer())
       .patch('/lab/config')
-      .send({ actionPointsPerTurn: 4 })
+      .send({
+        actionPointsPerTurn: 4,
+        escapeVigorPercent: 100,
+        reserveDeck: [{ type: 'gold', amount: 5, weight: 3 }],
+      })
       .expect(200)
 
     const response = await request(app.getHttpServer()).post(
@@ -27,6 +31,15 @@ describe('POST /lab/config/reset (e2e)', () => {
     expect(response.status).toBe(200)
     expect(response.body.values).toEqual(response.body.defaults)
     expect(response.body.values.actionPointsPerTurn).toBe(3)
+    expect(response.body.defaults.escapeVigorPercent).toBe(20)
+    expect(response.body.limits.escapeVigorPercent).toEqual({
+      min: 0,
+      max: 100,
+    })
+    expect(response.body.limits.reserveDeck).toEqual({
+      minEntries: 1,
+      minWeight: 1,
+    })
     const read = await request(app.getHttpServer()).get('/lab/config')
     expect(read.body.values).toEqual(response.body.defaults)
   })

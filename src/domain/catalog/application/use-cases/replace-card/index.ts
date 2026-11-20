@@ -70,8 +70,15 @@ export class ReplaceCardUseCase {
     const renamed = card.id !== cardId
     // D-91: carta citada em `rewardDecks` não muda para tipo que não entra no deck.
     const leavesRewardTypes = isRewardCard(current.card) && !isRewardCard(card)
+    const leavesEventTypes =
+      (current.card.type === 'randomEvent' ||
+        current.card.type === 'combatEvent') &&
+      card.type !== 'combatEvent' &&
+      (card.type !== 'randomEvent' || card.escapeThreshold === undefined)
     const allCards =
       card.type === 'dimension' ||
+      card.type === 'randomEvent' ||
+      leavesEventTypes ||
       current.status === 'published' ||
       renamed ||
       leavesRewardTypes
@@ -89,7 +96,9 @@ export class ReplaceCardUseCase {
         card,
         cardId,
         await loadOtherDimensions(this.contentStore, collectionId),
-        card.type === 'dimension' ? cardsOutside(allCards, collectionId) : []
+        card.type === 'dimension' || card.type === 'randomEvent'
+          ? cardsOutside(allCards, collectionId)
+          : []
       ),
       ...(current.status === 'published'
         ? [
@@ -105,7 +114,7 @@ export class ReplaceCardUseCase {
     ]
     if (issues.length > 0) return left(new ContentInvalidError(issues))
 
-    if (!renamed && leavesRewardTypes && cited()) {
+    if (!renamed && (leavesRewardTypes || leavesEventTypes) && cited()) {
       return left(new ContentReferencedError('rewardDeck'))
     }
 

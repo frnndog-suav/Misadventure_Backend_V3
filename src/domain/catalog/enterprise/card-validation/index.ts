@@ -102,20 +102,43 @@ export function rewardDeckPublicationIssues(
   candidate: TCard,
   statusById: ReadonlyMap<string, TContentStatus>
 ): TContentIssue[] {
+  if (candidate.type === 'randomEvent') {
+    return randomEventRewardCitations(candidate).flatMap(({ path, cardId }) =>
+      statusById.get(cardId) === 'published'
+        ? []
+        : [{ path, reason: 'rewardDeckCardNotPublished' }]
+    )
+  }
   if (candidate.type !== 'dimension') return []
   const issues: TContentIssue[] = []
-  candidate.rewardDecks.forEach((deck, index) => {
-    deck.cards.forEach((entry, cardIndex) => {
-      const status = statusById.get(entry.cardId)
-      if (status !== undefined && status !== 'published') {
-        issues.push({
-          path: `rewardDecks.${index}.cards.${cardIndex}.cardId`,
-          reason: 'rewardDeckCardNotPublished',
-        })
-      }
+  for (const field of ['rewardDecks', 'eventDecks'] as const) {
+    candidate[field]?.forEach((deck, index) => {
+      deck.cards.forEach((entry, cardIndex) => {
+        const status = statusById.get(entry.cardId)
+        if (status !== undefined && status !== 'published') {
+          issues.push({
+            path: `${field}.${index}.cards.${cardIndex}.cardId`,
+            reason: 'rewardDeckCardNotPublished',
+          })
+        }
+      })
     })
-  })
+  }
   return issues
+}
+
+function randomEventRewardCitations(
+  card: Extract<TCard, { type: 'randomEvent' }>
+) {
+  return (['goodOutcome', 'badOutcome'] as const).flatMap((field) => {
+    const outcome = card[field]
+    if (!('steps' in outcome)) return []
+    return outcome.steps.flatMap((step, index) =>
+      step.type === 'searchReward' || step.type === 'grantReward'
+        ? [{ cardId: step.cardId, path: `${field}.steps.${index}.cardId` }]
+        : []
+    )
+  })
 }
 
 /** REQ-82: alguma Carta de Dimensão cita uma destas cartas em `rewardDecks`? */
@@ -125,10 +148,14 @@ export function isCitedInRewardDeck(
 ): boolean {
   return cards.some(
     (card) =>
-      card.type === 'dimension' &&
-      card.rewardDecks.some((deck) =>
-        deck.cards.some((entry) => cardIds.has(entry.cardId))
-      )
+      (card.type === 'dimension' &&
+        [...card.rewardDecks, ...(card.eventDecks ?? [])].some((deck) =>
+          deck.cards.some((entry) => cardIds.has(entry.cardId))
+        )) ||
+      (card.type === 'randomEvent' &&
+        randomEventRewardCitations(card).some(({ cardId }) =>
+          cardIds.has(cardId)
+        ))
   )
 }
 
