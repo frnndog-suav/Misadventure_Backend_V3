@@ -72,6 +72,11 @@ describe('POST /parties (e2e)', () => {
               reflection: 0,
             },
             hand: expect.any(Array),
+            handCopies: expect.any(Array),
+            nextTurnActionPointDebt: 0,
+            lastRandomEvent: null,
+            lastRewardSearch: null,
+            lastRewardDelivery: null,
             attributeDeckCount: 53,
             attributeDiscardPileCount: 0,
             zoneId: 'fixture.gray-harbor',
@@ -82,6 +87,7 @@ describe('POST /parties (e2e)', () => {
               'recover',
               'adjustDeck',
               'useVault',
+              'startEvent',
               'endTurn',
             ],
             build: [
@@ -131,6 +137,8 @@ describe('POST /parties (e2e)', () => {
       },
       turnOrder: [memberId],
       turn: { round: 1, memberId, actionPoints: 3 },
+      randomEventEncounter: null,
+      pendingRewards: [],
       createdAt: expect.stringMatching(ISO_UTC),
       savedAt: expect.stringMatching(ISO_UTC),
     })

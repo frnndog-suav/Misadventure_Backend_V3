@@ -38,6 +38,31 @@ export class DrizzlePartiesRepository implements PartiesRepository {
     return row ? DrizzlePartyMapper.toDomain(row) : null
   }
 
+  async withLockedParty<T>(
+    id: string,
+    run: (
+      party: Party | null,
+      save: (party: Party) => Promise<void>
+    ) => Promise<T>
+  ): Promise<T> {
+    return this.db.transaction(async (tx) => {
+      const [row] = UUID.test(id)
+        ? await tx
+            .select()
+            .from(parties)
+            .where(eq(parties.id, id))
+            .for('update')
+        : []
+      return run(
+        row ? DrizzlePartyMapper.toDomain(row) : null,
+        async (party) => {
+          const { id: partyId, ...values } = DrizzlePartyMapper.toDrizzle(party)
+          await tx.update(parties).set(values).where(eq(parties.id, partyId))
+        }
+      )
+    })
+  }
+
   async findAll(): Promise<Party[]> {
     const rows = await this.db.select().from(parties)
     return rows.map((row) => DrizzlePartyMapper.toDomain(row))

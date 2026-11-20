@@ -51,11 +51,20 @@ export class TakePartyActionUseCase {
     private readonly eventActionsEnabled = true
   ) {}
 
-  async execute({
+  execute({
     partyId,
     body,
   }: TTakePartyActionUseCaseRequest): Promise<TTakePartyActionUseCaseResponse> {
-    const party = await this.partiesRepository.findById(partyId)
+    return this.partiesRepository.withLockedParty(partyId, (party, save) =>
+      this.takeAction(party, body, save)
+    )
+  }
+
+  private async takeAction(
+    party: Party | null,
+    body: unknown,
+    save: (party: Party) => Promise<void>
+  ): Promise<TTakePartyActionUseCaseResponse> {
     if (!party) {
       return left(new PartyNotFoundError())
     }
@@ -303,7 +312,7 @@ export class TakePartyActionUseCase {
       }
     }
 
-    await this.partiesRepository.save(party)
+    await save(party)
 
     return right({ party })
   }

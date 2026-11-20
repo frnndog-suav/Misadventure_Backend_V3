@@ -22,21 +22,18 @@ export class EndSessionUseCase {
     private readonly clock: Clock
   ) {}
 
-  async execute({
+  execute({
     partyId,
   }: TEndSessionUseCaseRequest): Promise<TEndSessionUseCaseResponse> {
-    const party = await this.partiesRepository.findById(partyId)
-    if (!party) {
-      return left(new PartyNotFoundError())
-    }
-
-    const result = party.endSession(this.clock.now())
-    if (result.isLeft()) {
-      return left(new PartySessionNotActiveError())
-    }
-
-    await this.partiesRepository.save(party)
-
-    return right({ party })
+    return this.partiesRepository.withLockedParty(
+      partyId,
+      async (party, save) => {
+        if (!party) return left(new PartyNotFoundError())
+        const result = party.endSession(this.clock.now())
+        if (result.isLeft()) return left(new PartySessionNotActiveError())
+        await save(party)
+        return right({ party })
+      }
+    )
   }
 }

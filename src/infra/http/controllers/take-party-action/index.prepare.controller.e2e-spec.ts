@@ -145,6 +145,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
       'recover',
       'adjustDeck',
       'useVault',
+      'startEvent',
       'endTurn',
     ])
   })
@@ -177,6 +178,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
       'prepare',
       'adjustDeck',
       'useVault',
+      'startEvent',
       'endTurn',
     ])
     await give(party, B)
@@ -186,6 +188,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
       'prepare',
       'adjustDeck',
       'useVault',
+      'startEvent',
       'endTurn',
     ])
 
@@ -357,7 +360,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
     expect(player.availableActions).toContain('prepare')
   })
 
-  it('REQ-79/D-79: save v4 inserido à mão é lido como v7 (vazio, padrões, ouro limitado) e regravado como v7', async () => {
+  it('REQ-79/D-79: save v4 inserido à mão é lido (vazio, padrões, ouro limitado) e regravado como v8', async () => {
     const party = await startedParty()
     await give(party, B)
     const state = (await rawState(party.id)) as {
@@ -397,7 +400,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
 
     await act(party.id, { type: 'endTurn' }).expect(200)
     expect(await rawState(party.id)).toMatchObject({
-      schemaVersion: 7,
+      schemaVersion: 8,
       config: { inventoryCapacity: 10, purseCapacity: 300 },
       members: [{ player: { inventory: [], gold: 300 } }],
     })

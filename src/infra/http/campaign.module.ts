@@ -106,7 +106,7 @@ import { TakePartyActionController } from './controllers/take-party-action/index
         catalog: CardCatalog,
         ids: IdGenerator
         // A exposição HTTP depende do mapper e da projeção da T-43.
-      ) => new TakePartyActionUseCase(parties, clock, catalog, ids, false),
+      ) => new TakePartyActionUseCase(parties, clock, catalog, ids),
     },
     {
       provide: AbandonPartyUseCase,

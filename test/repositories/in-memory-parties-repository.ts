@@ -22,6 +22,16 @@ export class InMemoryPartiesRepository implements PartiesRepository {
     return found ? snapshot(found) : null
   }
 
+  async withLockedParty<T>(
+    id: string,
+    run: (
+      party: Party | null,
+      save: (party: Party) => Promise<void>
+    ) => Promise<T>
+  ): Promise<T> {
+    return run(await this.findById(id), (party) => this.save(party))
+  }
+
   async findAll(): Promise<Party[]> {
     return this.items.map(snapshot)
   }
@@ -56,6 +66,10 @@ function snapshot(party: Party): Party {
       rngState: [...party.rngState] as unknown as Party['rngState'],
       dimension: structuredClone(party.dimension),
       rewardDecks: structuredClone(party.rewardDecks),
+      eventDecks: structuredClone(party.eventDecks),
+      eventEncounter: structuredClone(party.eventEncounter),
+      pendingReward: structuredClone(party.pendingRewards[0]),
+      rewardSequence: party.rewardSequence,
       turnOrder: [...party.turnOrder],
       turn: party.turn,
       createdAt: party.createdAt,

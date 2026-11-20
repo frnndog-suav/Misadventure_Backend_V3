@@ -24,12 +24,12 @@ export function availableActions(
   /** Os alvos do Vasculhar do membro (REQ-90; `scavengeTargets`). */
   scavengeTargets: readonly string[] = [],
   activatableEffects: readonly TActivatableEffect[] = [],
-  canStartEvent = false
+  canStartEvent = false,
+  encounter = party.randomEventEncounter
 ): TPartyActionType[] {
   const { turn } = party
   if (!turn.memberId.equals(memberId)) return []
   if (party.pendingRewards.length) return ['resolveReward']
-  const encounter = party.randomEventEncounter
   if (encounter) {
     if (encounter.phase === 'success' || encounter.phase === 'setback')
       return []

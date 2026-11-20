@@ -251,11 +251,18 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return this.props.pendingReward ? [this.props.pendingReward] : []
   }
 
+  get rewardSequence(): number {
+    return this.props.rewardSequence ?? 0
+  }
+
   get randomEventEncounter() {
+    return this.describeRandomEvent(this.eventCatalog)
+  }
+
+  describeRandomEvent(cards: ReadonlyMap<string, TCard>) {
     const encounter = this.eventEncounter
     if (!encounter) return null
     const player = this.props.members[this.actorIndex()].player
-    const cards = this.eventCatalog
     return {
       id: encounter.id,
       memberId: encounter.memberId,
@@ -276,16 +283,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 
   eventActionBlock(action: TPartyAction): TEventRefusal | null {
     if (action.type === 'resolveReward') return null
+    if ('encounterId' in action) return null
     if (this.props.pendingReward) return 'choicePending'
     const encounter = this.eventEncounter
     if (!encounter) return null
     switch (action.type) {
-      case 'payEventRequirement':
-      case 'resolveEvent':
-      case 'giveUpEvent':
-      case 'escapeEvent':
-      case 'revealEvent':
-        return null
       case 'prepare':
         if (encounter.outcome) return 'choicePending'
         if (encounter.payments.length) return 'eventPaymentStarted'
@@ -2195,10 +2197,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             {
               characterName: member.characterName,
               kind: member.kind,
-              player:
-                this.props.members[index].player.handCopies === undefined
-                  ? player
-                  : reconcileHand(this.props.members[index].player, player),
+              player: reconcileHand(member.player, player),
             },
             member.id
           )

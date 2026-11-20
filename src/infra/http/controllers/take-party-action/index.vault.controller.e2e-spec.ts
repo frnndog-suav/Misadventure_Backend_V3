@@ -35,7 +35,11 @@ type TPlayer = {
   vaultDeckSlots: number
   vaultGoldCapacity: number
   scavengeTargets: string[]
-  lastScavenge: { cardId: string; found: boolean } | null
+  lastScavenge: {
+    cardId: string
+    found: boolean
+    delivery: 'inventory' | 'pending' | 'left' | 'none'
+  } | null
   availableActions: string[]
 }
 
@@ -135,6 +139,7 @@ describe('Cofre e Vasculhar (e2e)', () => {
       'recover',
       'adjustDeck',
       'useVault',
+      'startEvent',
       'endTurn',
     ])
   })
@@ -165,6 +170,7 @@ describe('Cofre e Vasculhar (e2e)', () => {
       'adjustDeck',
       'scavenge',
       'useVault',
+      'startEvent',
       'endTurn',
     ])
   })
@@ -179,7 +185,11 @@ describe('Cofre e Vasculhar (e2e)', () => {
       { cardId: F, quantity: 1 },
       { cardId: S, quantity: 1 },
     ])
-    expect(player(first.body).lastScavenge).toEqual({ cardId: S, found: true })
+    expect(player(first.body).lastScavenge).toEqual({
+      cardId: S,
+      found: true,
+      delivery: 'inventory',
+    })
     expect(first.body.turn.actionPoints).toBe(2)
 
     const second = await act(party.id, scavenge(S))
@@ -192,17 +202,22 @@ describe('Cofre e Vasculhar (e2e)', () => {
     expect(player(second.body).lastScavenge).toEqual({
       cardId: S,
       found: false,
+      delivery: 'none',
     })
 
     const saved = player(await get(party.id))
-    expect(saved.lastScavenge).toEqual({ cardId: S, found: false })
+    expect(saved.lastScavenge).toEqual({
+      cardId: S,
+      found: false,
+      delivery: 'none',
+    })
     const decks = (await rawState(party.id)).rewardDecks as {
       cards: string[]
     }[]
     expect([...decks[0].cards].sort()).toEqual([P, P, I].sort())
   })
 
-  it('REQ-92: recusas na ordem, sem gravar: forma, sem sessão, notScavengeable, inventoryFull, noActionPoints', async () => {
+  it('REQ-92/REQ-115/REQ-116: recusa forma e alvo inválidos e persiste a escolha com inventário cheio', async () => {
     const party = await startedParty()
     await give(party, F)
 
@@ -226,10 +241,42 @@ describe('Cofre e Vasculhar (e2e)', () => {
 
     // Inventário cheio: 10 slots, nenhum de S (F + 9 picaretas não empilham).
     await give(party, K, 9)
-    const full = await act(party.id, scavenge(S))
-    expect(full.status).toBe(409)
-    expect(full.body).toEqual(notAllowed({ reason: 'inventoryFull' }))
-    expect((await get(party.id)).turn.actionPoints).toBe(3)
+    const full = await act(party.id, scavenge(S)).expect(200)
+    expect(full.body).toMatchObject({
+      turn: { actionPoints: 2 },
+      randomEventEncounter: null,
+      pendingRewards: [
+        {
+          cardId: S,
+          origin: { type: 'rewardDeck', zoneType: 'urban' },
+          source: { type: 'scavenge' },
+        },
+      ],
+      members: [
+        {
+          player: {
+            availableActions: ['resolveReward'],
+            lastScavenge: { cardId: S, found: true, delivery: 'pending' },
+          },
+        },
+      ],
+    })
+    expect(await get(party.id)).toEqual(full.body)
+    const left = await act(party.id, {
+      type: 'resolveReward',
+      rewardId: full.body.pendingRewards[0].id,
+      choice: 'leave',
+    }).expect(200)
+    expect(left.body.pendingRewards).toEqual([])
+    expect(player(left.body).lastScavenge).toEqual({
+      cardId: S,
+      found: true,
+      delivery: 'left',
+    })
+    const decks = (await rawState(party.id)).rewardDecks as {
+      cards: string[]
+    }[]
+    expect(decks[0].cards.at(-1)).toBe(S)
 
     await request(server()).post(`/parties/${party.id}/session/end`).expect(200)
     const idle = await act(party.id, scavenge(S))
@@ -481,7 +528,7 @@ describe('Cofre e Vasculhar (e2e)', () => {
     expect(referenced.body.error.code).toBe('CONTENT_REFERENCED')
   })
 
-  it('REQ-95/REQ-96/D-87: save v5 inserido à mão é lido com cofre vazio, lastScavenge null, sem deck (Vasculhar não acha) e regravado como v7', async () => {
+  it('REQ-95/REQ-96/D-87: save v5 inserido à mão é lido com cofre vazio, lastScavenge null, sem deck (Vasculhar não acha) e regravado como v8', async () => {
     const party = await startedParty()
     await give(party, F)
     const state = (await rawState(party.id)) as {
@@ -517,9 +564,10 @@ describe('Cofre e Vasculhar (e2e)', () => {
     expect(player(scavenged.body).lastScavenge).toEqual({
       cardId: S,
       found: false,
+      delivery: 'none',
     })
     const rewritten = await rawState(party.id)
-    expect(rewritten.schemaVersion).toBe(7)
+    expect(rewritten.schemaVersion).toBe(8)
     expect(rewritten.rewardDecks).toEqual([])
   })
 })

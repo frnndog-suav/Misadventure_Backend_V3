@@ -207,7 +207,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
     expect(response.body).toEqual(PARTY_NOT_FOUND)
   })
 
-  it('REQ-55/REQ-58/REQ-67: criação traz turn na rodada 1 e availableActions [move, recover, adjustDeck, useVault, endTurn]', async () => {
+  it('REQ-55/REQ-58/REQ-67: criação traz turn na rodada 1 e availableActions [move, recover, adjustDeck, useVault, startEvent, endTurn]', async () => {
     const created = (await postParty(app)) as unknown as TParty
     const memberId = created.members[0].id
     expect(created.turn).toEqual({ round: 1, memberId, actionPoints: 3 })
@@ -216,6 +216,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
       'recover',
       'adjustDeck',
       'useVault',
+      'startEvent',
       'endTurn',
     ])
   })
@@ -342,7 +343,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
     expect(ended.body.turn.actionPoints).toBe(3)
   })
 
-  it('REQ-59/D-64/D-70/D-79: save v2 inserido à mão é lido com turn na rodada 1 e regravado como v7', async () => {
+  it('REQ-59/D-64/D-70/D-79: save v2 inserido à mão é lido com turn na rodada 1 e regravado como v8', async () => {
     const party = await startedParty()
     const db = app.get<Database>(DRIZZLE)
     const [row] = await db
@@ -396,7 +397,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
       .from(parties)
       .where(eq(parties.id, party.id))
     expect(saved.state).toMatchObject({
-      schemaVersion: 7,
+      schemaVersion: 8,
       turn: { round: 2, memberId: party.members[0].id, actionPoints: 4 },
     })
   })

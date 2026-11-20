@@ -42,7 +42,7 @@ const ruleText = z.strictObject({ text })
 const ability = z.strictObject({ name: text, text })
 
 const eventRequirementBase = { id: text, text }
-const eventRequirement = z.union([
+export const eventRequirement = z.union([
   z.strictObject({
     ...eventRequirementBase,
     kind: z.literal('attributes'),
@@ -72,7 +72,7 @@ const eventEffect = effectSchema.omit({ trigger: true, cost: true }).extend({
     z.strictObject({ kind: z.enum(['untilEventPhaseEnd', 'untilEventEnd']) }),
   ]),
 })
-const eventOutcome = z.strictObject({
+export const eventOutcome = z.strictObject({
   text,
   steps: z
     .discriminatedUnion('type', [

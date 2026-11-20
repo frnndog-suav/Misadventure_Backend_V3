@@ -5,6 +5,14 @@ export abstract class PartiesRepository {
   abstract create(party: Party): Promise<void>
   abstract save(party: Party): Promise<void>
   abstract findById(id: string): Promise<Party | null>
+  /** Lê o estado corrente e mantém o lock do grupo até concluir a gravação. */
+  abstract withLockedParty<T>(
+    id: string,
+    run: (
+      party: Party | null,
+      save: (party: Party) => Promise<void>
+    ) => Promise<T>
+  ): Promise<T>
   /** Sem ordem garantida: a ordem é do caso de uso (REQ-18). */
   abstract findAll(): Promise<Party[]>
   abstract delete(party: Party): Promise<void>

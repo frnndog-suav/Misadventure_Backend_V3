@@ -21,18 +21,16 @@ export class StartSessionUseCase {
     private readonly clock: Clock
   ) {}
 
-  async execute({
+  execute({
     partyId,
   }: TStartSessionUseCaseRequest): Promise<TStartSessionUseCaseResponse> {
-    const party = await this.partiesRepository.findById(partyId)
-    if (!party) {
-      return left(new PartyNotFoundError())
-    }
-
-    if (party.startSession(this.clock.now())) {
-      await this.partiesRepository.save(party)
-    }
-
-    return right({ party })
+    return this.partiesRepository.withLockedParty(
+      partyId,
+      async (party, save) => {
+        if (!party) return left(new PartyNotFoundError())
+        if (party.startSession(this.clock.now())) await save(party)
+        return right({ party })
+      }
+    )
   }
 }

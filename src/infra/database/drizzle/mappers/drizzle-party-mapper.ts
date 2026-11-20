@@ -1,6 +1,14 @@
 import { z } from 'zod'
 import { activationSchema } from '@/infra/content/effect-schemas'
-import { EFFECT_MARKS } from '@/domain/catalog/enterprise/value-objects/effect'
+import {
+  cardFileSchemas,
+  eventOutcome,
+  eventRequirement,
+} from '@/infra/content/card-schemas'
+import {
+  EFFECT_MARKS,
+  EVENT_PHASES,
+} from '@/domain/catalog/enterprise/value-objects/effect'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { RngState } from '@/core/rng/seeded-rng'
 import { Party } from '@/domain/campaign/enterprise/entities/party'
@@ -8,6 +16,7 @@ import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
 import { DIRECTIONS } from '@/domain/campaign/enterprise/map-assembly'
 import { sortedByCardId } from '@/domain/campaign/enterprise/starting-player'
 import { emptyVault } from '@/domain/campaign/enterprise/vault'
+import type { TEventEncounter } from '@/domain/campaign/enterprise/random-event'
 import {
   emptyEquipment,
   type TPlayerState,
@@ -28,7 +37,7 @@ import {
 } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
 // REQ-107: saves v2 a v6 ganham a lista de status na leitura.
-const SCHEMA_VERSION = 7
+const SCHEMA_VERSION = 8
 
 const uint32 = z
   .number()
@@ -229,6 +238,7 @@ const statusSchema = z.strictObject({
         'untilLeaveZone',
         'infinite',
         'untilPartyEnd',
+        'untilEventEnd',
       ]),
     }),
     z.strictObject({
@@ -239,12 +249,139 @@ const statusSchema = z.strictObject({
       kind: z.literal('forRounds'),
       rounds: z.number().int().positive(),
     }),
+    z.strictObject({
+      kind: z.literal('untilEventPhaseEnd'),
+      phase: z.enum(EVENT_PHASES),
+    }),
   ]),
   remaining: z.number().int().positive().nullable(),
 })
-const playerSchema = z.strictObject({
+const v7PlayerSchema = z.strictObject({
   ...v6PlayerFields,
   statuses: z.array(statusSchema),
+})
+
+const count = z.number().int().nonnegative()
+const copies = z.number().int().positive()
+const zoneType = z.enum(ZONE_TYPES)
+const handCopy = z.strictObject({ copyId: id, cardId: id })
+const rewardDiscard = z.strictObject({ cardId: id, copies })
+const receipt = z.strictObject({
+  requirementId: id,
+  gold: count.optional(),
+  health: count.optional(),
+  vigor: count.optional(),
+  handCards: z.array(handCopy).optional(),
+  movedAttributeCards: z.array(handCopy).optional(),
+  equipment: z
+    .array(
+      z.strictObject({
+        slot: z.enum(EQUIPMENT_SLOTS),
+        cardId: id,
+      })
+    )
+    .optional(),
+  resources: z.array(rewardDiscard).optional(),
+})
+const escapeReceipt = z.strictObject({
+  vigorSpent: count,
+  naturalRoll: z.number().int().min(1).max(20).nullable(),
+  total: z.number().nullable(),
+  threshold: z.number(),
+  succeeded: z.boolean(),
+  actionPointsLost: count,
+  nextTurnActionPointDebtAdded: count,
+})
+const cause = z.enum([
+  'requirementsMet',
+  'gaveUp',
+  'escapeSucceeded',
+  'escapeFailed',
+])
+const eventResult = z.strictObject({
+  encounterId: id,
+  cardId: id,
+  resolution: z.enum(['success', 'setback', 'escaped']),
+  cause,
+  payments: z.array(receipt),
+  peakDelta: z.number().int(),
+  replacement: z.strictObject({ requested: count, drawn: count }),
+  escape: escapeReceipt.nullable(),
+})
+const eventCard = cardFileSchemas.randomEvent.omit({ status: true }).extend({
+  type: z.literal('randomEvent'),
+  collectionId: id,
+  requirements: z.array(eventRequirement).min(1),
+  goodOutcome: eventOutcome,
+  badOutcome: eventOutcome,
+})
+const eventEncounter = z.strictObject({
+  id,
+  memberId: id,
+  zoneType,
+  phase: z.enum(EVENT_PHASES),
+  card: eventCard.nullable(),
+  payments: z.array(receipt),
+  decisionDeadlineAt: z.null(),
+  outcome: z
+    .strictObject({
+      nextStep: count,
+      nextCopy: count.optional(),
+      startingPeak: count,
+      cause,
+      escape: escapeReceipt.nullable(),
+    })
+    .optional(),
+})
+const rewardOrigin = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('rewardDeck'), zoneType }),
+  z.strictObject({ type: z.literal('reserveDeck') }),
+  z.strictObject({ type: z.literal('fixed') }),
+])
+const pendingReward = z.strictObject({
+  id,
+  memberId: id,
+  cardId: id,
+  origin: rewardOrigin,
+  source: z.discriminatedUnion('type', [
+    z.strictObject({ type: z.literal('scavenge') }),
+    z.strictObject({ type: z.literal('randomEvent'), encounterId: id }),
+  ]),
+  destination: z.enum(['inventory', 'tcgFolder']),
+  discardOptions: z.array(z.strictObject({ cardId: id, maxCopies: copies })),
+  decisionDeadlineAt: z.null(),
+})
+const playerSchema = v7PlayerSchema.extend({
+  lastScavenge: z
+    .strictObject({
+      cardId: id,
+      found: z.boolean(),
+      delivery: z.enum(['inventory', 'pending', 'left', 'none']),
+    })
+    .nullable()
+    .optional(),
+  handCopies: z.array(handCopy).optional(),
+  handCopySequence: count.optional(),
+  nextTurnActionPointDebt: count.optional(),
+  automaticEventEscape: z.boolean().optional(),
+  lastRandomEvent: eventResult.nullable().optional(),
+  lastRewardSearch: z
+    .strictObject({
+      encounterId: id,
+      cardId: id,
+      found: z.boolean(),
+    })
+    .nullable()
+    .optional(),
+  lastRewardDelivery: z
+    .strictObject({
+      rewardId: id,
+      cardId: id,
+      origin: rewardOrigin,
+      disposition: z.enum(['kept', 'returnedToDeck', 'removed', 'sentToLimbo']),
+    })
+    .nullable()
+    .optional(),
 })
 
 const rewardDecksSchema = z.array(
@@ -323,10 +460,28 @@ const stateSchema = z
       rewardDecks: rewardDecksSchema.optional(),
     }),
     z.strictObject({
+      schemaVersion: z.literal(7),
+      ...stateFields(currentConfigSchema, v7PlayerSchema),
+      turn: turnSchema,
+      rewardDecks: rewardDecksSchema.optional(),
+    }),
+    z.strictObject({
       schemaVersion: z.literal(SCHEMA_VERSION),
       ...stateFields(currentConfigSchema, playerSchema),
       turn: turnSchema,
       rewardDecks: rewardDecksSchema.optional(),
+      eventDecks: z
+        .array(
+          z.strictObject({
+            zoneType,
+            cards: z.array(id),
+            discard: z.array(id),
+          })
+        )
+        .optional(),
+      eventEncounter: eventEncounter.nullable().optional(),
+      pendingReward: pendingReward.nullable().optional(),
+      rewardSequence: count.optional(),
     }),
   ])
   .refine((state) => state.members.some((m) => m.id === state.hostMemberId), {
@@ -362,7 +517,7 @@ export class DrizzlePartyMapper {
     const state = stateSchema.parse(row.state)
     const turnOrder = state.turnOrder.map((m) => new UniqueEntityID(m))
     const savedConfig =
-      state.schemaVersion === 6 || state.schemaVersion === SCHEMA_VERSION
+      state.schemaVersion >= 6
         ? state.config
         : state.schemaVersion === 5
           ? { ...state.config, ...V6_CONFIG_DEFAULTS }
@@ -397,10 +552,14 @@ export class DrizzlePartyMapper {
         rngState: state.rngState satisfies RngState,
         dimension: state.dimension,
         // D-87: save antigo fica sem decks de recompensas.
-        rewardDecks:
-          state.schemaVersion === 6 || state.schemaVersion === SCHEMA_VERSION
-            ? (state.rewardDecks ?? [])
-            : [],
+        rewardDecks: 'rewardDecks' in state ? (state.rewardDecks ?? []) : [],
+        ...(state.schemaVersion === SCHEMA_VERSION && {
+          eventDecks: state.eventDecks,
+          eventEncounter: state.eventEncounter as
+            TEventEncounter | null | undefined,
+          pendingReward: state.pendingReward,
+          rewardSequence: state.rewardSequence,
+        }),
         turnOrder,
         // D-64: o save v2 ganha a vez na rodada 1, com o 1º de `turnOrder` e pontos cheios.
         turn:
@@ -460,14 +619,34 @@ export class DrizzlePartyMapper {
               gold: m.player.vault.gold,
             },
             equipment: { ...m.player.equipment },
-            lastScavenge:
-              m.player.lastScavenge === null
-                ? null
-                : { ...m.player.lastScavenge },
+            lastScavenge: upgradeScavenge(m.player.lastScavenge),
             deck: [...m.player.deck],
             hand: [...m.player.hand],
             discard: [...m.player.discard],
             modifiers: { ...m.player.modifiers },
+            ...(m.player.handCopies !== undefined && {
+              handCopies: m.player.handCopies.map((copy) => ({ ...copy })),
+            }),
+            ...(m.player.handCopySequence !== undefined && {
+              handCopySequence: m.player.handCopySequence,
+            }),
+            ...(m.player.nextTurnActionPointDebt !== undefined && {
+              nextTurnActionPointDebt: m.player.nextTurnActionPointDebt,
+            }),
+            ...(m.player.automaticEventEscape !== undefined && {
+              automaticEventEscape: m.player.automaticEventEscape,
+            }),
+            ...(m.player.lastRandomEvent !== undefined && {
+              lastRandomEvent: eventResult
+                .nullable()
+                .parse(m.player.lastRandomEvent),
+            }),
+            ...(m.player.lastRewardSearch !== undefined && {
+              lastRewardSearch: m.player.lastRewardSearch,
+            }),
+            ...(m.player.lastRewardDelivery !== undefined && {
+              lastRewardDelivery: m.player.lastRewardDelivery,
+            }),
           },
         })),
         hostMemberId: party.hostMemberId.toString(),
@@ -487,6 +666,22 @@ export class DrizzlePartyMapper {
           zoneType: deck.zoneType,
           cards: [...deck.cards],
         })),
+        ...(party.eventDecks.length > 0 && {
+          eventDecks: party.eventDecks.map((deck) => ({
+            zoneType: deck.zoneType,
+            cards: [...deck.cards],
+            discard: [...deck.discard],
+          })),
+        }),
+        ...(party.eventEncounter && {
+          eventEncounter: eventEncounter.parse(party.eventEncounter),
+        }),
+        ...(party.pendingRewards[0] && {
+          pendingReward: pendingReward.parse(party.pendingRewards[0]),
+        }),
+        ...(party.rewardSequence > 0 && {
+          rewardSequence: party.rewardSequence,
+        }),
         turnOrder: party.turnOrder.map((m) => m.toString()),
         turn: {
           round: party.turn.round,
@@ -508,6 +703,13 @@ type TStoredPlayer = z.infer<typeof legacyPlayerSchema> &
       | 'vault'
       | 'lastScavenge'
       | 'statuses'
+      | 'handCopies'
+      | 'handCopySequence'
+      | 'nextTurnActionPointDebt'
+      | 'automaticEventEscape'
+      | 'lastRandomEvent'
+      | 'lastRewardSearch'
+      | 'lastRewardDelivery'
     >
   >
 
@@ -531,7 +733,17 @@ function upgradePlayer(
     inventory: player.inventory ?? [],
     equipment: player.equipment ?? emptyEquipment(),
     vault: player.vault ?? emptyVault(),
-    lastScavenge: player.lastScavenge ?? null,
+    lastScavenge: upgradeScavenge(player.lastScavenge),
     statuses: player.statuses ?? [],
+  }
+}
+
+function upgradeScavenge(
+  scavenge: TPlayerState['lastScavenge'] | undefined
+): NonNullable<z.infer<typeof playerSchema>['lastScavenge']> | null {
+  if (!scavenge) return null
+  return {
+    ...scavenge,
+    delivery: scavenge.delivery ?? (scavenge.found ? 'inventory' : 'none'),
   }
 }

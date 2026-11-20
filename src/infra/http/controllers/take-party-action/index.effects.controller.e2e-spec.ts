@@ -653,7 +653,7 @@ describe('FEAT-11 — efeitos e status (e2e)', () => {
     expect(player(activated).availableActions).toEqual(['endTurn'])
   })
 
-  it('REQ-107: grava save v7 com status em ordem e lê save v6 com lista vazia', async () => {
+  it('REQ-107: grava save v8 com status em ordem e lê save v6 com lista vazia', async () => {
     const party = await startedParty()
     await give(party, TONIC, 2)
     await act(party, activate(TONIC)).expect(200)
@@ -674,12 +674,15 @@ describe('FEAT-11 — efeitos e status (e2e)', () => {
       .where(eq(parties.id, party.id))
     const state = row.state as {
       schemaVersion: number
+      config: { escapeVigorPercent?: number; reserveDeck?: unknown }
       members: { player: { statuses?: unknown } }[]
     }
-    expect(state.schemaVersion).toBe(7)
+    expect(state.schemaVersion).toBe(8)
     expect(state.members[0].player.statuses).toEqual(activeStatuses)
 
     state.schemaVersion = 6
+    delete state.config.escapeVigorPercent
+    delete state.config.reserveDeck
     delete state.members[0].player.statuses
     await db.update(parties).set({ state }).where(eq(parties.id, party.id))
     expect(player(await get(party)).statuses).toEqual([])
@@ -690,7 +693,7 @@ describe('FEAT-11 — efeitos e status (e2e)', () => {
       .from(parties)
       .where(eq(parties.id, party.id))
     expect(rewritten.state).toMatchObject({
-      schemaVersion: 7,
+      schemaVersion: 8,
       members: [{ player: { statuses: [] } }],
     })
   })

@@ -39,12 +39,22 @@ export class GrantToMemberUseCase {
     private readonly cardCatalog: CardCatalog
   ) {}
 
-  async execute({
+  execute({
     partyId,
     memberId,
     body,
   }: TGrantToMemberUseCaseRequest): Promise<TGrantToMemberUseCaseResponse> {
-    const party = await this.partiesRepository.findById(partyId)
+    return this.partiesRepository.withLockedParty(partyId, (party, save) =>
+      this.grant(party, memberId, body, save)
+    )
+  }
+
+  private async grant(
+    party: Party | null,
+    memberId: string,
+    body: unknown,
+    save: (party: Party) => Promise<void>
+  ): Promise<TGrantToMemberUseCaseResponse> {
     if (!party) return left(new PartyNotFoundError())
 
     const member = party.members.find((m) => m.id.toString() === memberId)
@@ -101,7 +111,7 @@ export class GrantToMemberUseCase {
       }
     }
 
-    await this.partiesRepository.save(party)
+    await save(party)
     return right({ party })
   }
 }

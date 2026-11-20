@@ -5,7 +5,18 @@ import type {
 import type {
   PartyMember,
   TPartyMemberKind,
+  TPlayerState,
 } from '@/domain/campaign/enterprise/entities/party-member'
+import {
+  handCopiesOf,
+  type THandCopy,
+  type TEventResult,
+} from '@/domain/campaign/enterprise/random-event'
+import type {
+  TPendingReward,
+  TRewardDelivery,
+  TRewardSearch,
+} from '@/domain/campaign/enterprise/rewards'
 import {
   activatableEffects,
   type TActivatableEffect,
@@ -46,6 +57,11 @@ export interface TPlayerStateHttp {
   vigor: number
   modifiers: Record<TModifier, number>
   hand: string[]
+  handCopies: readonly THandCopy[]
+  nextTurnActionPointDebt: number
+  lastRandomEvent: TEventResult | null
+  lastRewardSearch: TRewardSearch | null
+  lastRewardDelivery: TRewardDelivery | null
   attributeDeckCount: number
   attributeDiscardPileCount: number
   zoneId: string
@@ -76,7 +92,13 @@ export interface TPlayerStateHttp {
   vaultDeckSlots: number
   vaultGoldCapacity: number
   scavengeTargets: string[]
-  lastScavenge: { cardId: string; found: boolean } | null
+  lastScavenge:
+    | (NonNullable<TPlayerState['lastScavenge']> & {
+        delivery: NonNullable<
+          NonNullable<TPlayerState['lastScavenge']>['delivery']
+        >
+      })
+    | null
 }
 
 const copiesToHTTP = (
@@ -118,6 +140,8 @@ export interface TPartyHttp {
   dimension: TPartyDimensionHttp
   turnOrder: string[]
   turn: TPartyTurnHttp
+  randomEventEncounter: ReturnType<Party['describeRandomEvent']>
+  pendingRewards: readonly TPendingReward[]
   createdAt: string
   savedAt: string
 }
@@ -125,7 +149,8 @@ export interface TPartyHttp {
 function playerToHTTP(
   party: Party,
   member: PartyMember,
-  cards: TPartyCards
+  cards: TPartyCards,
+  encounter: TPartyHttp['randomEventEncounter']
 ): TPlayerStateHttp {
   const player = member.player
   const { map } = party.dimension
@@ -143,9 +168,15 @@ function playerToHTTP(
   const dimensionCard = cards.get(party.dimension.dimensionCardId)
   const dimension = dimensionCard?.type === 'dimension' ? dimensionCard : null
   const catalogCards = [...cards.values()]
-  const effects = party.turn.memberId.equals(member.id)
-    ? activatableEffects(player, catalogCards)
-    : []
+  const effects =
+    party.turn.memberId.equals(member.id) &&
+    party.pendingRewards.length === 0 &&
+    (!encounter ||
+      ((encounter.phase === 'anticipation' ||
+        encounter.phase === 'encounter') &&
+        encounter.payments.length === 0))
+      ? activatableEffects(player, catalogCards, encounter?.phase)
+      : []
   const targets = scavengeTargets({
     player,
     zone,
@@ -165,6 +196,11 @@ function playerToHTTP(
     vigor: player.vigor,
     modifiers: { ...player.modifiers },
     hand: [...player.hand],
+    handCopies: handCopiesOf(player),
+    nextTurnActionPointDebt: player.nextTurnActionPointDebt ?? 0,
+    lastRandomEvent: player.lastRandomEvent ?? null,
+    lastRewardSearch: player.lastRewardSearch ?? null,
+    lastRewardDelivery: player.lastRewardDelivery ?? null,
     attributeDeckCount: player.deck.length,
     attributeDiscardPileCount: player.discard.length,
     zoneId: player.zoneId,
@@ -176,7 +212,9 @@ function playerToHTTP(
       equipmentCardIds,
       zone?.zoneActions ?? [],
       targets,
-      effects
+      effects,
+      party.canStartEvent(zone, dimension, cards),
+      encounter
     ),
     build: copiesToHTTP(player.build),
     buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),
@@ -215,6 +253,9 @@ function playerToHTTP(
         : {
             cardId: player.lastScavenge.cardId,
             found: player.lastScavenge.found,
+            delivery:
+              player.lastScavenge.delivery ??
+              (player.lastScavenge.found ? 'inventory' : 'none'),
           },
   }
 }
@@ -231,6 +272,12 @@ export async function findPartyCards(
   party: Party
 ): Promise<TPartyCards> {
   const cardIds = new Set<string>()
+  for (const deck of party.eventDecks) {
+    for (const id of [...deck.cards, ...deck.discard]) cardIds.add(id)
+  }
+  for (const payment of party.eventEncounter?.payments ?? []) {
+    for (const { cardId } of payment.handCards ?? []) cardIds.add(cardId)
+  }
   for (const { id, player } of party.members) {
     if (party.turn.memberId.equals(id)) {
       for (const cardId of player.hand) cardIds.add(cardId)
@@ -249,6 +296,9 @@ export async function findPartyCards(
       for (const deck of dimension.rewardDecks) {
         for (const { cardId } of deck.cards) cardIds.add(cardId)
       }
+      for (const deck of dimension.eventDecks ?? []) {
+        for (const { cardId } of deck.cards) cardIds.add(cardId)
+      }
     }
   }
   for (const cardId of cardIds) {
@@ -261,6 +311,7 @@ export async function findPartyCards(
 export class PartyPresenter {
   static toHTTP(party: Party, cards: TPartyCards): TPartyHttp {
     const { dimensionCardId, startingCityZoneId, map } = party.dimension
+    const encounter = party.describeRandomEvent(cards)
     return {
       id: party.id.toString(),
       name: party.name,
@@ -270,7 +321,7 @@ export class PartyPresenter {
         characterName: member.characterName,
         kind: member.kind,
         isHost: party.isHost(member),
-        player: playerToHTTP(party, member, cards),
+        player: playerToHTTP(party, member, cards, encounter),
       })),
       dimension: {
         dimensionCardId,
@@ -293,6 +344,8 @@ export class PartyPresenter {
         memberId: party.turn.memberId.toString(),
         actionPoints: party.turn.actionPoints,
       },
+      randomEventEncounter: encounter,
+      pendingRewards: party.pendingRewards,
       createdAt: party.createdAt.toISOString(),
       savedAt: party.savedAt.toISOString(),
     }
