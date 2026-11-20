@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.57 · **Data:** 2026-11-20
+> **Versão da spec:** 0.58 · **Data:** 2026-11-20
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -602,7 +602,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 
 ### FEAT-12 — Eventos aleatórios
 
-- [ ] **T-40 — Configuração, catálogo e decks** (REQ-108 a REQ-111). Atualizar configuração, DTOs, publicação, referências e migração de conteúdo após revisão do autor. Verificar GET/PATCH/reset do laboratório, peso zero na primeira entrada, preservação da configuração após erro, leitura legada e deck misto.
+- [x] **T-40 — Configuração, catálogo e decks** (REQ-108 a REQ-111). Atualizar configuração, DTOs, publicação, referências e migração de conteúdo após revisão do autor. Verificar GET/PATCH/reset do laboratório, peso zero na primeira entrada, preservação da configuração após erro, leitura legada e deck misto.
 - [ ] **T-41 — Domínio e ações do encontro** (REQ-111 a REQ-114). Implementar antecipação, revelação, disponibilidade por fase, ativação de consumível, pagamentos por cópia, checagem atômica, fuga, desistência e reposição. Testar duplicatas, descarte aleatório e restauração do RNG, PA zero e dívida na próxima vez.
 - [ ] **T-42 — Recompensas pendentes e Vasculhar** (REQ-114 a REQ-115). Implementar reserva, busca, pausa e retomada do desfecho, manter/deixar e recibos. Testar espaço por empilhamento, descarte insuficiente, destinos das três origens e ausência de fallback da reserva no Vasculhar.
 - [ ] **T-43 — Save, projeção HTTP e validação BE** (REQ-108 a REQ-116). Persistir escolhas, decks, RNG, cópias e progresso; projetar `Party` e as recusas na rota de ações. Executar unitários e cenários HTTP determinísticos do contrato, incluindo recarga, save antigo, IDs obsoletos e repetição de escolha. O prazo multiplayer é verificado na integração FEAT-26. Após a validação BE, registrar `implementado (BE)` no contrato e levar ao frontend a URL de teste e os dados dos cenários.
@@ -669,6 +669,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.55 | 2026-11-19 | T-38 concluída: parser, ativação e recusas de Preparar, projeção de efeitos ativáveis e ações disponíveis no domínio, ida e volta dos status em memória e integração HTTP reservada ao save v7 (D-106). |
 | 0.56 | 2026-11-19 | T-39 concluída: ativação via HTTP, projeção de efeitos e status, save v7, compatibilidade v2 a v6, proteção de conteúdo em uso (D-107), Supertest e roteiro em `client.http`. |
 | 0.57 | 2026-11-20 | Planejamento BE da FEAT-12 a partir do CONTRATO v0.57 e devlog 048. REQ-108 a REQ-116 e T-40 a T-43. |
+| 0.58 | 2026-11-20 | T-40 concluída. Configuração e erro indexado do laboratório, leitura de cartas legadas, publicação de regras executáveis, proteção de referências e configuração de decks mistos. Ver devlog 049. |
 
 ## Apêndice A — Conteúdo de teste
 

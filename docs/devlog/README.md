@@ -66,6 +66,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 046 | T-38 | Preparar: ativação, pagamento atômico, efeitos e ações disponíveis, status em memória (REQ-101, REQ-104 a REQ-107, D-106) | concluída |
 | 047 | T-39 | FEAT-11 ponta a ponta: ativação HTTP, save v7, projeção de efeitos e status, Supertest, CONTRATO v0.52 e ROADMAP v0.54 | aguardando revisão |
 | 048 | FEAT-12 | Contrato de eventos aleatórios e configuração do laboratório acordados, CONTRATO v0.57 e ROADMAP v0.58 | concluída |
+| 049 | T-40 | [Configuração do laboratório, catálogo e decks mistos](049-T-40-configuracao-catalogo-e-decks.md) | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
@@ -76,4 +77,4 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 6. Reiniciar a sessão do Claude Code para carregar agentes e skills.
 7. `docs/devlog/tempo.html`: registro de tempo (array `SESSOES`); a `/registrar-etapa` acrescenta a sessão de cada etapa, perguntando as horas ao autor.
 8. Convenções do autor (2026-11-14): mensagem de commit sugerida sempre em inglês; Docker ligado só para testar e desligado ao terminar. Revisão 2026-11-15: o Docker é manual (o autor abre o Docker Desktop e sobe/para containers; o agente só pede e confere com `docker compose ps`).
-9. No Codex, consulte a seção **Uso no Codex** de `AGENTS.md` para reaproveitar os fluxos e executar a guarda manualmente. As horas ficam a preencher pelo autor.
+9. No Codex, siga a seção **Operação do ambiente local** de `AGENTS.md`. As horas ficam a preencher pelo autor.
