@@ -1,7 +1,7 @@
 # 051 — T-42 — Recompensas pendentes e Vasculhar
 
 - **Data** — 2026-11-20
-- **Status** — aguardando revisão
+- **Status** — concluída
 - **Spec** — REQ-114 e REQ-115
 - **Contrato** — v0.57, acordado
 - **Horas** — a preencher pelo autor
@@ -33,7 +33,9 @@ Após a implementação, os 28 casos dos dois arquivos devem passar, assim como 
 - Typecheck, ESLint dos testes alterados e `git diff --check` passaram.
 - O autor reportou 8 falhas e 20 aprovações. Dois cenários de Vasculhar falharam no matcher ao comparar diretamente o getter `Party.turn`. Os testes novos agora comparam objetos simples com os campos relevantes, o que também reduz a saída do diff.
 - O anexo da nova rodada confirmou 8 falhas de comportamento e 20 aprovações.
-- Implementação de domínio e caso de uso concluída. Typecheck, ESLint dos arquivos alterados e `git diff --check` passaram. Aguardando a rodada de testes do autor após a implementação.
+- Implementação de domínio e caso de uso registrada no commit `f95037e`. Typecheck, ESLint dos arquivos alterados e `git diff --check` passaram.
+- O autor executou a rodada final. O log confirmou 43 testes aprovados em 3 suítes, com código de saída 0.
+- A T-43 retoma a partir daqui com persistência do save, projeção HTTP e validação BE da FEAT-12.
 - O caso de borda de descarte parcial deve manter a pilha e o RNG intactos. O descarte de toda a pilha deve enviar as cópias ao limbo, entregar a recompensa e abrir a próxima escolha. O desfecho deve aplicar a cura final, o Pico e a reposição uma única vez.
 
 ## Commit sugerido
