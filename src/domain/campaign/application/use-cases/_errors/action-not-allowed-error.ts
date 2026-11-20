@@ -1,7 +1,13 @@
 import { DomainError } from '@/core/error/domain-error'
+import type {
+  TEventRefusal,
+  TMinimumCheck,
+} from '../../../enterprise/random-event'
 
 /** CONTRATO §4 `ACTION_NOT_ALLOWED`; `details` = `ActionNotAllowedDetails` (FEATs seguintes acrescentam motivos). */
 export type TActionNotAllowedReason =
+  | Extract<TEventRefusal, string>
+  | 'eventMinimumNotMet'
   | 'notConnected'
   | 'noActionPoints'
   | 'notOwned'
@@ -45,6 +51,7 @@ export class ActionNotAllowedError extends DomainError {
     reason: TActionNotAllowedReason
     cardId?: string
     operationIndex?: number
+    checks?: TMinimumCheck[]
   }
 
   /**
@@ -54,13 +61,15 @@ export class ActionNotAllowedError extends DomainError {
   constructor(
     reason: TActionNotAllowedReason,
     cardId?: string,
-    operationIndex?: number
+    operationIndex?: number,
+    checks?: TMinimumCheck[]
   ) {
     super()
     this.details = {
       reason,
       ...(cardId === undefined ? {} : { cardId }),
       ...(operationIndex === undefined ? {} : { operationIndex }),
+      ...(checks === undefined ? {} : { checks }),
     }
   }
 }

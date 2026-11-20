@@ -23,10 +23,30 @@ export function availableActions(
   zoneActions: readonly TZoneAction[] = [],
   /** Os alvos do Vasculhar do membro (REQ-90; `scavengeTargets`). */
   scavengeTargets: readonly string[] = [],
-  activatableEffects: readonly TActivatableEffect[] = []
+  activatableEffects: readonly TActivatableEffect[] = [],
+  canStartEvent = false
 ): TPartyActionType[] {
   const { turn } = party
   if (!turn.memberId.equals(memberId)) return []
+  const encounter = party.randomEventEncounter
+  if (encounter) {
+    if (encounter.phase === 'success' || encounter.phase === 'setback')
+      return []
+    const actions: TPartyActionType[] = []
+    if (encounter.phase === 'anticipation') actions.push('revealEvent')
+    else {
+      actions.push('giveUpEvent')
+      if (encounter.requirements.some(({ payable }) => payable))
+        actions.push('payEventRequirement')
+      if (encounter.requirements.every(({ status }) => status === 'check'))
+        actions.push('resolveEvent')
+      if (encounter.escape?.unavailableReason === null)
+        actions.push('escapeEvent')
+    }
+    if (encounter.payments.length === 0 && activatableEffects.length > 0)
+      actions.push('prepare')
+    return actions
+  }
 
   const member = party.members.find((m) => m.id.equals(memberId))
   const actions: TPartyActionType[] = []
@@ -56,6 +76,7 @@ export function availableActions(
   if (turn.actionPoints >= 1 && zoneActions.includes('useVault')) {
     actions.push('useVault')
   }
+  if (turn.actionPoints >= 1 && canStartEvent) actions.push('startEvent')
   actions.push('endTurn')
   return actions
 }

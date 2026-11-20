@@ -10,6 +10,7 @@ import {
 
 import type { TInventorySlot } from '../../inventory'
 import type { TPlayerStatus } from '../../player-status'
+import type { TEventResult, THandCopy } from '../../random-event'
 import type { TVault } from '../../vault'
 
 /** Na FEAT-20 entra o ajudante de IA. */
@@ -40,6 +41,11 @@ export type TPlayerState = Readonly<{
   deck: readonly string[]
   /** Na ordem em que foram compradas. */
   hand: readonly string[]
+  handCopies?: readonly THandCopy[]
+  handCopySequence?: number
+  nextTurnActionPointDebt?: number
+  lastRandomEvent?: TEventResult | null
+  automaticEventEscape?: boolean
   discard: readonly string[]
   gold: number
   baseHealth: number

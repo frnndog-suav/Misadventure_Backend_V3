@@ -16,6 +16,8 @@ type TStatusDuration = Extract<
       | 'untilLeaveZone'
       | 'infinite'
       | 'untilPartyEnd'
+      | 'untilEventEnd'
+      | 'untilEventPhaseEnd'
   }
 >
 
@@ -60,6 +62,8 @@ export function statusAfterTurn(
     case 'untilLeaveZone':
     case 'infinite':
     case 'untilPartyEnd':
+    case 'untilEventEnd':
+    case 'untilEventPhaseEnd':
       return status
     default: {
       const _exhaustive: never = duration

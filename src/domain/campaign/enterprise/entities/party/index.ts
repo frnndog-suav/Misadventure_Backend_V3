@@ -12,13 +12,19 @@ import type {
   TDimensionCard,
   TEquipmentCard,
   TItemCard,
+  TRandomEventOutcomeStep,
   TStarterDeckEntry,
   TZoneAction,
   TZoneCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
-import { prepareEffect, type TActivateRefusal } from '../../activatable-effects'
+import {
+  isExecutableActivation,
+  isStatusDuration,
+  prepareEffect,
+  type TActivateRefusal,
+} from '../../activatable-effects'
 import { connectedZones } from '../../connected-zones'
 import { applyActivations } from '../../effect-activation'
 import type { TPartyEvent } from '../../events/party-events'
@@ -29,7 +35,23 @@ import type {
   TPrepareOperation,
   TRecoverOption,
   TVaultOperation,
+  TRandomEventAction,
+  TPartyAction,
 } from '../../party-action'
+import {
+  eventPayment,
+  failedMinimums,
+  handCopiesOf,
+  isExecutableEvent,
+  reconcileHand,
+  requirementProgress,
+  type TEscapeReceipt,
+  type TEventDeck,
+  type TEventEncounter,
+  type TEventRefusal,
+  type TEventResult,
+  type TExecutableEvent,
+} from '../../random-event'
 import type { TPartyTurn } from '../../party-turn'
 import { statusAfterTurn, type TPlayerStatus } from '../../player-status'
 import { shuffle } from '../../shuffle'
@@ -139,6 +161,8 @@ export interface TPartyProps {
   dimension: TPartyDimension
   /** Decks de recompensas por tipo de zona (README 3.4; REQ-89, D-87). */
   rewardDecks: readonly TPartyRewardDeck[]
+  eventDecks?: readonly TEventDeck[]
+  eventEncounter?: TEventEncounter | null
   /** Ids de membro, do 1º ao último (REQ-33). */
   turnOrder: UniqueEntityID[]
   /** De quem é a vez (D-63, REQ-55). */
@@ -202,6 +226,499 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   /** Ordem secreta: não trafega (REQ-89). */
   get rewardDecks(): readonly TPartyRewardDeck[] {
     return this.props.rewardDecks
+  }
+
+  get eventDecks(): readonly TEventDeck[] {
+    return this.props.eventDecks ?? []
+  }
+
+  get eventEncounter(): TEventEncounter | null {
+    return this.props.eventEncounter ?? null
+  }
+
+  get randomEventEncounter() {
+    const encounter = this.eventEncounter
+    if (!encounter) return null
+    const player = this.props.members[this.actorIndex()].player
+    const cards = this.eventCatalog
+    return {
+      id: encounter.id,
+      memberId: encounter.memberId,
+      zoneType: encounter.zoneType,
+      phase: encounter.phase,
+      card: encounter.card,
+      payments: encounter.payments,
+      decisionDeadlineAt: encounter.decisionDeadlineAt,
+      requirements: requirementProgress(encounter, player, cards),
+      escape:
+        encounter.phase === 'encounter'
+          ? this.eventEscape(encounter, player)
+          : null,
+    }
+  }
+
+  private eventCatalog: ReadonlyMap<string, TCard> = new Map()
+
+  eventActionBlock(action: TPartyAction): TEventRefusal | null {
+    const encounter = this.eventEncounter
+    if (!encounter) return null
+    switch (action.type) {
+      case 'payEventRequirement':
+      case 'resolveEvent':
+      case 'giveUpEvent':
+      case 'escapeEvent':
+      case 'revealEvent':
+        return null
+      case 'prepare':
+        if (encounter.outcome) return 'choicePending'
+        if (encounter.payments.length) return 'eventPaymentStarted'
+        return action.operation === 'activate' ? null : 'choicePending'
+      default:
+        return 'choicePending'
+    }
+  }
+
+  canStartEvent(
+    zone: TZoneCard | null,
+    dimension: TDimensionCard | null,
+    cards: ReadonlyMap<string, TCard>
+  ): boolean {
+    if (!zone?.zoneActions.includes('startEvent')) return false
+    const deck = this.eventDecks.find(
+      (entry) => entry.zoneType === zone.zoneType
+    )
+    const ids = deck
+      ? [...deck.cards, ...deck.discard]
+      : (dimension?.eventDecks
+          ?.find((entry) => entry.zoneType === zone.zoneType)
+          ?.cards.map(({ cardId }) => cardId) ?? [])
+    return ids.some((id) => isExecutableEvent(cards.get(id)))
+  }
+
+  takeEventAction(
+    action: TRandomEventAction,
+    zone: TZoneCard | null,
+    dimension: TDimensionCard | null,
+    cards: ReadonlyMap<string, TCard>,
+    at: Date,
+    ids: IdGenerator | undefined
+  ): Either<TEventRefusal, void> {
+    const index = this.actorIndex()
+    const actor = this.props.members[index]
+    const player = actor.player
+    const encounter = this.eventEncounter
+    const rng = SeededRng.fromState(this.props.rngState)
+    const complete = (): Either<TEventRefusal, void> => {
+      this.eventCatalog = cards
+      this.props.rngState = rng.state()
+      this.props.savedAt = at
+      return right(undefined)
+    }
+
+    if (action.type === 'startEvent') {
+      if (encounter) return left('choicePending')
+      if (this.turn.actionPoints < 1) return left('noActionPoints')
+      if (!zone?.zoneActions.includes('startEvent'))
+        return left('zoneActionUnavailable')
+      if (!this.canStartEvent(zone, dimension, cards))
+        return left('eventDeckEmpty')
+      if (!this.eventDecks.some((entry) => entry.zoneType === zone.zoneType)) {
+        const configured = dimension?.eventDecks?.find(
+          (entry) => entry.zoneType === zone.zoneType
+        )
+        const initial =
+          configured?.cards.flatMap(({ cardId, copies }) =>
+            Array.from({ length: copies }, () => cardId)
+          ) ?? []
+        const eligible = (id: string) => isExecutableEvent(cards.get(id))
+        this.updateEventDeck({
+          zoneType: zone.zoneType,
+          discard: [],
+          cards: [
+            ...shuffle(
+              initial.filter(eligible),
+              SeededRng.fromState(this.props.rngState)
+            ),
+            ...initial.filter((id) => !eligible(id)),
+          ],
+        })
+      }
+      const copies = handCopiesOf(player)
+      this.replaceActor(index, {
+        ...player,
+        handCopies: copies,
+        handCopySequence: player.handCopySequence ?? copies.length,
+      })
+      this.props.eventEncounter = {
+        id:
+          ids?.next().toValue() ??
+          `event-${actor.id.toValue()}-${at.toISOString()}-${this.turn.round}-${this.turn.actionPoints}`,
+        memberId: actor.id.toValue(),
+        zoneType: zone.zoneType,
+        phase: 'anticipation',
+        card: null,
+        payments: [],
+        decisionDeadlineAt: null,
+      }
+      this.spendActionPoint()
+      return complete()
+    }
+    if (!encounter || encounter.id !== action.encounterId)
+      return left('staleEncounter')
+    if (action.type === 'revealEvent') {
+      if (encounter.phase !== 'anticipation') return left('wrongEventPhase')
+      const deck = this.eventDecks.find(
+        (entry) => entry.zoneType === encounter.zoneType
+      )
+      if (!deck) return left('eventDeckEmpty')
+      const eligible = (id: string) => isExecutableEvent(cards.get(id))
+      const recycle = !deck.cards.some(eligible)
+      const ordered = recycle
+        ? [...shuffle(deck.discard.filter(eligible), rng), ...deck.cards]
+        : deck.cards
+      const position = ordered.findIndex(eligible)
+      const card = cards.get(ordered[position])
+      if (!isExecutableEvent(card)) return left('eventDeckEmpty')
+      this.updateEventDeck({
+        ...deck,
+        cards: ordered.filter((_, i) => i !== position),
+        discard: recycle
+          ? deck.discard.filter((id) => !eligible(id))
+          : deck.discard,
+      })
+      this.props.eventEncounter = { ...encounter, phase: 'encounter', card }
+      this.props.members[index] = this.updateStatuses(
+        actor,
+        (status) =>
+          status.duration.kind === 'untilEventPhaseEnd' &&
+          status.duration.phase === 'anticipation'
+            ? null
+            : status,
+        at
+      )
+      return complete()
+    }
+    if (encounter.phase !== 'encounter' || !encounter.card)
+      return left('wrongEventPhase')
+    const card = encounter.card
+    const finish = (
+      changed: TPlayerState,
+      result: TEventResult['cause'],
+      escape: TEscapeReceipt | null = null,
+      paid = encounter.payments
+    ) => {
+      this.finishEvent(
+        index,
+        encounter,
+        card,
+        changed,
+        result,
+        escape,
+        paid,
+        ids
+      )
+      return complete()
+    }
+    const tryResolve = (
+      changed: TPlayerState,
+      paid: TEventEncounter['payments']
+    ) => {
+      const checks = failedMinimums(card, changed, cards)
+      return checks.length
+        ? left<TEventRefusal, void>({ reason: 'eventMinimumNotMet', checks })
+        : finish(changed, 'requirementsMet', null, paid)
+    }
+    switch (action.type) {
+      case 'giveUpEvent':
+        return finish(player, 'gaveUp')
+      case 'resolveEvent':
+        return requirementProgress(encounter, player, cards).some(
+          ({ status }) => status === 'unpaid' || status === 'partial'
+        )
+          ? left('requirementsNotPaid')
+          : tryResolve(player, encounter.payments)
+      case 'payEventRequirement': {
+        const payment = eventPayment(
+          encounter,
+          action.requirementId,
+          action.payment,
+          player,
+          cards,
+          rng
+        )
+        if (payment.isLeft()) return left(payment.value)
+        const { player: changed, receipt } = payment.value
+        const payments = [...encounter.payments, receipt]
+        const updated = { ...encounter, payments }
+        const isLast = !requirementProgress(updated, changed, cards).some(
+          ({ status }) => status === 'unpaid' || status === 'partial'
+        )
+        if (isLast) {
+          const resolved = tryResolve(changed, payments)
+          if (resolved.isLeft()) return resolved
+        } else {
+          this.replaceActor(index, changed)
+          this.props.eventEncounter = updated
+        }
+        for (const { cardId, copies } of receipt.resources ?? []) {
+          this.addDomainEvent({
+            type: 'SentToLimbo',
+            cardId,
+            quantity: copies,
+            from: 'inventory',
+            memberId: actor.id,
+            occurredAt: at,
+            aggregateId: this.id,
+          })
+        }
+        for (const { cardId } of receipt.equipment ?? []) {
+          this.addDomainEvent({
+            type: 'SentToLimbo',
+            cardId,
+            quantity: 1,
+            from: 'equipment',
+            memberId: actor.id,
+            occurredAt: at,
+            aggregateId: this.id,
+          })
+        }
+        return isLast ? right(undefined) : complete()
+      }
+      case 'escapeEvent': {
+        const escape = this.eventEscape(encounter, player)
+        if (escape.unavailableReason) return left(escape.unavailableReason)
+        const naturalRoll = escape.automatic ? null : rng.nextInt(1, 20)
+        const total =
+          naturalRoll === null
+            ? null
+            : player.statuses
+                .flatMap(({ activation }) => activation)
+                .reduce(
+                  (roll, effect) =>
+                    effect.kind === 'diceResultModifier'
+                      ? roll +
+                        (effect.amount === 'minusHandCount'
+                          ? -player.hand.length
+                          : effect.amount)
+                      : roll,
+                  naturalRoll
+                )
+        const succeeded = total === null || total > escape.threshold
+        const actionPointsLost =
+          !succeeded && this.turn.actionPoints > 0 ? 1 : 0
+        const nextTurnActionPointDebtAdded =
+          !succeeded && actionPointsLost === 0 ? 1 : 0
+        if (actionPointsLost) this.spendActionPoint()
+        return finish(
+          {
+            ...player,
+            vigor: player.vigor - escape.vigorCost,
+            nextTurnActionPointDebt:
+              (player.nextTurnActionPointDebt ?? 0) +
+              nextTurnActionPointDebtAdded,
+          },
+          succeeded ? 'escapeSucceeded' : 'escapeFailed',
+          {
+            threshold: escape.threshold,
+            naturalRoll,
+            total,
+            succeeded,
+            vigorSpent: escape.vigorCost,
+            actionPointsLost,
+            nextTurnActionPointDebtAdded,
+          }
+        )
+      }
+    }
+  }
+
+  private eventEscape(
+    encounter: TEventEncounter,
+    player: TPlayerState
+  ): {
+    vigorCost: number
+    threshold: number
+    automatic: boolean
+    unavailableReason:
+      'eventPaymentStarted' | 'escapeForbidden' | 'notEnoughVigor' | null
+  } {
+    const automatic = player.automaticEventEscape === true
+    const vigorCost = automatic
+      ? 0
+      : Math.max(
+          1,
+          Math.floor((player.peak * this.props.config.escapeVigorPercent) / 100)
+        )
+    const unavailableReason = encounter.payments.length
+      ? 'eventPaymentStarted'
+      : encounter.card?.noEscape || (!automatic && player.peak === 0)
+        ? 'escapeForbidden'
+        : player.vigor < vigorCost
+          ? 'notEnoughVigor'
+          : null
+    const threshold = player.statuses
+      .flatMap(({ activation }) => activation)
+      .reduce((value, effect) => {
+        if (effect.kind === 'fleeTargetOverride') return effect.value
+        if (effect.kind === 'fleeTargetModifier')
+          return (
+            value +
+            (effect.amount === 'minusHandCount'
+              ? -player.hand.length
+              : effect.amount)
+          )
+        return value
+      }, encounter.card?.escapeThreshold ?? 10)
+    return {
+      vigorCost,
+      threshold,
+      automatic,
+      unavailableReason,
+    }
+  }
+
+  private updateEventDeck(deck: TEventDeck): void {
+    this.props.eventDecks = [
+      ...this.eventDecks.filter(({ zoneType }) => zoneType !== deck.zoneType),
+      deck,
+    ]
+  }
+
+  private finishEvent(
+    index: number,
+    encounter: TEventEncounter,
+    card: TExecutableEvent,
+    player: TPlayerState,
+    cause: TEventResult['cause'],
+    escape: TEscapeReceipt | null,
+    payments: TEventEncounter['payments'],
+    ids: IdGenerator | undefined
+  ): void {
+    const resolution =
+      cause === 'requirementsMet'
+        ? 'success'
+        : cause === 'escapeSucceeded'
+          ? 'escaped'
+          : 'setback'
+    const startingPeak = player.peak
+    const outcome =
+      resolution === 'success'
+        ? card.goodOutcome
+        : resolution === 'setback'
+          ? card.badOutcome
+          : null
+    if (outcome && resolution !== 'escaped') {
+      for (const [nextStep, step] of outcome.steps.entries()) {
+        if (step.type !== 'effect') {
+          this.props.eventEncounter = {
+            ...encounter,
+            payments,
+            phase: resolution,
+            outcome: { nextStep, startingPeak, cause, escape },
+          }
+          this.replaceActor(index, player)
+          return
+        }
+        player = this.applyEventOutcomeEffect(
+          player,
+          step.effect,
+          card.id,
+          nextStep,
+          encounter.id,
+          resolution,
+          ids
+        )
+      }
+    }
+    const peak = Math.max(
+      0,
+      player.peak +
+        (resolution === 'success' ? 1 : resolution === 'setback' ? -1 : 0)
+    )
+    const requested = payments.reduce(
+      (total, receipt) =>
+        total +
+        (receipt.handCards?.length ?? 0) +
+        (receipt.movedAttributeCards?.length ?? 0),
+      0
+    )
+    const drawn = player.deck.slice(0, requested)
+    const next = reconcileHand(player, {
+      ...player,
+      peak,
+      vigor: Math.min(peak, player.vigor),
+      statuses: player.statuses.filter(
+        ({ duration }) =>
+          duration.kind !== 'untilEventEnd' &&
+          duration.kind !== 'untilEventPhaseEnd'
+      ),
+      health: Math.min(player.health, maxHealthOf({ ...player, peak })),
+      hand: [...player.hand, ...drawn],
+      deck: player.deck.slice(drawn.length),
+      lastRandomEvent: {
+        encounterId: encounter.id,
+        cardId: card.id,
+        resolution,
+        cause,
+        payments,
+        peakDelta: peak - startingPeak,
+        replacement: { requested, drawn: drawn.length },
+        escape,
+      },
+    })
+    const deck = this.eventDecks.find(
+      ({ zoneType }) => zoneType === encounter.zoneType
+    )
+    if (deck)
+      this.updateEventDeck({ ...deck, discard: [...deck.discard, card.id] })
+    this.props.eventEncounter = null
+    this.replaceActor(index, next)
+  }
+
+  private applyEventOutcomeEffect(
+    player: TPlayerState,
+    effect: Extract<TRandomEventOutcomeStep, { type: 'effect' }>['effect'],
+    cardId: string,
+    effectIndex: number,
+    encounterId: string,
+    phase: 'success' | 'setback',
+    ids: IdGenerator | undefined
+  ): TPlayerState {
+    const activations = effect.activation.filter(isExecutableActivation)
+    const { player: changed } = applyActivations(
+      player,
+      activations,
+      this.props.config.purseCapacity
+    )
+    const next = reconcileHand(player, changed)
+    const { mark, text } = effect
+    const duration =
+      effect.duration.kind === 'untilEventPhaseEnd'
+        ? { kind: 'untilEventPhaseEnd' as const, phase }
+        : effect.duration
+    if (!isStatusDuration(duration) || mark === null) return next
+    return {
+      ...next,
+      statuses: [
+        ...next.statuses,
+        {
+          statusId:
+            ids?.next().toValue() ?? `${encounterId}-effect-${effectIndex}`,
+          effectIndex,
+          sourceCardId: cardId,
+          duration,
+          mark,
+          text,
+          activation: activations,
+          remaining:
+            duration.kind === 'forOwnTurns'
+              ? duration.turns
+              : duration.kind === 'forRounds'
+                ? duration.rounds
+                : null,
+        },
+      ],
+    }
   }
 
   get turnOrder(): readonly UniqueEntityID[] {
@@ -538,11 +1055,21 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const nextPosition = (position + 1) % this.props.turnOrder.length
     const round = nextPosition === 0 ? ended.round + 1 : ended.round
     const memberId = this.props.turnOrder[nextPosition]
+    const nextIndex = this.props.members.findIndex((member) =>
+      member.id.equals(memberId)
+    )
+    const nextPlayer = this.props.members[nextIndex].player
+    const debt = nextPlayer.nextTurnActionPointDebt ?? 0
+    if (debt > 0)
+      this.replaceActor(nextIndex, {
+        ...nextPlayer,
+        nextTurnActionPointDebt: 0,
+      })
 
     this.props.turn = {
       round,
       memberId,
-      actionPoints: this.props.config.actionPointsPerTurn,
+      actionPoints: Math.max(0, this.props.config.actionPointsPerTurn - debt),
     }
     this.props.savedAt = at
     const base = { occurredAt: at, aggregateId: this.id }
@@ -1010,7 +1537,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           player,
           operation,
           catalog.cards,
-          this.props.rngState
+          this.props.rngState,
+          this.eventEncounter?.phase
         )
         if (prepared.isLeft()) return left(prepared.value)
 
@@ -1300,7 +1828,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             {
               characterName: member.characterName,
               kind: member.kind,
-              player,
+              player:
+                this.props.members[index].player.handCopies === undefined
+                  ? player
+                  : reconcileHand(this.props.members[index].player, player),
             },
             member.id
           )

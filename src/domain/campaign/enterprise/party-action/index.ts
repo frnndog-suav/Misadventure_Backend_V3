@@ -25,6 +25,25 @@ export type TActivateOperation = {
   payment?: { handCards: readonly string[] }
 }
 
+export type TEventPayment = {
+  handCards?: string[]
+  equipmentSlots?: TEquipmentSlot[]
+  resources?: { cardId: string; copies: number }[]
+}
+
+export type TRandomEventAction =
+  | { type: 'startEvent' }
+  | {
+      type: 'revealEvent' | 'resolveEvent' | 'giveUpEvent' | 'escapeEvent'
+      encounterId: string
+    }
+  | {
+      type: 'payEventRequirement'
+      encounterId: string
+      requirementId: string
+      payment?: TEventPayment
+    }
+
 /** Uma operação do Usar cofre (README 6.4; REQ-84 a REQ-87). */
 export type TVaultOperation =
   | { operation: 'store'; cardId: string; quantity: number }
@@ -39,6 +58,7 @@ export type TVaultOperation =
 
 /** Intenção de jogo (CONTRATO §1.6). União por `type`; as FEATs 10+ acrescentam variantes. */
 export type TPartyAction =
+  | TRandomEventAction
   | { type: 'move'; zoneId: string }
   | { type: 'endTurn' }
   | { type: 'recover'; option: TRecoverOption }
@@ -86,7 +106,8 @@ export type TActionIssue =
  */
 export function parsePartyAction(
   input: unknown,
-  effectActivationEnabled = true
+  effectActivationEnabled = true,
+  eventActionsEnabled = true
 ): Either<TActionIssue[], TPartyAction> {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     return left([{ field: null, reason: 'invalidBody' }])
@@ -115,9 +136,118 @@ export function parsePartyAction(
       return parseUseVault(body)
     case 'scavenge':
       return parseScavenge(body)
+    case 'startEvent': {
+      if (!eventActionsEnabled)
+        return left([{ field: 'type', reason: 'unknownAction' }])
+      const issues = extraKeys(body, ['type'])
+      return issues.length ? left(issues) : right({ type: 'startEvent' })
+    }
+    case 'revealEvent':
+    case 'resolveEvent':
+    case 'giveUpEvent':
+    case 'escapeEvent':
+    case 'payEventRequirement':
+      return eventActionsEnabled
+        ? parseEncounterAction(body.type, body)
+        : left([{ field: 'type', reason: 'unknownAction' }])
     default:
       return left([{ field: 'type', reason: 'unknownAction' }])
   }
+}
+
+function parseEncounterAction(
+  type: Exclude<TRandomEventAction['type'], 'startEvent'>,
+  body: Record<string, unknown>
+): Either<TActionIssue[], TRandomEventAction> {
+  const { encounterId, requirementId } = body
+  const issues: TActionIssue[] = []
+  const isPayment = type === 'payEventRequirement'
+  for (const field of isPayment
+    ? ['encounterId', 'requirementId']
+    : ['encounterId']) {
+    if (typeof body[field] !== 'string') {
+      issues.push({
+        field,
+        reason: body[field] === undefined ? 'required' : 'notString',
+      })
+    }
+  }
+  const payment = isPayment ? readEventPayment(body.payment, issues) : undefined
+  issues.push(
+    ...extraKeys(
+      body,
+      isPayment
+        ? ['type', 'encounterId', 'requirementId', 'payment']
+        : ['type', 'encounterId']
+    )
+  )
+  if (issues.length || typeof encounterId !== 'string') return left(issues)
+  if (type !== 'payEventRequirement') return right({ type, encounterId })
+  if (typeof requirementId !== 'string') return left(issues)
+  return right({
+    type,
+    encounterId,
+    requirementId,
+    ...(payment && { payment }),
+  })
+}
+
+function readEventPayment(
+  value: unknown,
+  issues: TActionIssue[]
+): TEventPayment | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    issues.push({ field: 'payment', reason: 'notObject' })
+    return undefined
+  }
+  const input = value as Record<string, unknown>
+  const payment: TEventPayment = {}
+  for (const field of ['handCards', 'equipmentSlots', 'resources'] as const) {
+    const entries = input[field]
+    if (entries === undefined) continue
+    if (!Array.isArray(entries)) {
+      issues.push({ field: `payment.${field}`, reason: 'notArray' })
+      continue
+    }
+    if (field === 'handCards') payment.handCards = []
+    if (field === 'equipmentSlots') payment.equipmentSlots = []
+    if (field === 'resources') payment.resources = []
+    for (const [index, entry] of entries.entries()) {
+      if (field === 'handCards' && typeof entry === 'string') {
+        payment.handCards?.push(entry)
+      } else if (
+        field === 'equipmentSlots' &&
+        typeof entry === 'string' &&
+        isEquipmentSlot(entry)
+      ) {
+        payment.equipmentSlots?.push(entry)
+      } else if (
+        field === 'resources' &&
+        entry &&
+        typeof entry === 'object' &&
+        typeof entry.cardId === 'string' &&
+        isPositiveInteger(entry.copies) &&
+        Object.keys(entry).every((key) => key === 'cardId' || key === 'copies')
+      ) {
+        payment.resources?.push({ cardId: entry.cardId, copies: entry.copies })
+      } else {
+        issues.push({
+          field: `payment.${field}.${index}`,
+          reason: 'invalidItem',
+        })
+      }
+    }
+  }
+  issues.push(
+    ...extraKeys(input, ['handCards', 'equipmentSlots', 'resources']).map(
+      (issue) => ({
+        field: `payment.${issue.field}`,
+        reason: 'unknownKey' as const,
+      })
+    )
+  )
+  return payment
 }
 
 /** Problemas na ordem `cardId`, depois campos a mais (REQ-92). */

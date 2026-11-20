@@ -47,7 +47,8 @@ export class TakePartyActionUseCase {
     private readonly partiesRepository: PartiesRepository,
     private readonly clock: Clock,
     private readonly cardCatalog: CardCatalog,
-    private readonly ids?: IdGenerator
+    private readonly ids?: IdGenerator,
+    private readonly eventActionsEnabled = true
   ) {}
 
   async execute({
@@ -60,13 +61,51 @@ export class TakePartyActionUseCase {
     }
 
     // A porta é ligada no Nest com o save v7, quando os status podem ser persistidos.
-    const parsed = parsePartyAction(body, this.ids !== undefined)
+    const parsed = parsePartyAction(
+      body,
+      this.ids !== undefined,
+      this.eventActionsEnabled
+    )
     if (parsed.isLeft()) {
       return left(new ActionInvalidError(parsed.value))
     }
 
     const action = parsed.value
+    if (party.status === 'idle') return left(new PartySessionNotActiveError())
+    const blocked = party.eventActionBlock(action)
+    if (typeof blocked === 'string')
+      return left(new ActionNotAllowedError(blocked))
     switch (action.type) {
+      case 'startEvent':
+      case 'revealEvent':
+      case 'payEventRequirement':
+      case 'resolveEvent':
+      case 'giveUpEvent':
+      case 'escapeEvent': {
+        const { zone, dimension, cards } = await this.findEventCatalog(party)
+        const result = party.takeEventAction(
+          action,
+          zone,
+          dimension,
+          cards,
+          this.clock.now(),
+          this.ids
+        )
+        if (result.isLeft()) {
+          const refusal = result.value
+          return left(
+            typeof refusal === 'string'
+              ? new ActionNotAllowedError(refusal)
+              : new ActionNotAllowedError(
+                  refusal.reason,
+                  undefined,
+                  undefined,
+                  refusal.checks
+                )
+          )
+        }
+        break
+      }
       case 'move': {
         const moved = party.move(action.zoneId, this.clock.now())
         if (moved.isLeft()) {
@@ -250,6 +289,48 @@ export class TakePartyActionUseCase {
     await this.partiesRepository.save(party)
 
     return right({ party })
+  }
+
+  private async findEventCatalog(party: Party) {
+    const player = party.members.find(({ id }) =>
+      id.equals(party.turn.memberId)
+    )?.player
+    const [foundZone, foundDimension] = await Promise.all([
+      player ? this.cardCatalog.findCard(player.zoneId) : null,
+      this.cardCatalog.findCard(party.dimension.dimensionCardId),
+    ])
+    const zone = foundZone?.type === 'zone' ? foundZone : null
+    const dimension =
+      foundDimension?.type === 'dimension' ? foundDimension : null
+    const zoneType = party.eventEncounter?.zoneType ?? zone?.zoneType
+    const deck = dimension?.eventDecks?.find(
+      (entry) => entry.zoneType === zoneType
+    )
+    const savedDeck = party.eventDecks.find(
+      (entry) => entry.zoneType === zoneType
+    )
+    const ids = new Set([
+      ...(deck?.cards.map(({ cardId }) => cardId) ?? []),
+      ...(savedDeck?.cards ?? []),
+      ...(savedDeck?.discard ?? []),
+      ...(player?.hand ?? []),
+      ...(player?.deck ?? []),
+      ...(player?.discard ?? []),
+      ...(player?.inventory.map(({ cardId }) => cardId) ?? []),
+      ...Object.values(player?.equipment ?? {}).filter(
+        (id): id is string => id !== null
+      ),
+      ...(party.eventEncounter?.payments.flatMap(
+        (receipt) => receipt.handCards?.map(({ cardId }) => cardId) ?? []
+      ) ?? []),
+    ])
+    const cards = new Map<string, TCard>()
+    for (const card of await Promise.all(
+      [...ids].map((id) => this.cardCatalog.findCard(id))
+    )) {
+      if (card) cards.set(card.id, card)
+    }
+    return { zone, dimension, cards }
   }
 
   /**

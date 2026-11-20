@@ -50,7 +50,7 @@ type TExecutableCost = Extract<
   { kind: (typeof EXECUTABLE_COSTS)[number] }
 >
 
-function quantityOf(
+export function quantityOf(
   quantity: TQuantity,
   player: TPlayerState,
   cards: ReadonlyMap<string, TCard>

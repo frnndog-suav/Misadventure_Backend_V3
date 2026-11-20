@@ -10,6 +10,7 @@ import type {
   TActivation,
   TCost,
   TEffect,
+  TEventPhase,
 } from '@/domain/catalog/enterprise/value-objects/effect'
 
 import { equipmentWorks } from '../effective-modifiers'
@@ -36,7 +37,18 @@ const ACTIVATIONS = [
   'drawCards',
   'removeDebuffs',
   'removeBuffs',
+  'fleeTargetOverride',
+  'fleeTargetModifier',
+  'diceResultModifier',
 ] as const satisfies readonly TActivation['kind'][]
+
+function isEventRuleActivation(entry: TActivation): boolean {
+  return (
+    entry.kind === 'fleeTargetOverride' ||
+    entry.kind === 'fleeTargetModifier' ||
+    entry.kind === 'diceResultModifier'
+  )
+}
 
 const DURATIONS = [
   'untilEndOfTurn',
@@ -47,6 +59,8 @@ const DURATIONS = [
   'untilLeaveZone',
   'infinite',
   'untilPartyEnd',
+  'untilEventEnd',
+  'untilEventPhaseEnd',
 ] as const satisfies readonly TPlayerStatus['duration']['kind'][]
 
 function hasKind<const T extends string>(
@@ -60,6 +74,21 @@ export type TExecutableActivation = Extract<
   TActivation,
   { kind: (typeof ACTIVATIONS)[number] }
 >
+export function isExecutableActivation(
+  entry: TActivation
+): entry is TExecutableActivation {
+  return (
+    hasKind(ACTIVATIONS, entry.kind) &&
+    ((entry.kind !== 'removeBuffs' && entry.kind !== 'removeDebuffs') ||
+      entry.target === 'self')
+  )
+}
+
+export function isStatusDuration(
+  value: TEffect['duration']
+): value is TPlayerStatus['duration'] {
+  return hasKind(DURATIONS, value.kind)
+}
 type TExecutableCost = Extract<
   TCost,
   { kind: (typeof EXECUTABLE_COSTS)[number] }
@@ -102,7 +131,8 @@ export function handPayment(effect: TEffect) {
 function resolveEffect(
   player: TPlayerState,
   { card, source }: TSource,
-  effectIndex: number
+  effectIndex: number,
+  phase?: TEventPhase
 ): Either<TActivateRefusal, TExecutableEffect> {
   if (
     card.type === 'equipment' &&
@@ -124,12 +154,8 @@ function resolveEffect(
     !cost.every((entry): entry is TExecutableCost =>
       hasKind(EXECUTABLE_COSTS, entry.kind)
     ) ||
-    !activation.every(
-      (entry): entry is TExecutableActivation =>
-        hasKind(ACTIVATIONS, entry.kind) &&
-        ((entry.kind !== 'removeBuffs' && entry.kind !== 'removeDebuffs') ||
-          entry.target === 'self')
-    )
+    !activation.every(isExecutableActivation) ||
+    (phase === undefined && activation.some(isEventRuleActivation))
   ) {
     return left({ reason: 'notActivatableYet' })
   }
@@ -137,17 +163,21 @@ function resolveEffect(
     if (
       activation.some(
         ({ kind }) => kind === 'modifierFlat' || kind === 'modifierPercent'
-      )
+      ) ||
+      activation.some(isEventRuleActivation)
     ) {
       return left({ reason: 'notActivatableYet' })
     }
     return right({ ...effect, cost, activation, duration })
   }
-  const isStatusDuration = (
-    value: TEffect['duration']
-  ): value is TPlayerStatus['duration'] => hasKind(DURATIONS, value.kind)
   if (!isStatusDuration(duration) || effect.mark === null) {
     return left({ reason: 'notActivatableYet' })
+  }
+  if (
+    (duration.kind === 'untilEventEnd' && phase === undefined) ||
+    (duration.kind === 'untilEventPhaseEnd' && phase !== duration.phase)
+  ) {
+    return left({ reason: 'notActivatable' })
   }
   return right({ ...effect, cost, activation, duration })
 }
@@ -155,7 +185,8 @@ function resolveEffect(
 /** Lista em ordem de inventário e depois de equipamento (REQ-101). */
 export function activatableEffects(
   player: TPlayerState,
-  cards: readonly TCard[]
+  cards: readonly TCard[],
+  phase?: TEventPhase
 ): TActivatableEffect[] {
   const catalog = new Map(cards.map((card) => [card.id, card]))
   const seen = new Set<string>()
@@ -169,7 +200,7 @@ export function activatableEffects(
       return
     seen.add(cardId)
     for (const [effectIndex] of card.effects.entries()) {
-      const effect = resolveEffect(player, { card, source }, effectIndex)
+      const effect = resolveEffect(player, { card, source }, effectIndex, phase)
       if (
         effect.isLeft() ||
         payEffectCosts(player, cardId, effect.value.cost, catalog).isLeft()
@@ -198,7 +229,8 @@ export function prepareEffect(
   player: TPlayerState,
   operation: TActivateOperation,
   cards: readonly TCard[],
-  rngState: RngState
+  rngState: RngState,
+  phase?: TEventPhase
 ): Either<TActivateRefusal, TPayment & { effect: TExecutableEffect }> {
   const { cardId, effectIndex } = operation
   const inUse = Object.values(player.equipment).includes(cardId)
@@ -213,7 +245,8 @@ export function prepareEffect(
   const effect = resolveEffect(
     player,
     { card, source: inUse ? 'equipment' : 'inventory' },
-    effectIndex
+    effectIndex,
+    phase
   )
   if (effect.isLeft()) return left(effect.value)
   const payment = payEffectCosts(player, cardId, effect.value.cost, catalog, {

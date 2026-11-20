@@ -87,6 +87,9 @@ export function applyActivations(
       }
       case 'modifierFlat':
       case 'modifierPercent':
+      case 'fleeTargetOverride':
+      case 'fleeTargetModifier':
+      case 'diceResultModifier':
         record({})
         break
       default: {

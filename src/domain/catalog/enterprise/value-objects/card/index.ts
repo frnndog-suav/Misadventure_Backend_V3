@@ -296,8 +296,7 @@ export type TRandomEventOutcomeStep =
   | {
       type: 'effect'
       effect: Omit<TEffect, 'trigger' | 'cost' | 'duration'> & {
-        duration:
-          TEffect['duration'] | { kind: 'untilEventPhaseEnd' | 'untilEventEnd' }
+        duration: TEffect['duration'] | { kind: 'untilEventPhaseEnd' }
       }
     }
   | { type: 'drawRewards'; count: number }
