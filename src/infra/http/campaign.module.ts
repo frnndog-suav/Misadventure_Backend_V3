@@ -106,7 +106,8 @@ import { TakePartyActionController } from './controllers/take-party-action/index
         catalog: CardCatalog,
         ids: IdGenerator
         // A exposição HTTP depende do mapper e da projeção da T-43.
-      ) => new TakePartyActionUseCase(parties, clock, catalog, ids),
+      // T-49 habilita o combate quando o mapper puder preservar o estado.
+      ) => new TakePartyActionUseCase(parties, clock, catalog, ids, true, false),
     },
     {
       provide: AbandonPartyUseCase,

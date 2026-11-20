@@ -27,6 +27,15 @@ import {
   type TActivateRefusal,
 } from '../../activatable-effects'
 import { connectedZones } from '../../connected-zones'
+import {
+  combatAttackTargets,
+  combatIsTerminal,
+  createCombat,
+  resolveCombatTurn,
+  type TCombatRefusal,
+  type TCombatState,
+} from '../../combat'
+import { effectiveModifiers } from '../../effective-modifiers'
 import { applyActivations } from '../../effect-activation'
 import type { TPartyEvent } from '../../events/party-events'
 import { addToInventory, type TInventorySlot } from '../../inventory'
@@ -37,6 +46,7 @@ import type {
   TRecoverOption,
   TVaultOperation,
   TRandomEventAction,
+  TCombatAction,
   TPartyAction,
 } from '../../party-action'
 import {
@@ -173,6 +183,7 @@ export interface TPartyProps {
   rewardDecks: readonly TPartyRewardDeck[]
   eventDecks?: readonly TEventDeck[]
   eventEncounter?: TEventEncounter | null
+  combat?: TCombatState | null
   pendingReward?: TPendingReward | null
   rewardSequence?: number
   /** Ids de membro, do 1º ao último (REQ-33). */
@@ -286,7 +297,18 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 
   private eventCatalog: ReadonlyMap<string, TCard> = new Map()
 
-  eventActionBlock(action: TPartyAction): TEventRefusal | null {
+  get combat() {
+    const state = this.props.combat
+    if (!state) return null
+    const health = this.props.members[this.actorIndex()].player.health
+    return { ...state, attackTargetIds: combatAttackTargets(state, health) }
+  }
+
+  eventActionBlock(
+    action: TPartyAction
+  ): TEventRefusal | TCombatRefusal | null {
+    if ('combatId' in action) return null
+    if (this.props.combat) return 'combatInProgress'
     if (action.type === 'resolveReward') return null
     if ('encounterId' in action) return null
     if (this.props.pendingReward) return 'choicePending'
@@ -305,7 +327,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   canStartEvent(
     zone: TZoneCard | null,
     dimension: TDimensionCard | null,
-    cards: ReadonlyMap<string, TCard>
+    cards: ReadonlyMap<string, TCard>,
+    combatEnabled = true
   ): boolean {
     if (!zone?.zoneActions.includes('startEvent')) return false
     const deck = this.eventDecks.find(
@@ -316,7 +339,79 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       : (dimension?.eventDecks
           ?.find((entry) => entry.zoneType === zone.zoneType)
           ?.cards.map(({ cardId }) => cardId) ?? [])
-    return ids.some((id) => isPlayableEvent(cards.get(id)))
+    return ids.some((id) =>
+      combatEnabled
+        ? isPlayableEvent(cards.get(id))
+        : isExecutableEvent(cards.get(id))
+    )
+  }
+
+  combatActions(): TCombatAction['type'][] {
+    const state = this.props.combat
+    if (!state || state.turn.actorId !== state.memberId) return []
+    const health = this.props.members[this.actorIndex()].player.health
+    if (combatIsTerminal(state, health)) return []
+    return combatAttackTargets(state, health).length
+      ? ['combatAttack', 'endCombatTurn']
+      : ['endCombatTurn']
+  }
+
+  private combatPlayer(
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>
+  ) {
+    const equipment = Object.values(player.equipment).flatMap((id) => {
+      const card = id ? cards.get(id) : undefined
+      return card?.type === 'equipment' ? [card] : []
+    })
+    return {
+      health: player.health,
+      modifiers: effectiveModifiers({
+        ...player,
+        equipment,
+        combat: {
+          exhaustionPenaltyPercent:
+            player.vigor === 0 ? this.config.exhaustionPenaltyPercent : 0,
+        },
+      }),
+    }
+  }
+
+  takeCombatAction(
+    action: TCombatAction,
+    cards: ReadonlyMap<string, TCard>,
+    at: Date
+  ): Either<TCombatRefusal, void> {
+    const state = this.props.combat
+    if (!state || state.id !== action.combatId) return left('staleCombat')
+    if (state.turn.id !== action.turnId) return left('staleCombatTurn')
+    const index = this.actorIndex()
+    const player = this.props.members[index].player
+    if (player.health === 0) return left('playerDown')
+    if (!this.combatActions().includes(action.type))
+      return left('wrongCombatPhase')
+    const targetId =
+      action.type === 'combatAttack' ? action.targetId : undefined
+    if (
+      targetId !== undefined &&
+      !combatAttackTargets(state, player.health).includes(targetId)
+    )
+      return left('combatTargetUnavailable')
+
+    const rng = SeededRng.fromState(this.props.rngState)
+    const resolved = resolveCombatTurn(
+      state,
+      this.combatPlayer(player, cards),
+      this.config,
+      rng,
+      targetId
+    )
+    this.props.combat = resolved.state
+    this.props.rngState = rng.state()
+    if (resolved.health !== player.health)
+      this.replaceActor(index, { ...player, health: resolved.health })
+    this.props.savedAt = at
+    return right(undefined)
   }
 
   takeEventAction(
@@ -325,7 +420,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     dimension: TDimensionCard | null,
     cards: ReadonlyMap<string, TCard>,
     at: Date,
-    ids: IdGenerator | undefined
+    ids: IdGenerator | undefined,
+    combatEnabled = true
   ): Either<TEventRefusal, void> {
     const index = this.actorIndex()
     const actor = this.props.members[index]
@@ -344,7 +440,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       if (this.turn.actionPoints < 1) return left('noActionPoints')
       if (!zone?.zoneActions.includes('startEvent'))
         return left('zoneActionUnavailable')
-      if (!this.canStartEvent(zone, dimension, cards))
+      if (!this.canStartEvent(zone, dimension, cards, combatEnabled))
         return left('eventDeckEmpty')
       if (!this.eventDecks.some((entry) => entry.zoneType === zone.zoneType)) {
         const configured = dimension?.eventDecks?.find(
@@ -354,7 +450,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           configured?.cards.flatMap(({ cardId, copies }) =>
             Array.from({ length: copies }, () => cardId)
           ) ?? []
-        const eligible = (id: string) => isPlayableEvent(cards.get(id))
+        const eligible = (id: string) =>
+          combatEnabled
+            ? isPlayableEvent(cards.get(id))
+            : isExecutableEvent(cards.get(id))
         this.updateEventDeck({
           zoneType: zone.zoneType,
           discard: [],
@@ -395,14 +494,24 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         (entry) => entry.zoneType === encounter.zoneType
       )
       if (!deck) return left('eventDeckEmpty')
-      const eligible = (id: string) => isExecutableEvent(cards.get(id))
+      const eligible = (id: string) => {
+        const card = cards.get(id)
+        return (
+          isExecutableEvent(card) ||
+          (combatEnabled && isExecutableCombatEvent(card))
+        )
+      }
       const recycle = !deck.cards.some(eligible)
       const ordered = recycle
         ? [...shuffle(deck.discard.filter(eligible), rng), ...deck.cards]
         : deck.cards
       const position = ordered.findIndex(eligible)
       const card = cards.get(ordered[position])
-      if (!isExecutableEvent(card)) return left('eventDeckEmpty')
+      if (
+        !isExecutableEvent(card) &&
+        !(combatEnabled && isExecutableCombatEvent(card))
+      )
+        return left('eventDeckEmpty')
       this.updateEventDeck({
         ...deck,
         cards: ordered.filter((_, i) => i !== position),
@@ -410,7 +519,6 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           ? deck.discard.filter((id) => !eligible(id))
           : deck.discard,
       })
-      this.props.eventEncounter = { ...encounter, phase: 'encounter', card }
       this.props.members[index] = this.updateStatuses(
         actor,
         (status) =>
@@ -420,6 +528,27 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             : status,
         at
       )
+      if (isExecutableEvent(card)) {
+        this.props.eventEncounter = { ...encounter, phase: 'encounter', card }
+      } else {
+        const current = this.props.members[index].player
+        const fighter = this.combatPlayer(current, cards)
+        const state = createCombat(
+          encounter.id,
+          card,
+          encounter.memberId,
+          fighter,
+          this.config
+        )
+        const resolved =
+          state.turn.actorId === state.memberId
+            ? { state, health: current.health }
+            : resolveCombatTurn(state, fighter, this.config, rng)
+        this.props.eventEncounter = null
+        this.props.combat = resolved.state
+        if (resolved.health !== current.health)
+          this.replaceActor(index, { ...current, health: resolved.health })
+      }
       return complete()
     }
     if (encounter.phase !== 'encounter' || !encounter.card)
@@ -1318,7 +1447,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   }
 
   /** Encerrar sessão (REQ-21). Fora de sessão é rejeitado e nada muda. */
-  endSession(at: Date): Either<'sessionNotActive', void> {
+  endSession(at: Date): Either<'sessionNotActive' | 'combatInProgress', void> {
+    if (this.props.combat) return left('combatInProgress')
     switch (this.props.status) {
       case 'idle':
         return left('sessionNotActive')

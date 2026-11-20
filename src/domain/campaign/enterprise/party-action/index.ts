@@ -45,6 +45,10 @@ export type TRandomEventAction =
       payment?: TEventPayment
     }
 
+export type TCombatAction = { combatId: string; turnId: string } & (
+  { type: 'combatAttack'; targetId: string } | { type: 'endCombatTurn' }
+)
+
 /** Uma operação do Usar cofre (README 6.4; REQ-84 a REQ-87). */
 export type TVaultOperation =
   | { operation: 'store'; cardId: string; quantity: number }
@@ -60,6 +64,7 @@ export type TVaultOperation =
 /** Intenção de jogo (CONTRATO §1.6). União por `type`; as FEATs 10+ acrescentam variantes. */
 export type TPartyAction =
   | TRandomEventAction
+  | TCombatAction
   | TResolveRewardAction
   | { type: 'move'; zoneId: string }
   | { type: 'endTurn' }
@@ -109,7 +114,8 @@ export type TActionIssue =
 export function parsePartyAction(
   input: unknown,
   effectActivationEnabled = true,
-  eventActionsEnabled = true
+  eventActionsEnabled = true,
+  combatEnabled = true
 ): Either<TActionIssue[], TPartyAction> {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     return left([{ field: null, reason: 'invalidBody' }])
@@ -124,6 +130,11 @@ export function parsePartyAction(
   }
 
   switch (body.type) {
+    case 'combatAttack':
+    case 'endCombatTurn':
+      return combatEnabled
+        ? parseCombatAction(body.type, body)
+        : left([{ field: 'type', reason: 'unknownAction' }])
     case 'move':
       return parseMove(body)
     case 'endTurn':
@@ -159,6 +170,35 @@ export function parsePartyAction(
     default:
       return left([{ field: 'type', reason: 'unknownAction' }])
   }
+}
+
+function parseCombatAction(
+  type: TCombatAction['type'],
+  body: Record<string, unknown>
+): Either<TActionIssue[], TCombatAction> {
+  const fields =
+    type === 'combatAttack'
+      ? ['combatId', 'turnId', 'targetId']
+      : ['combatId', 'turnId']
+  const issues: TActionIssue[] = []
+  for (const field of fields) {
+    if (typeof body[field] !== 'string')
+      issues.push({
+        field,
+        reason: body[field] === undefined ? 'required' : 'notString',
+      })
+  }
+  issues.push(...extraKeys(body, ['type', ...fields]))
+  if (issues.length) return left(issues)
+  const ids = {
+    combatId: body.combatId as string,
+    turnId: body.turnId as string,
+  }
+  return right(
+    type === 'combatAttack'
+      ? { type, ...ids, targetId: body.targetId as string }
+      : { type, ...ids }
+  )
 }
 
 function parseResolveReward(

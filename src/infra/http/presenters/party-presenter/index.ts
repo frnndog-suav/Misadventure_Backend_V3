@@ -213,7 +213,7 @@ function playerToHTTP(
       zone?.zoneActions ?? [],
       targets,
       effects,
-      party.canStartEvent(zone, dimension, cards),
+      party.canStartEvent(zone, dimension, cards, false),
       encounter
     ),
     build: copiesToHTTP(player.build),

@@ -1,4 +1,5 @@
 import { DomainError } from '@/core/error/domain-error'
+import type { TCombatRefusal } from '../../../enterprise/combat'
 import type {
   TEventRefusal,
   TMinimumCheck,
@@ -7,6 +8,7 @@ import type { TRewardRefusal } from '../../../enterprise/rewards'
 
 /** CONTRATO §4 `ACTION_NOT_ALLOWED`; `details` = `ActionNotAllowedDetails` (FEATs seguintes acrescentam motivos). */
 export type TActionNotAllowedReason =
+  | TCombatRefusal
   | Extract<TEventRefusal, string>
   | TRewardRefusal
   | 'eventMinimumNotMet'

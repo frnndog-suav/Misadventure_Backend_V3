@@ -13,6 +13,7 @@ export type TEffectiveModifiersInput = Readonly<{
   /** Cartas dos equipamentos em uso (o agregado não conhece o catálogo, D-76). */
   equipment: readonly TEquipmentCard[]
   statuses?: readonly TPlayerStatus[]
+  combat?: Readonly<{ power?: number; exhaustionPenaltyPercent: number }>
 }>
 
 /** Um equipamento em uso funciona se não tem requisito ou o Pico o cumpre (7.3 item 8). */
@@ -29,6 +30,7 @@ export function effectiveModifiers({
   peak,
   equipment,
   statuses = [],
+  combat,
 }: TEffectiveModifiersInput): Record<TModifier, number> {
   const working = equipment.filter((card) => equipmentWorks(card, peak))
   const equipmentBonuses = working.flatMap((card) => card.modifiers)
@@ -57,7 +59,8 @@ export function effectiveModifiers({
     let fixed = equipmentBonuses
       .filter((entry) => entry.modifier === modifier)
       .reduce((sum, entry) => sum + entry.value, 0)
-    let percent = 0
+    if (modifier === 'attack') fixed += combat?.power ?? 0
+    let percent = -(combat?.exhaustionPenaltyPercent ?? 0)
     for (const activation of activations) {
       if (activation.kind === 'modifierFlat') {
         for (const change of activation.changes) {

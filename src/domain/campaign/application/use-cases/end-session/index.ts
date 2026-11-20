@@ -4,6 +4,7 @@ import { PartiesRepository } from '@/domain/campaign/application/repositories/pa
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
 
 import { PartyNotFoundError } from '../_errors/party-not-found-error'
+import { ActionNotAllowedError } from '../_errors/action-not-allowed-error'
 import { PartySessionNotActiveError } from '../_errors/party-session-not-active-error'
 
 export interface TEndSessionUseCaseRequest {
@@ -11,7 +12,7 @@ export interface TEndSessionUseCaseRequest {
 }
 
 export type TEndSessionUseCaseResponse = Either<
-  PartyNotFoundError | PartySessionNotActiveError,
+  PartyNotFoundError | PartySessionNotActiveError | ActionNotAllowedError,
   { party: Party }
 >
 
@@ -30,7 +31,11 @@ export class EndSessionUseCase {
       async (party, save) => {
         if (!party) return left(new PartyNotFoundError())
         const result = party.endSession(this.clock.now())
-        if (result.isLeft()) return left(new PartySessionNotActiveError())
+        if (result.isLeft()) {
+          return result.value === 'combatInProgress'
+            ? left(new ActionNotAllowedError(result.value))
+            : left(new PartySessionNotActiveError())
+        }
         await save(party)
         return right({ party })
       }

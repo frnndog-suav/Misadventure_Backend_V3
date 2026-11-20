@@ -48,7 +48,8 @@ export class TakePartyActionUseCase {
     private readonly clock: Clock,
     private readonly cardCatalog: CardCatalog,
     private readonly ids?: IdGenerator,
-    private readonly eventActionsEnabled = true
+    private readonly eventActionsEnabled = true,
+    private readonly combatEnabled = true
   ) {}
 
   execute({
@@ -73,7 +74,8 @@ export class TakePartyActionUseCase {
     const parsed = parsePartyAction(
       body,
       this.ids !== undefined,
-      this.eventActionsEnabled
+      this.eventActionsEnabled,
+      this.combatEnabled
     )
     if (parsed.isLeft()) {
       return left(new ActionInvalidError(parsed.value))
@@ -85,6 +87,13 @@ export class TakePartyActionUseCase {
     if (typeof blocked === 'string')
       return left(new ActionNotAllowedError(blocked))
     switch (action.type) {
+      case 'combatAttack':
+      case 'endCombatTurn': {
+        const { cards } = await this.findEventCatalog(party)
+        const result = party.takeCombatAction(action, cards, this.clock.now())
+        if (result.isLeft()) return left(new ActionNotAllowedError(result.value))
+        break
+      }
       case 'resolveReward': {
         const pending = party.pendingRewards[0]
         if (pending?.id !== action.rewardId)
@@ -113,7 +122,8 @@ export class TakePartyActionUseCase {
           dimension,
           cards,
           this.clock.now(),
-          this.ids
+          this.ids,
+          this.combatEnabled
         )
         if (result.isLeft()) {
           const refusal = result.value

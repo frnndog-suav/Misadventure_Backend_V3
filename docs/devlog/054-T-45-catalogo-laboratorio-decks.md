@@ -1,7 +1,7 @@
 # 054 — T-45 — Catálogo, laboratório e decks de combate
 
 - Data — 2026-11-20
-- Status — aguardando revisão
+- Status — concluída
 - Spec — v0.62
 - Contrato — v0.62, acordado
 - Horas — a preencher pelo autor
@@ -40,7 +40,7 @@ Antes da implementação, o autor confirmou 7 falhas esperadas e 39 testes passa
 ## Checks e pendências
 
 - `npm.cmd run typecheck` e `git diff --check` passaram. `npm.cmd run validate:content` validou 1 coleção e 16 cartas.
-- Aguardando a segunda execução das suítes pelo autor.
+- O autor confirmou que a segunda execução passou sem erros e registrou a implementação no commit `aad6a88`.
 - A revelação ainda usa o fluxo de evento aleatório. Um deck só com combate executável pode abrir antecipação e receber `eventDeckEmpty` ao revelar até a entrada de combate da T-46. A compra e a reciclagem que iniciam combate dependem dessa entrada.
 
 ## Commit sugerido

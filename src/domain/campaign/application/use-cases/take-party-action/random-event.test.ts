@@ -517,6 +517,113 @@ describe('TakePartyActionUseCase — encontro aleatório (T-41)', () => {
     ])
   })
 
+  it.each(['compra', 'descarte'] as const)(
+    'REQ-118: revela combate pela %s e identifica as duas cópias em ordem impressa com 0 PA',
+    async (source) => {
+      const enemy = combat.enemies[0]
+      const combatCard = makeCombatEventCard({
+        goodOutcome: emptyOutcome,
+        badOutcome: emptyOutcome,
+        enemies: [
+          {
+            ...enemy,
+            modifiers: {
+              ...enemy.modifiers,
+              accuracy: 0,
+              evasion: 0,
+              celerity: 8,
+            },
+          },
+        ],
+      })
+      const game = setup({
+        combatCard,
+        combatOnly: true,
+        player: { peak: 0 },
+        eventDecks: [
+          {
+            zoneType: 'urban',
+            cards: source === 'compra' ? [combatCard.id] : [],
+            discard: source === 'descarte' ? [combatCard.id] : [],
+          },
+        ],
+      })
+
+      await game.reveal()
+
+      const party = game.party()
+      expect(party).toMatchObject({
+        randomEventEncounter: null,
+        turn: { actionPoints: 0 },
+        combat: {
+          card: { id: combatCard.id },
+          cycle: 1,
+          turn: { actorId: 'member-1', phase: 'prepare' },
+          enemies: [
+            {
+              id: expect.any(String),
+              blockIndex: 0,
+              copyIndex: 0,
+              health: enemy.health,
+            },
+            {
+              id: expect.any(String),
+              blockIndex: 0,
+              copyIndex: 1,
+              health: enemy.health,
+            },
+          ],
+        },
+      })
+      const state = party.combat
+      if (!state) throw new Error('O combate deveria estar aberto')
+      const enemyIds = state.enemies.map((copy) => copy.id)
+      expect(new Set(enemyIds).size).toBe(2)
+      expect(state.order).toEqual([...enemyIds, 'member-1'])
+      expect(state.attackTargetIds).toEqual(enemyIds)
+      expect(availableActions(party, party.turn.memberId, new Set())).toEqual([
+        'combatAttack',
+        'endCombatTurn',
+      ])
+      await game.refuse(
+        {
+          type: 'combatAttack',
+          combatId: state.id,
+          turnId: state.turn.id,
+          targetId: 'missing',
+        },
+        { reason: 'combatTargetUnavailable' }
+      )
+      const passed = await game.accept({
+        type: 'endCombatTurn',
+        combatId: state.id,
+        turnId: state.turn.id,
+      })
+      expect(passed.turn.actionPoints).toBe(0)
+      expect(passed.combat).toMatchObject({
+        cycle: 2,
+        turn: { actorId: 'member-1' },
+      })
+      const next = passed.combat
+      if (!next) throw new Error('O segundo ciclo deveria estar aberto')
+      await game.refuse(
+        { type: 'endCombatTurn', combatId: state.id, turnId: state.turn.id },
+        { reason: 'staleCombatTurn' }
+      )
+      const attacked = await game.accept({
+        type: 'combatAttack',
+        combatId: next.id,
+        turnId: next.turn.id,
+        targetId: enemyIds[0],
+      })
+      expect(attacked.turn.actionPoints).toBe(0)
+      expect(attacked.combat).toMatchObject({
+        cycle: 3,
+        enemies: [{ health: enemy.health - 4 }, { health: enemy.health }],
+      })
+    }
+  )
+
   it('REQ-111: recusa iniciar quando o deck contém apenas combate', async () => {
     const game = setup({ combatOnly: true })
     await game.refuse({ type: 'startEvent' }, { reason: 'eventDeckEmpty' })
