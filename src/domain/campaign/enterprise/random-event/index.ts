@@ -62,6 +62,7 @@ export type TEventEncounter = {
   decisionDeadlineAt: null
   outcome?: {
     nextStep: number
+    nextCopy?: number
     startingPeak: number
     cause: TEventResult['cause']
     escape: TEscapeReceipt | null

@@ -3,10 +3,12 @@ import type {
   TEventRefusal,
   TMinimumCheck,
 } from '../../../enterprise/random-event'
+import type { TRewardRefusal } from '../../../enterprise/rewards'
 
 /** CONTRATO §4 `ACTION_NOT_ALLOWED`; `details` = `ActionNotAllowedDetails` (FEATs seguintes acrescentam motivos). */
 export type TActionNotAllowedReason =
   | Extract<TEventRefusal, string>
+  | TRewardRefusal
   | 'eventMinimumNotMet'
   | 'notConnected'
   | 'noActionPoints'

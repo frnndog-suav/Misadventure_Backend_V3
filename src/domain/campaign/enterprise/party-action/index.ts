@@ -3,6 +3,7 @@ import {
   EQUIPMENT_SLOTS,
   type TEquipmentSlot,
 } from '@/domain/catalog/enterprise/value-objects/card'
+import type { TResolveRewardAction, TRewardDiscard } from '../rewards'
 
 /** Os três modos do Recuperar (README 12.5; REQ-63). */
 export const RECOVER_OPTIONS = [
@@ -59,6 +60,7 @@ export type TVaultOperation =
 /** Intenção de jogo (CONTRATO §1.6). União por `type`; as FEATs 10+ acrescentam variantes. */
 export type TPartyAction =
   | TRandomEventAction
+  | TResolveRewardAction
   | { type: 'move'; zoneId: string }
   | { type: 'endTurn' }
   | { type: 'recover'; option: TRecoverOption }
@@ -136,6 +138,10 @@ export function parsePartyAction(
       return parseUseVault(body)
     case 'scavenge':
       return parseScavenge(body)
+    case 'resolveReward':
+      return eventActionsEnabled
+        ? parseResolveReward(body)
+        : left([{ field: 'type', reason: 'unknownAction' }])
     case 'startEvent': {
       if (!eventActionsEnabled)
         return left([{ field: 'type', reason: 'unknownAction' }])
@@ -153,6 +159,76 @@ export function parsePartyAction(
     default:
       return left([{ field: 'type', reason: 'unknownAction' }])
   }
+}
+
+function parseResolveReward(
+  body: Record<string, unknown>
+): Either<TActionIssue[], TResolveRewardAction> {
+  const { rewardId, choice } = body
+  if (typeof rewardId !== 'string' || !rewardId.trim())
+    return left([
+      {
+        field: 'rewardId',
+        reason:
+          rewardId === undefined || typeof rewardId === 'string'
+            ? 'required'
+            : 'notString',
+      },
+    ])
+  if (choice !== 'keep' && choice !== 'leave')
+    return left([
+      {
+        field: 'choice',
+        reason: choice === undefined ? 'required' : 'invalidItem',
+      },
+    ])
+  const keys = ['type', 'rewardId', 'choice']
+  if (choice === 'leave') {
+    const issues = extraKeys(body, keys)
+    return issues.length
+      ? left(issues)
+      : right({ type: 'resolveReward', rewardId, choice })
+  }
+  if (!Array.isArray(body.discard))
+    return left([
+      {
+        field: 'discard',
+        reason: body.discard === undefined ? 'required' : 'notArray',
+      },
+    ])
+  const discard: TRewardDiscard[] = []
+  const issues: TActionIssue[] = []
+  for (const [index, raw] of body.discard.entries()) {
+    const item: unknown = raw
+    const field = `discard.${index}`
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      issues.push({ field, reason: 'invalidItem' })
+      continue
+    }
+    const entry = item as Record<string, unknown>
+    const { cardId, copies } = entry
+    if (
+      typeof cardId !== 'string' ||
+      !cardId.trim() ||
+      typeof copies !== 'number' ||
+      !Number.isSafeInteger(copies) ||
+      copies < 1
+    ) {
+      issues.push({ field, reason: 'invalidItem' })
+      continue
+    }
+    issues.push(
+      ...extraKeys(entry, ['cardId', 'copies']).map(({ field: key }) => ({
+        field: `${field}.${key}`,
+        reason: 'unknownKey' as const,
+      }))
+    )
+    discard.push({ cardId, copies })
+  }
+  issues.push(...extraKeys(body, [...keys, 'discard']))
+  return issues.length
+    ? left(issues)
+    : right({ type: 'resolveReward', rewardId, choice, discard })
 }
 
 function parseEncounterAction(

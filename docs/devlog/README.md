@@ -68,6 +68,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 048 | FEAT-12 | Contrato de eventos aleatórios e configuração do laboratório acordados, CONTRATO v0.57 e ROADMAP v0.58 | concluída |
 | 049 | T-40 | [Configuração do laboratório, catálogo e decks mistos](049-T-40-configuracao-catalogo-e-decks.md) | concluída |
 | 050 | T-41 | [Domínio e ações do encontro](050-T-41-encontros-aleatorios.md) | concluída |
+| 051 | T-42 | [Recompensas pendentes e Vasculhar](051-T-42-recompensas-e-vasculhar.md) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

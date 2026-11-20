@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
+import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import {
   PartyMember,
   type TPlayerState,
@@ -16,6 +17,7 @@ import {
 } from '../../../../../../test/factories/make-party'
 import { fixedClock } from '../../../../../../test/fakes/fixed-clock'
 import { InMemoryCardCatalog } from '../../../../../../test/fakes/in-memory-card-catalog'
+import { sequentialIds } from '../../../../../../test/fakes/sequential-ids'
 import { InMemoryPartiesRepository } from '../../../../../../test/repositories/in-memory-parties-repository'
 
 import { ActionInvalidError } from '../_errors/action-invalid-error'
@@ -56,9 +58,19 @@ let repository: InMemoryPartiesRepository
 let catalog: InMemoryCardCatalog
 let sut: TakePartyActionUseCase
 
+function rewardState(party: ReturnType<typeof makeParty>) {
+  return {
+    actionPoints: party.turn.actionPoints,
+    randomEventEncounter: party.randomEventEncounter,
+    pendingRewards: party.pendingRewards,
+    rewardDecks: party.rewardDecks,
+  }
+}
+
 async function seed(
   player: Partial<TPlayerState> = {},
-  status: 'idle' | 'inSession' = 'inSession'
+  status: 'idle' | 'inSession' = 'inSession',
+  rewardCards = [POTION.id, FISH.id]
 ) {
   const host = PartyMember.create(
     {
@@ -75,7 +87,11 @@ async function seed(
     status,
     members: [host],
     hostMemberId: host.id,
-    rewardDecks: [{ zoneType: 'urban', cards: [POTION.id, FISH.id] }],
+    rewardDecks: [{ zoneType: 'urban', cards: rewardCards }],
+    config: {
+      ...GAME_CONFIG_DEFAULTS,
+      reserveDeck: [{ type: 'card', cardId: FISH.id, weight: 1 }],
+    },
   })
   await repository.create(party)
   return party.id.toString()
@@ -86,7 +102,12 @@ describe('TakePartyActionUseCase — scavenge', () => {
     repository = new InMemoryPartiesRepository()
     catalog = new InMemoryCardCatalog()
     catalog.cards = [ROD, FISH, POTION, HARBOR, DIMENSION]
-    sut = new TakePartyActionUseCase(repository, fixedClock(NOW), catalog)
+    sut = new TakePartyActionUseCase(
+      repository,
+      fixedClock(NOW),
+      catalog,
+      sequentialIds()
+    )
   })
 
   it('REQ-91: lê zona, dimensão e cartas no catálogo, aplica, grava e devolve o Party', async () => {
@@ -108,6 +129,7 @@ describe('TakePartyActionUseCase — scavenge', () => {
     expect(stored?.members[0].player.lastScavenge).toEqual({
       cardId: FISH.id,
       found: true,
+      delivery: 'inventory',
     })
     expect(stored?.rewardDecks).toEqual([
       { zoneType: 'urban', cards: [POTION.id] },
@@ -184,19 +206,106 @@ describe('TakePartyActionUseCase — scavenge', () => {
     })
   })
 
-  it('REQ-92: inventário cheio → inventoryFull', async () => {
+  it('REQ-115: inventário cheio abre escolha, gasta 1 PA e deixar devolve ao fundo', async () => {
     const partyId = await seed({
       inventory: [
         { cardId: ROD.id, quantity: 1 },
         ...Array.from({ length: 9 }, () => ({ cardId: ROD.id, quantity: 1 })),
       ],
     })
+    // A T-43 cobre a persistência da escolha no save.
+    let party = repository.items[0]
+    vi.spyOn(repository, 'findById').mockImplementation(async () => party)
+    vi.spyOn(repository, 'save').mockImplementation(async (updated) => {
+      party = updated
+    })
+    const initialPoints = party.turn.actionPoints
     const result = await sut.execute({
       partyId,
       body: { type: 'scavenge', cardId: FISH.id },
     })
-    expect((result.value as ActionNotAllowedError).details).toEqual({
-      reason: 'inventoryFull',
+    expect(result.isRight()).toBe(true)
+    expect(rewardState(party)).toMatchObject({
+      actionPoints: initialPoints - 1,
+      randomEventEncounter: null,
+      pendingRewards: [
+        {
+          id: expect.any(String),
+          cardId: FISH.id,
+          origin: { type: 'rewardDeck', zoneType: 'urban' },
+          source: { type: 'scavenge' },
+        },
+      ],
+    })
+    expect(party.members[0].player.lastScavenge).toEqual({
+      cardId: FISH.id,
+      found: true,
+      delivery: 'pending',
+    })
+    expect(party.rewardDecks).toEqual([
+      { zoneType: 'urban', cards: [POTION.id] },
+    ])
+    const left = await sut.execute({
+      partyId,
+      body: {
+        type: 'resolveReward',
+        rewardId: party.pendingRewards[0].id,
+        choice: 'leave',
+      },
+    })
+    expect(left.isRight()).toBe(true)
+    expect(rewardState(party)).toMatchObject({
+      actionPoints: initialPoints - 1,
+      pendingRewards: [],
+      rewardDecks: [{ zoneType: 'urban', cards: [POTION.id, FISH.id] }],
+    })
+    expect(party.members[0].player.lastScavenge).toEqual({
+      cardId: FISH.id,
+      found: true,
+      delivery: 'left',
     })
   })
+
+  it.each([true, false])(
+    'REQ-115: inventário cheio com pilha compatível, cópia no deck %s',
+    async (found) => {
+      const inventory = [
+        { cardId: ROD.id, quantity: 1 },
+        { cardId: FISH.id, quantity: 1 },
+        ...Array.from({ length: 8 }, () => ({
+          cardId: POTION.id,
+          quantity: 1,
+        })),
+      ]
+      const partyId = await seed(
+        { inventory },
+        'inSession',
+        found ? [FISH.id] : []
+      )
+      const result = await sut.execute({
+        partyId,
+        body: { type: 'scavenge', cardId: FISH.id },
+      })
+      expect(result.isRight()).toBe(true)
+      if (result.isLeft()) return
+      const { party } = result.value
+      expect(rewardState(party)).toMatchObject({
+        pendingRewards: [],
+        actionPoints: GAME_CONFIG_DEFAULTS.actionPointsPerTurn - 1,
+        rewardDecks: [{ zoneType: 'urban', cards: [] }],
+      })
+      expect(party.members[0].player).toMatchObject({
+        inventory: [
+          inventory[0],
+          { cardId: FISH.id, quantity: found ? 2 : 1 },
+          ...inventory.slice(2),
+        ],
+        lastScavenge: {
+          cardId: FISH.id,
+          found,
+          delivery: found ? 'inventory' : 'none',
+        },
+      })
+    }
+  )
 })

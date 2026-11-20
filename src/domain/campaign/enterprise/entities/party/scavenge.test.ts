@@ -204,6 +204,7 @@ describe('Party.scavenge (REQ-91, REQ-92, REQ-96)', () => {
     expect(playerOf(party).lastScavenge).toEqual({
       cardId: FISH.id,
       found: true,
+      delivery: 'inventory',
     })
     party.pullDomainEvents()
     const rng = SeededRng.fromState(party.rngState)
@@ -221,6 +222,7 @@ describe('Party.scavenge (REQ-91, REQ-92, REQ-96)', () => {
     expect(playerOf(party).lastScavenge).toEqual({
       cardId: FISH.id,
       found: false,
+      delivery: 'none',
     })
     expect(party.pullDomainEvents()).toMatchObject([
       { type: 'Scavenged', cardId: FISH.id, found: false },
@@ -249,6 +251,7 @@ describe('Party.scavenge (REQ-91, REQ-92, REQ-96)', () => {
     expect(playerOf(party).lastScavenge).toEqual({
       cardId: FISH.id,
       found: false,
+      delivery: 'none',
     })
   })
 
@@ -289,7 +292,7 @@ describe('Party.scavenge (REQ-91, REQ-92, REQ-96)', () => {
     expectUntouched(party, before)
   })
 
-  it('REQ-92/D-88: abriria slot novo com o inventário cheio → inventoryFull, antes de gastar e de embaralhar', () => {
+  it('REQ-92/D-88: enquanto a FEAT-12 estiver desabilitada, inventário cheio retorna inventoryFull', () => {
     const full = [
       slot(ROD.id),
       ...Array.from(
@@ -299,7 +302,9 @@ describe('Party.scavenge (REQ-91, REQ-92, REQ-96)', () => {
     ]
     const party = partyOf({ inventory: full })
     const before = partyOf({ inventory: full })
-    expect(run(party, RELIC.id).value).toBe('inventoryFull')
+    expect(
+      party.scavenge(RELIC.id, catalog(), LATER, undefined, false).value
+    ).toBe('inventoryFull')
     expectUntouched(party, before)
   })
 
@@ -324,6 +329,7 @@ describe('Party.scavenge (REQ-91, REQ-92, REQ-96)', () => {
     expect(playerOf(party).lastScavenge).toEqual({
       cardId: FISH.id,
       found: true,
+      delivery: 'inventory',
     })
   })
 
@@ -335,6 +341,7 @@ describe('Party.scavenge (REQ-91, REQ-92, REQ-96)', () => {
     expect(playerOf(party).lastScavenge).toEqual({
       cardId: FISH.id,
       found: true,
+      delivery: 'inventory',
     })
   })
 })

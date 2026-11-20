@@ -76,6 +76,21 @@ export class TakePartyActionUseCase {
     if (typeof blocked === 'string')
       return left(new ActionNotAllowedError(blocked))
     switch (action.type) {
+      case 'resolveReward': {
+        const pending = party.pendingRewards[0]
+        if (pending?.id !== action.rewardId)
+          return left(new ActionNotAllowedError('staleReward'))
+        const { cards } = await this.findEventCatalog(party)
+        const result = party.resolveReward(
+          action,
+          cards,
+          this.clock.now(),
+          this.ids
+        )
+        if (result.isLeft())
+          return left(new ActionNotAllowedError(result.value))
+        break
+      }
       case 'startEvent':
       case 'revealEvent':
       case 'payEventRequirement':
@@ -245,7 +260,9 @@ export class TakePartyActionUseCase {
         const scavenged = party.scavenge(
           action.cardId,
           await this.findScavengeCatalog(party),
-          this.clock.now()
+          this.clock.now(),
+          this.ids,
+          this.eventActionsEnabled
         )
         if (scavenged.isLeft()) {
           const refusal = scavenged.value
@@ -313,6 +330,23 @@ export class TakePartyActionUseCase {
       ...(deck?.cards.map(({ cardId }) => cardId) ?? []),
       ...(savedDeck?.cards ?? []),
       ...(savedDeck?.discard ?? []),
+      ...(party.rewardDecks.find((entry) => entry.zoneType === zoneType)
+        ?.cards ?? []),
+      ...party.config.reserveDeck.flatMap((entry) =>
+        entry.type === 'card' ? [entry.cardId] : []
+      ),
+      ...party.pendingRewards.map(({ cardId }) => cardId),
+      ...[
+        party.eventEncounter?.card?.goodOutcome,
+        party.eventEncounter?.card?.badOutcome,
+      ].flatMap(
+        (outcome) =>
+          outcome?.steps.flatMap((step) =>
+            step.type === 'grantReward' || step.type === 'searchReward'
+              ? [step.cardId]
+              : []
+          ) ?? []
+      ),
       ...(player?.hand ?? []),
       ...(player?.deck ?? []),
       ...(player?.discard ?? []),

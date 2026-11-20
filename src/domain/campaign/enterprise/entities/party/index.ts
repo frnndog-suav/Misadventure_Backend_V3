@@ -54,6 +54,15 @@ import {
 } from '../../random-event'
 import type { TPartyTurn } from '../../party-turn'
 import { statusAfterTurn, type TPlayerStatus } from '../../player-status'
+import {
+  drawReserve,
+  type TPendingReward,
+  type TResolveRewardAction,
+  type TRewardDelivery,
+  type TRewardDiscard,
+  type TRewardOrigin,
+  type TRewardRefusal,
+} from '../../rewards'
 import { shuffle } from '../../shuffle'
 import {
   createStartingPlayer,
@@ -163,6 +172,8 @@ export interface TPartyProps {
   rewardDecks: readonly TPartyRewardDeck[]
   eventDecks?: readonly TEventDeck[]
   eventEncounter?: TEventEncounter | null
+  pendingReward?: TPendingReward | null
+  rewardSequence?: number
   /** Ids de membro, do 1º ao último (REQ-33). */
   turnOrder: UniqueEntityID[]
   /** De quem é a vez (D-63, REQ-55). */
@@ -236,6 +247,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return this.props.eventEncounter ?? null
   }
 
+  get pendingRewards(): readonly TPendingReward[] {
+    return this.props.pendingReward ? [this.props.pendingReward] : []
+  }
+
   get randomEventEncounter() {
     const encounter = this.eventEncounter
     if (!encounter) return null
@@ -260,6 +275,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   private eventCatalog: ReadonlyMap<string, TCard> = new Map()
 
   eventActionBlock(action: TPartyAction): TEventRefusal | null {
+    if (action.type === 'resolveReward') return null
+    if (this.props.pendingReward) return 'choicePending'
     const encounter = this.eventEncounter
     if (!encounter) return null
     switch (action.type) {
@@ -407,6 +424,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       escape: TEscapeReceipt | null = null,
       paid = encounter.payments
     ) => {
+      const completed = complete()
       this.finishEvent(
         index,
         encounter,
@@ -415,9 +433,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         result,
         escape,
         paid,
-        ids
+        ids,
+        cards
       )
-      return complete()
+      return completed
     }
     const tryResolve = (
       changed: TPlayerState,
@@ -592,7 +611,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     cause: TEventResult['cause'],
     escape: TEscapeReceipt | null,
     payments: TEventEncounter['payments'],
-    ids: IdGenerator | undefined
+    ids: IdGenerator | undefined,
+    cards: ReadonlyMap<string, TCard>
   ): void {
     const resolution =
       cause === 'requirementsMet'
@@ -600,7 +620,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         : cause === 'escapeSucceeded'
           ? 'escaped'
           : 'setback'
-    const startingPeak = player.peak
+    const startingPeak = encounter.outcome?.startingPeak ?? player.peak
     const outcome =
       resolution === 'success'
         ? card.goodOutcome
@@ -608,26 +628,117 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           ? card.badOutcome
           : null
     if (outcome && resolution !== 'escaped') {
-      for (const [nextStep, step] of outcome.steps.entries()) {
-        if (step.type !== 'effect') {
+      const firstStep = encounter.outcome?.nextStep ?? 0
+      for (
+        let nextStep = firstStep;
+        nextStep < outcome.steps.length;
+        nextStep++
+      ) {
+        const step = outcome.steps[nextStep]
+        if (step.type === 'effect') {
+          player = this.applyEventOutcomeEffect(
+            player,
+            step.effect,
+            card.id,
+            nextStep,
+            encounter.id,
+            resolution,
+            ids
+          )
+          continue
+        }
+        const count =
+          step.type === 'searchReward'
+            ? 1
+            : step.type === 'drawRewards'
+              ? step.count
+              : step.copies
+        const firstCopy =
+          nextStep === firstStep ? (encounter.outcome?.nextCopy ?? 0) : 0
+        for (let copy = firstCopy; copy < count; copy++) {
+          const source = {
+            type: 'randomEvent',
+            encounterId: encounter.id,
+          } as const
+          let reward: { cardId: string; origin: TRewardOrigin } | null
+          switch (step.type) {
+            case 'drawRewards': {
+              const drawn = this.drawReward(encounter.zoneType)
+              if (drawn.type === 'gold') {
+                player = {
+                  ...player,
+                  gold: Math.min(
+                    this.config.purseCapacity,
+                    player.gold + drawn.amount
+                  ),
+                }
+                continue
+              }
+              reward = drawn
+              break
+            }
+            case 'searchReward': {
+              const found = this.searchReward(encounter.zoneType, step.cardId)
+              player = {
+                ...player,
+                lastRewardSearch: {
+                  encounterId: encounter.id,
+                  cardId: step.cardId,
+                  found,
+                },
+              }
+              reward = found
+                ? {
+                    cardId: step.cardId,
+                    origin: {
+                      type: 'rewardDeck',
+                      zoneType: encounter.zoneType,
+                    },
+                  }
+                : null
+              break
+            }
+            case 'grantReward':
+              reward = { cardId: step.cardId, origin: { type: 'fixed' } }
+              break
+          }
+          if (!reward) continue
+          const rewardCard = cards.get(reward.cardId)
+          if (
+            rewardCard?.type !== 'attribute' &&
+            rewardCard?.type !== 'item' &&
+            rewardCard?.type !== 'equipment'
+          )
+            continue
+          const delivered = this.addReward(player, rewardCard)
+          if (delivered) {
+            player = {
+              ...delivered,
+              lastRewardDelivery: {
+                rewardId: this.nextRewardId(ids),
+                cardId: reward.cardId,
+                origin: reward.origin,
+                disposition: 'kept',
+              },
+            }
+            continue
+          }
+          this.openReward(player, rewardCard, reward.origin, source, ids)
           this.props.eventEncounter = {
             ...encounter,
             payments,
             phase: resolution,
-            outcome: { nextStep, startingPeak, cause, escape },
+            outcome: {
+              nextStep,
+              nextCopy: copy + 1,
+              startingPeak,
+              cause,
+              escape,
+            },
           }
           this.replaceActor(index, player)
           return
         }
-        player = this.applyEventOutcomeEffect(
-          player,
-          step.effect,
-          card.id,
-          nextStep,
-          encounter.id,
-          resolution,
-          ids
-        )
       }
     }
     const peak = Math.max(
@@ -673,6 +784,258 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.updateEventDeck({ ...deck, discard: [...deck.discard, card.id] })
     this.props.eventEncounter = null
     this.replaceActor(index, next)
+  }
+
+  private updateRewardDeck(
+    zoneType: TPartyRewardDeck['zoneType'],
+    cards: readonly string[]
+  ): void {
+    this.props.rewardDecks = this.rewardDecks.map((deck) =>
+      deck.zoneType === zoneType ? { zoneType, cards } : deck
+    )
+  }
+
+  private searchReward(
+    zoneType: TPartyRewardDeck['zoneType'],
+    cardId: string
+  ): boolean {
+    const deck = this.rewardDecks.find((entry) => entry.zoneType === zoneType)
+    if (!deck) return false
+    const position = deck.cards.indexOf(cardId)
+    const remaining = deck.cards.filter((_, index) => index !== position)
+    const rng = SeededRng.fromState(this.props.rngState)
+    this.updateRewardDeck(zoneType, shuffle(remaining, rng))
+    this.props.rngState = rng.state()
+    return position >= 0
+  }
+
+  private drawReward(
+    zoneType: TPartyRewardDeck['zoneType']
+  ):
+    | { cardId: string; origin: TRewardOrigin; type: 'card' }
+    | { type: 'gold'; amount: number } {
+    const deck = this.rewardDecks.find((entry) => entry.zoneType === zoneType)
+    if (deck?.cards.length) {
+      const [cardId, ...remaining] = deck.cards
+      this.updateRewardDeck(zoneType, remaining)
+      return { type: 'card', cardId, origin: { type: 'rewardDeck', zoneType } }
+    }
+    const rng = SeededRng.fromState(this.props.rngState)
+    const entry = drawReserve(this.config.reserveDeck, rng)
+    this.props.rngState = rng.state()
+    return entry.type === 'gold'
+      ? entry
+      : { ...entry, origin: { type: 'reserveDeck' } }
+  }
+
+  private addReward(
+    player: TPlayerState,
+    card: TAttributeCard | TItemCard | TEquipmentCard
+  ): TPlayerState | null {
+    if (card.type === 'attribute') {
+      if (
+        player.tcgFolder.reduce((sum, entry) => sum + entry.copies, 0) >=
+        this.config.tcgFolderCapacity
+      )
+        return null
+      const existing = player.tcgFolder.find(
+        (entry) => entry.cardId === card.id
+      )
+      return {
+        ...player,
+        tcgFolder: sortedByCardId([
+          ...player.tcgFolder.filter((entry) => entry.cardId !== card.id),
+          { cardId: card.id, copies: (existing?.copies ?? 0) + 1 },
+        ]),
+      }
+    }
+    const inventory = addToInventory(
+      player.inventory,
+      card,
+      1,
+      this.config.inventoryCapacity
+    )
+    return inventory ? { ...player, inventory } : null
+  }
+
+  private nextRewardId(ids: IdGenerator | undefined): string {
+    if (ids) return ids.next().toValue()
+    const sequence = (this.props.rewardSequence ?? 0) + 1
+    this.props.rewardSequence = sequence
+    return `${this.id.toString()}-reward-${sequence}`
+  }
+
+  private openReward(
+    player: TPlayerState,
+    card: TAttributeCard | TItemCard | TEquipmentCard,
+    origin: TRewardOrigin,
+    source: TPendingReward['source'],
+    ids: IdGenerator | undefined
+  ): void {
+    const destination = card.type === 'attribute' ? 'tcgFolder' : 'inventory'
+    const holdings = new Map<string, number>()
+    const entries =
+      destination === 'tcgFolder'
+        ? player.tcgFolder
+        : player.inventory.map(({ cardId, quantity }) => ({
+            cardId,
+            copies: quantity,
+          }))
+    for (const { cardId, copies } of entries)
+      holdings.set(cardId, (holdings.get(cardId) ?? 0) + copies)
+    this.props.pendingReward = {
+      id: this.nextRewardId(ids),
+      memberId: this.turn.memberId.toString(),
+      cardId: card.id,
+      origin,
+      source,
+      destination,
+      discardOptions: sortedByCardId(
+        [...holdings].map(([cardId, maxCopies]) => ({ cardId, maxCopies }))
+      ),
+      decisionDeadlineAt: null,
+    }
+  }
+
+  resolveReward(
+    action: TResolveRewardAction,
+    cards: ReadonlyMap<string, TCard>,
+    at: Date,
+    ids: IdGenerator | undefined
+  ): Either<TRewardRefusal, void> {
+    const reward = this.props.pendingReward
+    if (
+      !reward ||
+      reward.id !== action.rewardId ||
+      reward.memberId !== this.turn.memberId.toString()
+    )
+      return left('staleReward')
+    const index = this.actorIndex()
+    const actor = this.props.members[index]
+    let { player } = actor
+    const { cardId, origin, source, destination } = reward
+    const discarded: TRewardDiscard[] = []
+    let disposition: TRewardDelivery['disposition']
+    if (action.choice === 'keep') {
+      const quantities = new Map<string, number>()
+      for (const entry of action.discard) {
+        if (!Number.isSafeInteger(entry.copies) || entry.copies < 1)
+          return left('paymentInvalid')
+        const copies = (quantities.get(entry.cardId) ?? 0) + entry.copies
+        const option = reward.discardOptions.find(
+          ({ cardId }) => cardId === entry.cardId
+        )
+        if (!option || copies > option.maxCopies) return left('paymentInvalid')
+        quantities.set(entry.cardId, copies)
+      }
+      discarded.push(
+        ...[...quantities].map(([cardId, copies]) => ({ cardId, copies }))
+      )
+      const remaining = (id: string, count: number) => {
+        const removed = Math.min(quantities.get(id) ?? 0, count)
+        quantities.set(id, (quantities.get(id) ?? 0) - removed)
+        return count - removed
+      }
+      const candidate =
+        destination === 'inventory'
+          ? {
+              ...player,
+              inventory: player.inventory
+                .map((slot) => ({
+                  ...slot,
+                  quantity: remaining(slot.cardId, slot.quantity),
+                }))
+                .filter(({ quantity }) => quantity > 0),
+            }
+          : {
+              ...player,
+              tcgFolder: player.tcgFolder
+                .map((entry) => ({
+                  ...entry,
+                  copies: remaining(entry.cardId, entry.copies),
+                }))
+                .filter(({ copies }) => copies > 0),
+            }
+      if ([...quantities.values()].some((copies) => copies !== 0))
+        return left('paymentInvalid')
+      const card = cards.get(cardId)
+      if (
+        card?.type !== 'attribute' &&
+        card?.type !== 'equipment' &&
+        card?.type !== 'item'
+      )
+        return left('paymentInvalid')
+      const delivered = this.addReward(candidate, card)
+      if (!delivered) return left('rewardDoesNotFit')
+      player = delivered
+      disposition = 'kept'
+    } else {
+      switch (origin.type) {
+        case 'rewardDeck': {
+          const deck = this.rewardDecks.find(
+            ({ zoneType }) => zoneType === origin.zoneType
+          )
+          this.updateRewardDeck(origin.zoneType, [
+            ...(deck?.cards ?? []),
+            cardId,
+          ])
+          disposition = 'returnedToDeck'
+          break
+        }
+        case 'reserveDeck':
+          disposition = 'removed'
+          break
+        case 'fixed':
+          discarded.push({ cardId, copies: 1 })
+          disposition = 'sentToLimbo'
+          break
+      }
+    }
+    for (const entry of discarded) {
+      this.addDomainEvent({
+        type: 'SentToLimbo',
+        memberId: actor.id,
+        cardId: entry.cardId,
+        quantity: entry.copies,
+        from: destination,
+        occurredAt: at,
+        aggregateId: this.id,
+      })
+    }
+    player = {
+      ...player,
+      lastRewardDelivery: { rewardId: reward.id, cardId, origin, disposition },
+    }
+    this.props.pendingReward = null
+    this.props.savedAt = at
+    if (source.type === 'scavenge') {
+      this.replaceActor(index, {
+        ...player,
+        lastScavenge: {
+          cardId,
+          found: true,
+          delivery: action.choice === 'keep' ? 'inventory' : 'left',
+        },
+      })
+    } else {
+      const encounter = this.eventEncounter
+      if (encounter?.card && encounter.outcome) {
+        const { cause, escape } = encounter.outcome
+        this.eventCatalog = cards
+        this.finishEvent(
+          index,
+          encounter,
+          encounter.card,
+          player,
+          cause,
+          escape,
+          encounter.payments,
+          ids,
+          cards
+        )
+      }
+    }
+    return right(undefined)
   }
 
   private applyEventOutcomeEffect(
@@ -748,6 +1111,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.props.dimension.dimensionCardId,
       ...this.props.dimension.map.zones.map((zone) => zone.zoneId),
       ...this.props.rewardDecks.flatMap((deck) => deck.cards),
+      ...this.pendingRewards.map(({ cardId }) => cardId),
       ...this.props.config.reserveDeck.flatMap((entry) =>
         entry.type === 'card' ? [entry.cardId] : []
       ),
@@ -1383,7 +1747,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       dimension: TDimensionCard | null
       cards: readonly TCard[]
     },
-    at: Date
+    at: Date,
+    ids?: IdGenerator,
+    rewardsEnabled = true
   ): Either<TScavengeRefusal, void> {
     switch (this.props.status) {
       case 'idle':
@@ -1417,32 +1783,33 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     }
     const capacity = this.props.config.inventoryCapacity
     const withCard = addToInventory(player.inventory, card, 1, capacity)
-    if (withCard === null) return left('inventoryFull')
-
-    const deckIndex = this.props.rewardDecks.findIndex(
-      (deck) => deck.zoneType === zone.zoneType
-    )
-    let found = false
-    if (deckIndex >= 0) {
-      const deck = this.props.rewardDecks[deckIndex]
-      const position = deck.cards.indexOf(cardId)
-      found = position >= 0
-      const remaining = found
-        ? deck.cards.filter((_, i) => i !== position)
-        : deck.cards
-      const rng = SeededRng.fromState(this.props.rngState)
-      const cards = shuffle(remaining, rng)
-      this.props.rngState = rng.state()
-      this.props.rewardDecks = this.props.rewardDecks.map((d, i) =>
-        i === deckIndex ? { zoneType: d.zoneType, cards } : d
-      )
-    }
+    if (!rewardsEnabled && withCard === null) return left('inventoryFull')
+    const found = this.searchReward(zone.zoneType, cardId)
+    const origin = { type: 'rewardDeck', zoneType: zone.zoneType } as const
+    if (found && withCard === null)
+      this.openReward(player, card, origin, { type: 'scavenge' }, ids)
 
     this.spendActionPoint()
     this.replaceActor(index, {
       ...player,
-      inventory: found ? withCard : player.inventory,
-      lastScavenge: { cardId, found },
+      inventory: found && withCard ? withCard : player.inventory,
+      ...(rewardsEnabled && found && withCard
+        ? {
+            lastRewardDelivery: {
+              rewardId: this.nextRewardId(ids),
+              cardId,
+              origin,
+              disposition: 'kept',
+            },
+          }
+        : {}),
+      lastScavenge: rewardsEnabled
+        ? {
+            cardId,
+            found,
+            delivery: found ? (withCard ? 'inventory' : 'pending') : 'none',
+          }
+        : { cardId, found },
     })
     this.props.savedAt = at
     this.addDomainEvent({

@@ -130,7 +130,7 @@ export interface SentToLimboEvent extends DomainEvent {
   readonly memberId: UniqueEntityID
   readonly cardId: string
   readonly quantity: number
-  readonly from: 'vault' | 'inventory' | 'equipment'
+  readonly from: 'vault' | 'inventory' | 'equipment' | 'tcgFolder'
 }
 
 /** Vasculhar aceito (README 12.6; REQ-91): `found` diz se a carta saiu do deck. */

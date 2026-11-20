@@ -28,6 +28,7 @@ export function availableActions(
 ): TPartyActionType[] {
   const { turn } = party
   if (!turn.memberId.equals(memberId)) return []
+  if (party.pendingRewards.length) return ['resolveReward']
   const encounter = party.randomEventEncounter
   if (encounter) {
     if (encounter.phase === 'success' || encounter.phase === 'setback')

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { SeededRng, type RngState } from '@/core/rng/seeded-rng'
 import type { TRandomEventRequirement } from '@/domain/catalog/enterprise/value-objects/card'
+import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import { availableActions } from '../../../enterprise/available-actions'
 import {
   PartyMember,
@@ -37,6 +38,8 @@ const harbor = makeUrbanZoneCard({ zoneActions: ['startEvent'] })
 const potion = makeItemCard({
   effects: [makeEffect({ activation: [{ kind: 'heal', amount: 5 }] })],
 })
+const ore = makeItemCard({ id: 'fixture.ore', itemCategory: 'material' })
+const spare = makeItemCard({ id: 'fixture.spare', itemCategory: 'material' })
 const emptyOutcome = { text: 'Sem efeito.', steps: [] }
 const minimum = {
   id: 'min',
@@ -74,6 +77,221 @@ const randomDiscard = {
   random: true,
 } as const
 
+describe('TakePartyActionUseCase — recompensas de encontro (T-42)', () => {
+  it('REQ-114/REQ-115: pausa na primeira cópia, valida o descarte e retoma pela reserva uma vez', async () => {
+    const inventory = [{ cardId: spare.id, quantity: 2 }]
+    const heal = {
+      type: 'effect',
+      effect: {
+        text: 'Recupere 2 de vida.',
+        activation: [{ kind: 'heal', amount: 2 }],
+        duration: { kind: 'immediate' },
+        mark: null,
+      },
+    } as const
+    const game = setup({
+      requirements: [attrs],
+      player: { inventory, health: 10, hand: [strength.id, strength.id] },
+      rewardCards: [ore.id],
+      rewardConfig: {
+        ...GAME_CONFIG_DEFAULTS,
+        inventoryCapacity: 1,
+        reserveDeck: [{ type: 'card', cardId: potion.id, weight: 1 }],
+      },
+      outcome: {
+        text: 'Cura, duas recompensas e cura.',
+        steps: [heal, { type: 'drawRewards', count: 2 }, heal],
+      },
+    })
+    const encounterId = await game.reveal()
+    const [firstCopy, secondCopy] = game.handCopies()
+    const pay = {
+      type: 'payEventRequirement',
+      encounterId,
+      requirementId: attrs.id,
+    }
+    await game.accept({ ...pay, payment: { handCards: [firstCopy.copyId] } })
+    const paused = await game.accept({
+      ...pay,
+      payment: { handCards: [secondCopy.copyId] },
+    })
+    expect(rewardState(paused)).toMatchObject({
+      randomEventEncounter: { phase: 'success' },
+      pendingRewards: [
+        {
+          id: expect.any(String),
+          memberId: 'member-1',
+          cardId: ore.id,
+          origin: { type: 'rewardDeck', zoneType: 'urban' },
+          source: { type: 'randomEvent', encounterId },
+          destination: 'inventory',
+          discardOptions: [{ cardId: spare.id, maxCopies: 2 }],
+          decisionDeadlineAt: null,
+        },
+      ],
+    })
+    expect(game.playerState().health).toBe(12)
+    expect(availableActions(paused, paused.turn.memberId, new Set())).toEqual([
+      'resolveReward',
+    ])
+    const rewardId = pendingRewardId(paused)
+    const keep = { type: 'resolveReward', rewardId, choice: 'keep' }
+    await game.refuse({ ...keep, discard: [] }, { reason: 'rewardDoesNotFit' })
+    await game.refuse(
+      { ...keep, discard: [{ cardId: spare.id, copies: 1 }] },
+      { reason: 'rewardDoesNotFit' }
+    )
+    expect(game.playerState().inventory).toEqual(inventory)
+    const resumed = await game.accept({
+      ...keep,
+      discard: [{ cardId: spare.id, copies: 2 }],
+    })
+    expect(game.playerState().inventory).toEqual([
+      { cardId: ore.id, quantity: 1 },
+    ])
+    expect(game.playerState().health).toBe(12)
+    expect(game.playerState()).toMatchObject({
+      lastRewardDelivery: {
+        rewardId,
+        cardId: ore.id,
+        origin: { type: 'rewardDeck', zoneType: 'urban' },
+        disposition: 'kept',
+      },
+    })
+    expect(resumed.pullDomainEvents()).toContainEqual(
+      expect.objectContaining({
+        type: 'SentToLimbo',
+        cardId: spare.id,
+        quantity: 2,
+      })
+    )
+    expect(rewardState(resumed)).toMatchObject({
+      pendingRewards: [{ cardId: potion.id, origin: { type: 'reserveDeck' } }],
+    })
+    const reserveId = pendingRewardId(resumed)
+    expect(reserveId).not.toBe(rewardId)
+    const leave = {
+      type: 'resolveReward',
+      rewardId: reserveId,
+      choice: 'leave',
+    }
+    expect(rewardState(await game.accept(leave))).toMatchObject({
+      pendingRewards: [],
+      randomEventEncounter: null,
+    })
+    expect(game.playerState()).toMatchObject({
+      health: 14,
+      peak: 11,
+      hand: [endurance.id],
+      lastRandomEvent: { resolution: 'success', peakDelta: 1 },
+      lastRewardDelivery: {
+        rewardId: reserveId,
+        cardId: potion.id,
+        origin: { type: 'reserveDeck' },
+        disposition: 'removed',
+      },
+    })
+    await game.refuse(leave, { reason: 'staleReward' })
+  })
+
+  it.each([
+    { type: 'searchReward', cardId: ore.id },
+    { type: 'grantReward', cardId: ore.id, copies: 1 },
+  ] as const)(
+    'REQ-115: deixar recompensa de $type respeita a origem',
+    async (step) => {
+      const searched = step.type === 'searchReward'
+      const game = setup({
+        player: { inventory: [{ cardId: spare.id, quantity: 1 }] },
+        rewardCards: [ore.id, potion.id],
+        rewardConfig: { ...GAME_CONFIG_DEFAULTS, inventoryCapacity: 1 },
+        outcome: { text: 'Receba minério.', steps: [step] },
+      })
+      const encounterId = await game.reveal()
+      const paused = await game.accept({ type: 'resolveEvent', encounterId })
+      const origin = searched
+        ? { type: 'rewardDeck', zoneType: 'urban' }
+        : { type: 'fixed' }
+      expect(rewardState(paused)).toMatchObject({
+        pendingRewards: [{ cardId: ore.id, origin }],
+      })
+      if (searched) {
+        expect(game.playerState()).toMatchObject({
+          lastRewardSearch: { encounterId, cardId: ore.id, found: true },
+        })
+      }
+      const rewardId = pendingRewardId(paused)
+      const resolved = await game.accept({
+        type: 'resolveReward',
+        rewardId,
+        choice: 'leave',
+      })
+      expect(rewardState(resolved)).toMatchObject({
+        randomEventEncounter: null,
+        pendingRewards: [],
+      })
+      expect(game.playerState()).toMatchObject({
+        lastRewardDelivery: {
+          rewardId,
+          cardId: ore.id,
+          origin,
+          disposition: searched ? 'returnedToDeck' : 'sentToLimbo',
+        },
+      })
+      expect(resolved.rewardDecks).toEqual([
+        {
+          zoneType: 'urban',
+          cards: searched ? [potion.id, ore.id] : [ore.id, potion.id],
+        },
+      ])
+      if (!searched) {
+        expect(resolved.pullDomainEvents()).toContainEqual(
+          expect.objectContaining({
+            type: 'SentToLimbo',
+            cardId: ore.id,
+            quantity: 1,
+          })
+        )
+      }
+    }
+  )
+
+  it('REQ-115: busca no deck vazio registra ausência sem recorrer à reserva', async () => {
+    const game = setup({
+      rewardConfig: {
+        ...GAME_CONFIG_DEFAULTS,
+        reserveDeck: [{ type: 'card', cardId: ore.id, weight: 1 }],
+      },
+      outcome: {
+        text: 'Busque minério.',
+        steps: [{ type: 'searchReward', cardId: ore.id }],
+      },
+    })
+    const encounterId = await game.reveal()
+    expect(
+      rewardState(await game.accept({ type: 'resolveEvent', encounterId }))
+    ).toMatchObject({
+      randomEventEncounter: null,
+      pendingRewards: [],
+    })
+    expect(game.playerState()).toMatchObject({
+      inventory: [],
+      lastRewardSearch: { encounterId, cardId: ore.id, found: false },
+    })
+  })
+})
+
+function pendingRewardId(party: ReturnType<typeof makeParty>): string {
+  return party.pendingRewards[0].id
+}
+
+function rewardState(party: ReturnType<typeof makeParty>) {
+  return {
+    randomEventEncounter: party.randomEventEncounter,
+    pendingRewards: party.pendingRewards,
+  }
+}
+
 function setup({
   requirements = [minimum],
   player = {},
@@ -81,6 +299,9 @@ function setup({
   combatOnly = false,
   noEscape = false,
   rngState = SeededRng.fromSeed(42).state(),
+  outcome = emptyOutcome,
+  rewardCards = [],
+  rewardConfig = GAME_CONFIG_DEFAULTS,
 }: {
   requirements?: readonly TRandomEventRequirement[]
   player?: Partial<TPlayerState>
@@ -88,10 +309,13 @@ function setup({
   combatOnly?: boolean
   noEscape?: boolean
   rngState?: RngState
+  outcome?: ReturnType<typeof makeRandomEventCard>['goodOutcome']
+  rewardCards?: string[]
+  rewardConfig?: typeof GAME_CONFIG_DEFAULTS
 } = {}) {
   const event = makeRandomEventCard({
     requirements,
-    goodOutcome: emptyOutcome,
+    goodOutcome: outcome,
     badOutcome: emptyOutcome,
     escapeThreshold: 10,
     noEscape,
@@ -123,6 +347,8 @@ function setup({
     hostMemberId: memberId,
     turn: { round: 1, memberId, actionPoints },
     rngState,
+    config: rewardConfig,
+    rewardDecks: [{ zoneType: 'urban', cards: rewardCards }],
   })
   const repository = new InMemoryPartiesRepository()
   // O mapper de saves será exercitado na T-43.
@@ -141,6 +367,8 @@ function setup({
     strength,
     endurance,
     potion,
+    ore,
+    spare,
   ]
   const sut = new TakePartyActionUseCase(
     repository,

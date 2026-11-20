@@ -34,7 +34,13 @@ export type TPlayerState = Readonly<{
   /** Cofre (README 6.4; REQ-83, D-83): começa vazio. */
   vault: TVault
   /** Resultado do último Vasculhar aceito (REQ-96); `null` até o primeiro. */
-  lastScavenge: Readonly<{ cardId: string; found: boolean }> | null
+  lastScavenge: Readonly<{
+    cardId: string
+    found: boolean
+    delivery?: 'inventory' | 'pending' | 'left' | 'none'
+  }> | null
+  lastRewardSearch?: import('../../rewards').TRewardSearch | null
+  lastRewardDelivery?: import('../../rewards').TRewardDelivery | null
   /** Efeitos ativos, na ordem em que foram aplicados (REQ-103). */
   statuses: readonly TPlayerStatus[]
   /** Ids em ordem; o topo é o índice 0. */
