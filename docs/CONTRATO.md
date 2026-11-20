@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.61 · **Data:** 2026-11-20
+> **Versão do contrato:** 0.62 · **Data:** 2026-11-20
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -2392,7 +2392,7 @@ Exemplo dos campos executáveis de `cart` no cenário da última parte:
 | Inventário cheio, uma cópia de `ore` coletável no deck. `{"type":"scavenge","cardId":"ore"}`. | 200, −1 PA, `lastScavenge: {"cardId":"ore","found":true,"delivery":"pending"}`, recompensa de `rewardDeck` com fonte `scavenge`. Deixar devolve ao fundo e muda `delivery` para `left`. Com espaço em pilha, entrega direta e `delivery: "inventory"`. Com deck vazio, gasta o ponto, `found: false`, `delivery: "none"` e reserva intacta. |
 | Relógio controlado para integração FEAT-26, fase `encounter`, ouro já pago e prazo `2026-11-20T18:00:30Z`. GET após vencer o prazo. | Revés por `timedOut`; o ouro permanece pago, cartas elegíveis são repostas. Em escolha de recompensa vencida, mesmo destino de `leave`. No solo, avançar o relógio mantém a escolha aberta. |
 
-### FEAT-13 — Combate solo — `proposto (BE)`
+### FEAT-13 — Combate solo — `acordado`
 
 Base: ROADMAP v0.60, SPEC-BACKEND v0.61 (REQ-117 a REQ-123) e devlog 052. A integração começa com `startEvent` e `revealEvent` da FEAT-12. A revelação de um `combatEvent` fecha a antecipação, preenche `Party.combat` e avança eventuais turnos inimigos anteriores ao primeiro turno do jogador. Os fluxos de evento aleatório e recompensa da FEAT-12 mantêm seus formatos.
 
@@ -2657,3 +2657,4 @@ Ao terminar o combate, `combat` vira nulo e o resultado permanece disponível at
 | 0.59 | 2026-11-20 | FE | FEAT-12 validada na T-62 com MSW desligado. Interface com as fixtures e 23 cenários determinísticos contra API v0.58. Prazos multiplayer seguem a FEAT-26. |
 | 0.60 | 2026-11-20 | BE | FEAT-13 `proposto (BE)` na T-44. Catálogo, laboratório, ações, estado, desfechos e cenários determinísticos de combate solo. |
 | 0.61 | 2026-11-20 | BE | FEAT-13 permanece `proposto (BE)` após revisão do frontend. Define variantes de conteúdo, restrição de classe, opções de pagamento, elegibilidade de Preparar, lote do POST e recompensa após Reflexão fatal. |
+| 0.62 | 2026-11-20 | BE | FEAT-13 `acordado`: frontend confirmou a interface v0.61. T-44 concluída. |

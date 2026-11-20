@@ -1,6 +1,6 @@
 # Misadventures — Roadmap de desenvolvimento
 
-> **Versão:** 0.61 · **Data:** 2026-11-20
+> **Versão:** 0.62 · **Data:** 2026-11-20
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend; o autor copia o arquivo inteiro quando ele muda. Base: README Parte III (III.2 e III.4). As regras estão em [`README.md`](README.md); o que trafega entre os lados, em [`CONTRATO.md`](CONTRATO.md).
 
@@ -174,3 +174,4 @@ Situação por lado: `a fazer` · `em andamento` · `aguardando outro lado` · `
 | 0.59 | 2026-11-20 | FEAT-12: BE `pronto` (CONTRATO v0.58, `implementado (BE)`). Validação do frontend contra o backend real pendente. |
 | 0.60 | 2026-11-20 | FEAT-12 validada na T-62 (CONTRATO v0.59), com MSW desligado. Prazos multiplayer seguem a FEAT-26. |
 | 0.61 | 2026-11-20 | FEAT-13 em andamento no backend. T-44 com proposta de contrato BE v0.60 em revisão. |
+| 0.62 | 2026-11-20 | FEAT-13 com CONTRATO v0.62 acordado e T-44 concluída. Próxima tarefa BE: T-45, após autorização do autor. |

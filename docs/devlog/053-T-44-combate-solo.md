@@ -1,9 +1,9 @@
 # 053 — T-44 — Critérios e proposta de contrato do combate solo
 
 - Data — 2026-11-20
-- Status — aguardando revisão
-- Spec — v0.61
-- Contrato — v0.61, `proposto (BE)`
+- Status — concluída
+- Spec — v0.62
+- Contrato — v0.62, `acordado`
 - Horas — a preencher pelo autor
 
 ## Objetivo
@@ -36,8 +36,10 @@ A FEAT-13 precisa terminar o combate com 0 PV antes de existir respawn. A decis�
 
 O retorno à proposta v0.60 pediu precisão nos formatos legados e executáveis, nas escolhas por custo e no lote de transições. A v0.61 define essas interfaces e explicita `prepare/useAbility` como opção gratuita independente das outras operações de Preparar. A projeção de recompensa pendente tem prioridade sobre o bloqueio de jogador caído.
 
-Levar CONTRATO v0.61 completo. O ROADMAP v0.61 continua sendo a referência da etapa. A T-44 aguarda confirmação do contrato. A T-45 depende desse acordo e de autorização para iniciar.
+O frontend confirmou a v0.61 nos quatro pontos revisados: montagem de `EventPayment` por custo, `prepare/useAbility` como única operação disponível, identificação dos participantes no lote de um combate resolvido na mesma resposta e `resolveReward` após Reflexão fatal. A v0.62 registra o acordo sobre essa interface.
+
+Levar CONTRATO v0.62 e ROADMAP v0.62 completos. A T-45 aguarda autorização do autor.
 
 ## Commit sugerido
 
-`docs/propose solo combat contract (t-44)`
+`docs/agree solo combat contract (t-44)`

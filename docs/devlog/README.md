@@ -70,7 +70,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 050 | T-41 | [Domínio e ações do encontro](050-T-41-encontros-aleatorios.md) | concluída |
 | 051 | T-42 | [Recompensas pendentes e Vasculhar](051-T-42-recompensas-e-vasculhar.md) | concluída |
 | 052 | T-43 | [Save e ações HTTP da FEAT-12](052-T-43-save-e-http.md) | concluída |
-| 053 | T-44 | [Critérios e proposta de contrato do combate solo](053-T-44-combate-solo.md) | aguardando revisão |
+| 053 | T-44 | [Critérios e proposta de contrato do combate solo](053-T-44-combate-solo.md) | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
