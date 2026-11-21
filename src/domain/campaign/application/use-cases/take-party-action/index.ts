@@ -83,7 +83,9 @@ export class TakePartyActionUseCase {
 
     const action = parsed.value
     if (party.status === 'idle') return left(new PartySessionNotActiveError())
-    const blocked = party.eventActionBlock(action)
+    const blocked = action.type === 'saveRespawnPoint'
+      ? null
+      : party.eventActionBlock(action)
     if (typeof blocked === 'string')
       return left(new ActionNotAllowedError(blocked))
     party.clearCombatUpdates()
@@ -335,6 +337,25 @@ export class TakePartyActionUseCase {
             }
           }
         }
+        break
+      }
+      case 'saveRespawnPoint': {
+        const actor = party.members.find(({ id }) =>
+          id.equals(party.turn.memberId)
+        )
+        const zone = actor
+          ? await this.cardCatalog.findCard(actor.player.zoneId)
+          : null
+        const result = party.saveRespawnPoint(
+          zone?.type === 'zone' ? zone : null,
+          this.clock.now()
+        )
+        if (result.isLeft())
+          return left(
+            result.value === 'sessionNotActive'
+              ? new PartySessionNotActiveError()
+              : new ActionNotAllowedError(result.value)
+          )
         break
       }
       case 'endTurn': {

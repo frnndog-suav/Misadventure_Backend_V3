@@ -3,7 +3,7 @@ import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { SeededRng } from '@/core/rng/seeded-rng'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
-import { removeCombatConfig } from '../../../../../test/factories/remove-combat-config'
+import { removePostV6Config } from '../../../../../test/factories/remove-post-v6-config'
 import { makeCombatEventCard } from '../../../../../test/factories/make-card'
 import {
   makeParty,
@@ -231,7 +231,7 @@ describe('DrizzlePartyMapper', () => {
     })
     const row = DrizzlePartyMapper.toDrizzle(party)
     const legacyConfig = { ...row.state.config }
-    removeCombatConfig(legacyConfig)
+    removePostV6Config(legacyConfig)
     delete legacyConfig.escapeVigorPercent
     delete legacyConfig.reserveDeck
     const v6 = {
@@ -326,7 +326,7 @@ describe('DrizzlePartyMapper', () => {
       ...row.state.config,
       actionPointsPerTurn,
     }
-    removeCombatConfig(config)
+    removePostV6Config(config)
     const removedKeys = [
       'vaultCapacity',
       'vaultDeckSlots',

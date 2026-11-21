@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { DRIZZLE, type Database } from '@/infra/database/database.tokens'
 import { parties } from '@/infra/database/drizzle/schema'
-import { removeCombatConfig } from '../../../../../test/factories/remove-combat-config'
+import { removePostV6Config } from '../../../../../test/factories/remove-post-v6-config'
 import { createContentApp } from '../../../../../test/content-app'
 import { postParty, resetCampaign } from '../../../../../test/parties-e2e'
 
@@ -146,6 +146,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
       'recover',
       'adjustDeck',
       'useVault',
+      'saveRespawnPoint',
       'startEvent',
       'endTurn',
     ])
@@ -179,6 +180,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
       'prepare',
       'adjustDeck',
       'useVault',
+      'saveRespawnPoint',
       'startEvent',
       'endTurn',
     ])
@@ -189,6 +191,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
       'prepare',
       'adjustDeck',
       'useVault',
+      'saveRespawnPoint',
       'startEvent',
       'endTurn',
     ])
@@ -369,7 +372,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
       members: { player: Record<string, unknown> }[]
     }
     const config = { ...state.config }
-    removeCombatConfig(config)
+    removePostV6Config(config)
     delete config.inventoryCapacity
     delete config.purseCapacity
     delete config.escapeVigorPercent

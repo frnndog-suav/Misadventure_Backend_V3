@@ -69,6 +69,11 @@ export interface TGameConfigValues extends Record<
   maxCopiesPerCard: number // README 4.3 (D-67)
   tcgFolderCapacity: number // README 6.3
   recoverHealthPercent: number // README 12.5
+  knockoutHealthPercent: number
+  knockoutPeakLossPercent: number
+  knockoutVigorCapPercent: number
+  soloKnockoutGoldLossPercent: number
+  soloKnockoutWaitRounds: number
   recoverVigorPercent: number // README 7.3 item 6
   recoverHandSize: number // README 12.5
   inventoryCapacity: number // README 6.2 (D-73)
@@ -124,6 +129,11 @@ export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
   maxCopiesPerCard: 4,
   tcgFolderCapacity: 30,
   recoverHealthPercent: 15,
+  knockoutHealthPercent: 10,
+  knockoutPeakLossPercent: 10,
+  knockoutVigorCapPercent: 50,
+  soloKnockoutGoldLossPercent: 10,
+  soloKnockoutWaitRounds: 1,
   recoverVigorPercent: 5,
   recoverHandSize: 7,
   inventoryCapacity: 10,
@@ -134,6 +144,14 @@ export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
 })
 
 /** Inteiros, inclusivos. Além deles, `minPlayers ≤ maxPlayers`. */
+export const KNOCKOUT_NUMERIC_LIMITS = {
+  knockoutHealthPercent: { min: 1, max: 100 },
+  knockoutPeakLossPercent: { min: 0, max: 100 },
+  knockoutVigorCapPercent: { min: 0, max: 100 },
+  soloKnockoutGoldLossPercent: { min: 0, max: 100 },
+  soloKnockoutWaitRounds: { min: 0, max: 10 },
+} as const
+
 export const GAME_CONFIG_LIMITS: Readonly<
   Record<TNumericGameConfigKey, Readonly<TGameConfigLimit>> & {
     reserveDeck: Readonly<{ minEntries: number; minWeight: number }>
@@ -166,6 +184,7 @@ export const GAME_CONFIG_LIMITS: Readonly<
   maxCopiesPerCard: { min: 1, max: 200 },
   tcgFolderCapacity: { min: 0, max: 1000 },
   recoverHealthPercent: { min: 0, max: 100 },
+  ...KNOCKOUT_NUMERIC_LIMITS,
   recoverVigorPercent: { min: 0, max: 100 },
   recoverHandSize: { min: 0, max: 200 },
   inventoryCapacity: { min: 0, max: 100 },

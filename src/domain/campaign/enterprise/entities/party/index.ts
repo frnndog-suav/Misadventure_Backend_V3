@@ -3990,6 +3990,35 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return right(undefined)
   }
 
+  saveRespawnPoint(
+    zone: TZoneCard | null,
+    at: Date
+  ): Either<
+    | 'sessionNotActive'
+    | 'combatInProgress'
+    | 'choicePending'
+    | 'playerDown'
+    | 'noActionPoints'
+    | 'zoneActionUnavailable',
+    void
+  > {
+    if (this.status === 'idle') return left('sessionNotActive')
+    if (this.props.combat) return left('combatInProgress')
+    if (this.triggeredEffectChoice || this.props.pendingReward || this.eventEncounter)
+      return left('choicePending')
+    const index = this.actorIndex()
+    const player = this.props.members[index].player
+    if (player.down) return left('playerDown')
+    if (this.turn.actionPoints < 1) return left('noActionPoints')
+    if (zone?.zoneType !== 'urban' || zone.id !== player.zoneId)
+      return left('zoneActionUnavailable')
+
+    this.spendActionPoint()
+    this.replaceActor(index, { ...player, respawnZoneId: player.zoneId })
+    this.props.savedAt = at
+    return right(undefined)
+  }
+
   /**
    * Vasculhar (README 12.2, 12.6; REQ-90 a REQ-92, REQ-96; D-74, D-88). Quem
    * age é o membro da vez; gasta 1 ponto. `catalog.zone` é a carta da zona

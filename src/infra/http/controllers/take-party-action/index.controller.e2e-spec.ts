@@ -7,7 +7,7 @@ import { parties } from '@/infra/database/drizzle/schema'
 import { GameConfigRepository } from '@/domain/lab/application/repositories/game-config-repository'
 import { GameConfig } from '@/domain/lab/enterprise/value-objects/game-config'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
-import { removeCombatConfig } from '../../../../../test/factories/remove-combat-config'
+import { removePostV6Config } from '../../../../../test/factories/remove-post-v6-config'
 import { createApp } from '../../../../../test/lab-app'
 import {
   PARTY_NOT_FOUND,
@@ -86,6 +86,36 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
 
   const get = async (id: string): Promise<TParty> =>
     (await request(app.getHttpServer()).get(`/parties/${id}`)).body
+
+  it('REQ-124/REQ-125: salva na Urbana pela API e retira a ação com 0 PA', async () => {
+    const party = await startedParty()
+    const action = { type: 'saveRespawnPoint' }
+    expect(party.members[0].player.availableActions.slice(-3)).toEqual([
+      'saveRespawnPoint',
+      'startEvent',
+      'endTurn',
+    ])
+
+    for (const actionPoints of [2, 1, 0]) {
+      const response = await act(party.id, action).expect(200)
+      expect(response.body.turn.actionPoints).toBe(actionPoints)
+      expect(response.body.combatUpdates).toEqual([])
+    }
+
+    const saved = await get(party.id)
+    expect(saved.turn.actionPoints).toBe(0)
+    expect(saved.members[0].player).toMatchObject({
+      zoneId: CITY,
+      respawnZoneId: CITY,
+      availableActions: ['endTurn'],
+    })
+    const refused = await act(party.id, action).expect(409)
+    expect(refused.body.error).toMatchObject({
+      code: 'ACTION_NOT_ALLOWED',
+      details: { reason: 'noActionPoints' },
+    })
+    expect(await get(party.id)).toEqual(saved)
+  })
 
   it('REQ-50: moveTargets = zonas com travessia com a zona atual, em ordem de id', async () => {
     const party = await startedParty()
@@ -377,7 +407,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
       ...GAME_CONFIG_DEFAULTS,
       actionPointsPerTurn: 4,
     }
-    removeCombatConfig(legacyConfig)
+    removePostV6Config(legacyConfig)
     for (const key of [...V4_KEYS, 'escapeVigorPercent', 'reserveDeck']) {
       delete legacyConfig[key]
     }

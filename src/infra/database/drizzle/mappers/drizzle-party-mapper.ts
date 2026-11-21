@@ -38,6 +38,7 @@ import {
 import {
   COMBAT_NUMERIC_LIMITS,
   GAME_CONFIG_DEFAULTS,
+  KNOCKOUT_NUMERIC_LIMITS,
   type TGameConfigKey,
   type TGameConfigValues,
   type TNumericGameConfigKey,
@@ -84,10 +85,14 @@ const isV5ConfigKey = (key: TGameConfigKey): key is TV5ConfigKey =>
 const isV6ConfigKey = (key: TGameConfigKey): key is TV6ConfigKey =>
   (V6_CONFIG_KEYS as readonly string[]).includes(key)
 
-type TCombatConfigKey = keyof typeof COMBAT_NUMERIC_LIMITS
+const optionalNumericConfigLimits = {
+  ...COMBAT_NUMERIC_LIMITS,
+  ...KNOCKOUT_NUMERIC_LIMITS,
+}
+type TOptionalNumericConfigKey = keyof typeof optionalNumericConfigLimits
 type TLegacyConfigKey = Exclude<
   TNumericGameConfigKey,
-  'escapeVigorPercent' | TCombatConfigKey
+  'escapeVigorPercent' | TOptionalNumericConfigKey
 >
 
 const configKeys = Object.keys(GAME_CONFIG_DEFAULTS).filter(
@@ -95,7 +100,7 @@ const configKeys = Object.keys(GAME_CONFIG_DEFAULTS).filter(
     key !== 'reserveDeck' &&
     key !== 'escapeVigorPercent' &&
     key !== 'enemyAbilityPriorities' &&
-    !Object.hasOwn(COMBAT_NUMERIC_LIMITS, key)
+    !Object.hasOwn(optionalNumericConfigLimits, key)
 ) as TLegacyConfigKey[]
 
 const configSchema = z.strictObject(
@@ -106,11 +111,11 @@ const configSchema = z.strictObject(
 
 const currentConfigSchema = configSchema.extend({
   ...(Object.fromEntries(
-    Object.entries(COMBAT_NUMERIC_LIMITS).map(([key, { min, max }]) => [
+    Object.entries(optionalNumericConfigLimits).map(([key, { min, max }]) => [
       key,
       z.number().int().min(min).max(max).optional(),
     ])
-  ) as Record<TCombatConfigKey, z.ZodOptional<z.ZodNumber>>),
+  ) as Record<TOptionalNumericConfigKey, z.ZodOptional<z.ZodNumber>>),
   enemyAbilityPriorities: z
     .record(
       z.enum(ENEMY_BEHAVIORS),

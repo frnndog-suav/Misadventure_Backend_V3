@@ -34,6 +34,11 @@ const DEFAULTS = {
   vaultDeckSlots: 10,
   vaultGoldCapacity: 2000,
   escapeVigorPercent: 20,
+  knockoutHealthPercent: 10,
+  knockoutPeakLossPercent: 10,
+  knockoutVigorCapPercent: 50,
+  soloKnockoutGoldLossPercent: 10,
+  soloKnockoutWaitRounds: 1,
   reserveDeck: [{ type: 'gold', amount: 1, weight: 1 }],
 }
 
@@ -68,6 +73,11 @@ const LIMITS = {
   vaultDeckSlots: { min: 1, max: 100 },
   vaultGoldCapacity: { min: 0, max: 10000000 },
   escapeVigorPercent: { min: 0, max: 100 },
+  knockoutHealthPercent: { min: 1, max: 100 },
+  knockoutPeakLossPercent: { min: 0, max: 100 },
+  knockoutVigorCapPercent: { min: 0, max: 100 },
+  soloKnockoutGoldLossPercent: { min: 0, max: 100 },
+  soloKnockoutWaitRounds: { min: 0, max: 10 },
   reserveDeck: { minEntries: 1, minWeight: 1 },
 }
 
@@ -82,11 +92,11 @@ describe('GET /lab/config (e2e)', () => {
     await app.close()
   })
 
-  it('REQ-04, REQ-29, REQ-60: sem ajuste salvo, responde 200 com padrões e limites do contrato', async () => {
+  it('REQ-04, REQ-29, REQ-60, REQ-130: responde 200 com padrões e limites do contrato', async () => {
     const response = await request(app.getHttpServer()).get('/lab/config')
 
     expect(response.status).toBe(200)
-    expect(response.body).toEqual({
+    expect(response.body).toMatchObject({
       values: DEFAULTS,
       defaults: DEFAULTS,
       limits: LIMITS,

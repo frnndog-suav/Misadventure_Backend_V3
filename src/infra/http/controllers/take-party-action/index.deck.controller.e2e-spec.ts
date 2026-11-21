@@ -11,7 +11,7 @@ import {
   createContentApp,
   MAGE_INPUT,
 } from '../../../../../test/content-app'
-import { removeCombatConfig } from '../../../../../test/factories/remove-combat-config'
+import { removePostV6Config } from '../../../../../test/factories/remove-post-v6-config'
 import { postParty, resetCampaign } from '../../../../../test/parties-e2e'
 
 // CONTRATO FEAT-09 (REQ-60 a REQ-68). A pasta ainda não enche no jogo (D-69):
@@ -513,7 +513,7 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
       members: { player: Record<string, unknown> }[]
     }
     const config: Record<string, number> = { ...state.config }
-    removeCombatConfig(config)
+    removePostV6Config(config)
     for (const key of Object.keys(NEW_KEYS)) delete config[key]
     delete config.inventoryCapacity
     delete config.purseCapacity

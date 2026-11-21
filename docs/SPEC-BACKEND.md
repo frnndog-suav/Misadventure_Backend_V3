@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.63 · **Data:** 2026-11-20
+> **Versão da spec:** 0.65 · **Data:** 2026-11-21
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -386,6 +386,18 @@ Escopo do ROADMAP v0.60. Base nas regras README §§7.3–7.4, 13, 15–18, 19.1
 - **REQ-122 — Desfechos:** dado um combate ativo, quando ocorrer vitória, derrota, fuga ou limite de ciclos, então congelar o resultado, resolver os passos da carta na ordem aplicável a esse resultado e descartar a carta uma vez ao concluir o desfecho. Vitória exige derrotar todos os inimigos e reutiliza as escolhas de recompensa da FEAT-12. Fuga voluntária usa §15; na falha, o próximo inimigo vivo na ordem circular faz um ataque básico extra, preservando seu turno normal. No limite, aplicar a perda de Pico de fuga sem custo de Vigor ou rolagem, inclusive em combate Sem fuga. Aplicar D-108 aos 0 PV. Durante combate ativo, recusar ações de aventura e encerramento da sessão.
 - **REQ-123 — Save e interface:** dado um save recarregado, quando consultar ou agir, então preservar inimigos, ordem, turno, janela, recargas, cargas, status, desfecho, recompensas e RNG. Validar o identificador do encontro e do turno antes das condições específicas. Uma ação recusada preserva estado, RNG e `savedAt`. O backend fornece valores efetivos, ações, alvos e pagamentos elegíveis. A gravação do novo formato mantém leitura v2–v8 e respeita D-110.
 
+### FEAT-14 — Nocaute, spawn e respawn
+
+Base: README §§7.3–7.4, 12.2, 19.2, 19.5 e 20, CONTRATO v0.69, devlog 059 do backend e devlog 088 do frontend. Os REQ-63 a REQ-65 do frontend correspondem, respectivamente, aos REQ-124–125, REQ-126–129 e REQ-130 abaixo.
+
+- **REQ-124 — Spawn e ponto salvo.** Dado um grupo recém-preparado, quando consultar seu estado, então `zoneId` e `respawnZoneId` apontam para a cidade inicial. Dado o membro da vez em sessão ativa, de pé, em Urbana, sem combate nem escolha e com pelo menos 1 PA, quando enviar `saveRespawnPoint`, então recebe 200, gasta 1 PA, salva a zona atual e mantém sua posição. Repetir na mesma zona também custa 1 PA. A ação aparece antes de `startEvent` ou, na ausência deste, antes de `endTurn`. GET e reabertura recuperam o ponto salvo.
+- **REQ-125 — Recusas ao salvar.** Dado um pedido inválido ou estado impeditivo, quando enviar o POST, então aplicar a precedência do contrato: grupo inexistente, forma inválida, sessão inativa, combate, escolha, queda, falta de PA e zona indisponível. Campos extras, inclusive `zoneId`, recebem `unknownKey`. A recusa preserva estado, RNG e `savedAt`.
+- **REQ-126 — Queda e desfecho.** Dado um fluxo executável que leva o membro a 0 PV, quando aceitar a ação, então registrar a queda e concluir o desfecho em ordem. Derrota aplica a coisa ruim uma vez. Reflexão fatal após derrotar o último inimigo preserva a vitória e aplica a coisa boa. Pagamento fatal com requisitos em aberto preserva recibos, aplica `setback/gaveUp` uma vez e conclui reposição e descarte antes do respawn. Pagamento fatal aceito no último requisito aplica o êxito. Pagamento recusado segue a reversão da FEAT-12.
+- **REQ-127 — Recompensa durante a queda.** Dado um desfecho que pausa para recompensa, quando consultar, reabrir ou resolver a escolha, então preservar carta reservada quando aplicável, progresso, ID da escolha, 0 PV, `down: true`, vez e rodada enquanto houver pendência. Em sessão ativa, o dono recebe somente `resolveReward`, inclusive com 0 PA. Cura comum restaura zero PV antes e depois da escolha. A última resolução conclui o desfecho e devolve o respawn no mesmo 200. Em desfecho automático, o POST fatal já devolve o respawn.
+- **REQ-128 — Respawn e passagem de vez.** Dado um desfecho concluído, quando resolver o nocaute, então avaliar `keepPeakOnKnockout` antes de expirar `untilKnockout`, aplicar as perdas aos saldos finais, recalcular atributos, limitar Vigor e restaurar PV no ponto salvo. Arredondar para baixo, com mínimo de 1 PV e perda mínima de 1 Pico quando há Pico disponível, percentual positivo e nenhuma proteção. No solo, descontar ouro apenas da bolsa, descartar PA e processar os gatilhos normais até a vez jogável em R+2 com espera padrão ou R+1 com espera zero. Em grupos, inclusive com IA, manter a ordem normal e consumir `skipNextTurn` na próxima vez do membro. A validação de combate em grupo e reanimação depende das FEATs 20 e 22.
+- **REQ-129 — Persistência e retomada.** Dado um save atual ou legado, quando gravar uma transição ou carregar o estado, então persistir atomicamente progresso, RNG, recompensas e eventual respawn. Preservar ponto válido ou usar a cidade inicial da dimensão gravada e inicializar os campos ausentes com `lastKnockout: null` e `skipNextTurn: false`. Se o legado caído tiver escolha, retomar do passo gravado. Com desfecho concluído, o primeiro GET ou reabertura resolve o respawn uma vez, inclusive com sessão inativa no GET, sem reaplicar o desfecho. Releituras preservam ID do nocaute, rodada, saldos e `lastCombatResult`. `combatUpdates` relata somente as transições de combate no lote do POST.
+- **REQ-130 — Laboratório.** Dado o laboratório ou um snapshot legado, quando consultar, editar, restaurar ou criar um grupo, então aplicar as cinco chaves, padrões e limites inteiros da tabela da FEAT-14 do contrato. Preencher chaves ausentes com os padrões e preservar as gravadas. PATCH inválido informa erros por campo e preserva a configuração inteira. Alterações válidas afetam novos grupos e preservam o snapshot dos grupos existentes.
+
 ## Decisões
 
 - **D-108 — Derrota provisória:** ao chegar a 0 PV em combate, gravar o jogador caído e encerrar o combate. Em derrota, executar a coisa ruim uma vez. Se a Reflexão derrubar o jogador depois de o golpe derrotar o último inimigo, gravar vitória com jogador caído e permitir concluir a recompensa. Após resolver o desfecho, manter o save consultável e permitir encerrar/reabrir sessão. Bloquear ações de aventura desse membro, inclusive passagem de vez, enquanto estiver caído. A FEAT-14 introduz a recuperação desse estado, o respawn e as penalidades de nocaute. Efeitos de cura e reanimação ficam fora dos desfechos de combate desta entrega.
@@ -633,6 +645,14 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 - [ ] **T-48 — Desfechos e retorno à vez (REQ-122).** Verificar fuga, ataque livre, limite em Sem fuga, última derrota inimiga, recompensa com inventário cheio, Reflexão fatal e jogador caído após recarga.
 - [x] **T-49 — Save, HTTP e validação (REQ-123).** Persistir e projetar o combate e integrar D-110 à gravação. Preparar restaurações determinísticas e entregar ao autor os testes e cenários HTTP. Validação BE registrada no devlog 058. O fechamento da FEAT aguarda retorno da integração.
 
+### FEAT-14 — Nocaute, spawn e respawn
+
+- [x] **T-50 — Configuração e ponto de respawn (REQ-124, REQ-125, REQ-130).** Ação, projeção e ajustes do laboratório entregues. Verificação registrada no devlog 060.
+- [ ] **T-51 — Queda e continuidade do desfecho (REQ-126, REQ-127).** Integrar combate, Preparar e encontros à resolução de efeitos e recompensas. Cobrir pagamento fatal parcial, final e pagamento recusado.
+- [ ] **T-52 — Penalidades e passagem de vez (REQ-128).** Reutilizar o avanço normal para status, recargas e vitrines. Cobrir a proteção de Pico, a espera zero e o consumo da marca na ordem de participantes.
+- [ ] **T-53 — Save, retomada e HTTP (REQ-129).** Verificar o contrato público, a pausa para recompensa, a persistência do respawn e a retomada dos saves legados.
+- [ ] **T-54 — Campanhas e validação integrada.** Usar o padrão determinístico do devlog 058 com catálogo temporário e campanhas independentes. Preparar os cenários de referência da v0.69: ponto salvo e recusas, doação fatal fora de combate com passagem de tempo, doação fatal em encontro, cura antes e depois de escolha, derrota, Reflexão com entrega automática e com escolha, retomada de saves legados, laboratório e espera zero. Entregar URL, IDs, ações e resultados esperados para o frontend com MSW desligado. Registrar `implementado (BE)` após a entrega e os testes do backend, e `validado` após o retorno integrado.
+
 ## 8. Histórico
 
 | Versão | Data | Mudança |
@@ -700,6 +720,8 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.61 | 2026-11-20 | T-44 da FEAT-13 após a validação da FEAT-12 no devlog 052. REQ-117 a REQ-123, D-108 a D-110 e T-44 a T-49. CONTRATO v0.60 proposto pelo backend. |
 | 0.62 | 2026-11-20 | T-44 concluída com o acordo da FEAT-13 no CONTRATO v0.62. T-45 aguarda autorização. |
 | 0.63 | 2026-11-20 | T-49 concluída após confirmação dos unitários e e2e. FEAT-13 aguarda a validação integrada. |
+| 0.64 | 2026-11-21 | Planejamento aprovado da FEAT-14 com base no CONTRATO v0.69, devlog 059 do backend e devlog 088 do frontend. REQ-124 a REQ-130 e T-50 a T-54. |
+| 0.65 | 2026-11-21 | T-50 concluída. Salvar ponto de respawn, cinco ajustes de nocaute e compatibilidade dos snapshots de configuração verificados no devlog 060. |
 
 ## Apêndice A — Conteúdo de teste
 

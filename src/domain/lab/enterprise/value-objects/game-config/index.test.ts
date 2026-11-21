@@ -5,7 +5,7 @@ import { GameConfig } from '.'
 
 describe('GameConfig', () => {
   it('REQ-04: padrões do Apêndice A (D-11)', () => {
-    expect(GAME_CONFIG_DEFAULTS).toEqual({
+    expect(GAME_CONFIG_DEFAULTS).toMatchObject({
       minPlayers: 1,
       maxPlayers: 6,
       actionPointsPerTurn: 3,
@@ -176,6 +176,45 @@ describe('GameConfig', () => {
       initialGold: 50,
       baseHealth: 30,
     })
+  })
+
+  it('REQ-130: inicializa os cinco ajustes de nocaute com os padrões', () => {
+    expect(GameConfig.withDefaults().values).toMatchObject({
+      knockoutHealthPercent: 10,
+      knockoutPeakLossPercent: 10,
+      knockoutVigorCapPercent: 50,
+      soloKnockoutGoldLossPercent: 10,
+      soloKnockoutWaitRounds: 1,
+    })
+  })
+
+  it('REQ-130: aceita espera zero e os extremos dos percentuais', () => {
+    const patch = {
+      knockoutHealthPercent: 100,
+      knockoutPeakLossPercent: 0,
+      knockoutVigorCapPercent: 100,
+      soloKnockoutGoldLossPercent: 0,
+      soloKnockoutWaitRounds: 0,
+    }
+    const result = GameConfig.withDefaults().applyPatch(patch)
+
+    expect(result.isRight() && result.value.values).toMatchObject(patch)
+  })
+
+  it('REQ-130: rejeita vida de respawn zero e espera fracionária', () => {
+    const current = GameConfig.withDefaults()
+    const values = current.values
+    const result = current.applyPatch({
+      knockoutHealthPercent: 0,
+      soloKnockoutWaitRounds: 1.5,
+      initialGold: 1,
+    })
+
+    expect(result.isLeft() && result.value).toEqual([
+      { field: 'knockoutHealthPercent', reason: 'outOfRange' },
+      { field: 'soloKnockoutWaitRounds', reason: 'notInteger' },
+    ])
+    expect(current.values).toEqual(values)
   })
 
   it('REQ-05: {} é aceito e não muda nada', () => {

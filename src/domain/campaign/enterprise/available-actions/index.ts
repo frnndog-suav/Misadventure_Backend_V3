@@ -27,7 +27,8 @@ export function availableActions(
   canStartEvent = false,
   encounter = party.randomEventEncounter,
   canUseAbility = party.adventureAbilityOptions().length > 0,
-  combat = party.combat
+  combat = party.combat,
+  inUrbanZone = false
 ): TPartyActionType[] {
   const { turn } = party
   const choice = party.triggeredEffectChoice
@@ -90,6 +91,8 @@ export function availableActions(
   if (turn.actionPoints >= 1 && zoneActions.includes('useVault')) {
     actions.push('useVault')
   }
+  if (member && party.status === 'inSession' && turn.actionPoints >= 1 && inUrbanZone)
+    actions.push('saveRespawnPoint')
   if (turn.actionPoints >= 1 && canStartEvent) actions.push('startEvent')
   actions.push('endTurn')
   return actions

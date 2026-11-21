@@ -12,7 +12,7 @@ import {
   CONTENT_INVALID,
   createContentApp,
 } from '../../../../../test/content-app'
-import { removeCombatConfig } from '../../../../../test/factories/remove-combat-config'
+import { removePostV6Config } from '../../../../../test/factories/remove-post-v6-config'
 import { resetCampaign, WARRIOR_BODY } from '../../../../../test/parties-e2e'
 
 const POTION = 'fixture.healing-potion'
@@ -682,7 +682,7 @@ describe('FEAT-11 — efeitos e status (e2e)', () => {
     expect(state.members[0].player.statuses).toEqual(activeStatuses)
 
     state.schemaVersion = 6
-    removeCombatConfig(state.config)
+    removePostV6Config(state.config)
     delete state.config.escapeVigorPercent
     delete state.config.reserveDeck
     delete state.members[0].player.statuses

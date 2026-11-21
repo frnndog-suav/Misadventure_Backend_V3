@@ -56,6 +56,73 @@ describe('TakePartyActionUseCase', () => {
     sut = new TakePartyActionUseCase(repository, fixedClock(NOW), catalog)
   })
 
+  it('REQ-124: salva na Urbana e cobra 1 PA também ao repetir', async () => {
+    const partyId = await seed()
+
+    for (const actionPoints of [2, 1, 0]) {
+      const result = await sut.execute({
+        partyId,
+        body: { type: 'saveRespawnPoint' },
+      })
+
+      expect(result.isRight()).toBe(true)
+      const stored = await repository.findById(partyId)
+      expect(stored?.turn?.actionPoints).toBe(actionPoints)
+      expect(stored?.members[0].player).toMatchObject({
+        zoneId: HARBOR,
+        respawnZoneId: HARBOR,
+      })
+    }
+  })
+
+  it.each([
+    [1, 'zoneActionUnavailable'],
+    [3, 'noActionPoints'],
+  ] as const)('REQ-125: após %i movimentos recusa com %s sem gravar', async (moves, reason) => {
+    const partyId = await seed()
+    for (let index = 0; index < moves; index++) {
+      await sut.execute({
+        partyId,
+        body: { type: 'move', zoneId: index % 2 === 0 ? MINE : HARBOR },
+      })
+    }
+    const before = await repository.findById(partyId)
+    const rngState = before?.rngState
+    const savedAt = before?.savedAt
+    const save = vi.spyOn(repository, 'save')
+
+    const result = await sut.execute({
+      partyId,
+      body: { type: 'saveRespawnPoint' },
+    })
+
+    expect(result.isLeft() && result.value).toMatchObject({
+      code: 'ACTION_NOT_ALLOWED',
+      details: { reason },
+    })
+    expect(save).not.toHaveBeenCalled()
+    const after = await repository.findById(partyId)
+    expect(after?.rngState).toEqual(rngState)
+    expect(after?.savedAt).toEqual(savedAt)
+    expect(after?.members[0].player.respawnZoneId).toBe(HARBOR)
+  })
+
+  it('REQ-125: zoneId extra é recusado antes de conferir a sessão', async () => {
+    const partyId = await seed('idle')
+    const save = vi.spyOn(repository, 'save')
+
+    const result = await sut.execute({
+      partyId,
+      body: { type: 'saveRespawnPoint', zoneId: HARBOR },
+    })
+
+    expect(result.isLeft() && result.value).toMatchObject({
+      code: 'ACTION_INVALID',
+      details: { fields: [{ field: 'zoneId', reason: 'unknownKey' }] },
+    })
+    expect(save).not.toHaveBeenCalled()
+  })
+
   it('REQ-51: move aceito → zoneId novo, gravado com savedAt do Clock e PlayerMoved do host', async () => {
     const partyId = await seed()
     const save = vi.spyOn(repository, 'save')

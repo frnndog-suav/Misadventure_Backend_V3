@@ -229,7 +229,8 @@ function playerToHTTP(
       party.canStartEvent(zone, dimension, cards),
       encounter,
       usableAbilities.length > 0,
-      party.describeCombat(cards)
+      party.describeCombat(cards),
+      zone?.zoneType === 'urban'
     ),
     build: copiesToHTTP(player.build),
     buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),
