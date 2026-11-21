@@ -95,9 +95,21 @@ Use uma campanha solo com carta executável de dois inimigos de 1 PV, Reflexão 
 ## Commit sugerido
 
 `feat/persist and expose combat state (t-49)`
+
+### Habilidades com 0 PA na T-67
+
+- O modo `abilities` de `test/prepare-feat-13.cjs` prepara duas campanhas e revela o evento depois de gastar o último PA. Golpe Pago custa 2 de ouro e uma carta escolhida da mão, com recarga de dois ciclos. Socorro de Campo custa 1 de ouro, recupera 1 PV e é a única operação de Preparar no encontro. O encontro permanece aberto após pagar 2 de ouro na primeira parte, com 3 de Vigor por pagar.
+- `node --check` e `git diff --check` passaram. O validador de catálogo aprovou as 30 cartas. A criação dos saves e a confirmação das opções pela API aguardam o PostgreSQL de teste e o backend iniciado com o catálogo temporário.
+- Na validação integrada, conferir o ataque básico após pagar Golpe Pago, o descarte e a recarga. No encontro, usar Socorro de Campo, pagar apenas a parte de ouro e repetir a intenção. Esperado: `usableAbilities: []`, sem `prepare` e HTTP 409 `eventPaymentStarted` sem nova cobrança.
+- Após a confirmação do ambiente, foram criadas as campanhas Golpe Pago (`6ca3ea6f-682b-4d8b-8230-1ee46f71a54c`) e Socorro de Campo (`538dec1d-59f2-48cc-ac13-db68cdcd6d74`) em `http://localhost:3333`. O GET de ambas retornou 0 PA, 10 de ouro e a habilidade pagável com os custos esperados. No primeiro save, `combatAttack` está disponível. No segundo, `prepare` está disponível com uma única habilidade e `activatableEffects: []`, e as duas exigências estão pendentes. Os saves aguardam a execução no Chrome com MSW desligado e o retorno do devlog 086 do frontend.
 ### Empate e mudança de Celeridade na T-67
 
 - O modo `initiative` de `test/prepare-feat-13.cjs` cria duas campanhas com Celeridade 10 para o jogador e para as duas cópias do mesmo lobo. A campanha de mudança equipa a arma com Acelerar, habilidade gratuita que concede +5 de Celeridade por dois ciclos.
 - `node --check test/prepare-feat-13.cjs` e `git diff --check` passaram. `npm.cmd run validate:content` aprovou o catálogo temporário com 27 cartas.
 - A criação das campanhas aguarda a confirmação do PostgreSQL de teste e do backend iniciado com esse catálogo. Na revelação, conferir os IDs distintos na ordem impressa e cruzá-los com `combatTurnStarted`. Depois de Acelerar, conferir que `combat.order` permanece igual no ciclo 1 e que o jogador abre o ciclo 2 após `endCombatTurn`. A campanha de controle deve manter os lobos na frente no ciclo 2.
 - Com o ambiente confirmado pelo autor, o preparador criou as campanhas e verificou que ambas retornam HTTP 200 em `GET /parties/:id` na API `http://localhost:3333`. Empate: `d4f56370-404a-4411-80c0-a2c1faf30b81`. Mudança de Celeridade: `323dfc31-8eda-4faa-be87-9ce7954e193b`. Aguardando a execução dos cenários pelo frontend.
+### Reset de recarga na entrada em combate na T-67
+
+- O modo `cooldown` de `test/prepare-feat-13.cjs` prepara Lia com Socorro de Campo, 10 de ouro e Lobos Uivantes no topo. Deixa a campanha em antecipação e confere as opções de preparar e revelar pelo GET.
+- Após usar a habilidade e antes da revelação, `node test/prepare-feat-13.cjs cooldown-state <id>` consulta o snapshot persistido. Esperado: fase `anticipation`, 9 de ouro e `usage` com um uso e recarga positiva. Antes do uso, espera-se `usage: null`. Após revelar na mesma vez, conferir `combat.abilityStates` com `cooldownRemaining: 0` e a opção disponível na janela de Preparar do primeiro turno elegível.
+- A criação da campanha aguarda confirmação do PostgreSQL de teste e do backend com o catálogo temporário da T-67. Verificações locais: `node --check` e `git diff --check`.
