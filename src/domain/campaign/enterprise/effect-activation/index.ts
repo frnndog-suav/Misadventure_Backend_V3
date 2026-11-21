@@ -14,7 +14,7 @@ export function applyActivations(
   activations: readonly TExecutableActivation[],
   purseCapacity: number
 ): { player: TPlayerState; applied: TActivationApplied[] } {
-  let player = initial
+  let player = initial.health === 0 ? { ...initial, down: true } : initial
   const applied: TActivationApplied[] = []
   for (const activation of activations) {
     const record = (
@@ -36,6 +36,10 @@ export function applyActivations(
         break
       }
       case 'heal': {
+        if (player.down) {
+          record({}, { amount: 0 })
+          break
+        }
         const health = Math.min(
           maxHealthOf(player),
           player.health + activation.amount
@@ -48,7 +52,9 @@ export function applyActivations(
           activation.amount === 'halfHealth'
             ? Math.ceil(player.health / 2)
             : Math.max(0, player.health - activation.amount)
-        record({ health }, { amount: player.health - health })
+        record(health === 0 ? { health, down: true } : { health }, {
+          amount: player.health - health,
+        })
         break
       }
       case 'restoreVigor': {

@@ -801,7 +801,7 @@ describe('TakePartyActionUseCase — desfechos de combate (T-48)', () => {
     expect(party.rngState).toEqual(rng)
   })
 
-  it('REQ-122: só resolve vitória no último inimigo e reserva a carta durante a recompensa de jogador caído', async () => {
+  it('REQ-122/REQ-127: preserva a vitória por Reflexão e conclui o respawn na última escolha', async () => {
     const reflectingEnemy = {
       ...enemy,
       modifiers: { ...enemy.modifiers, reflection: 1 },
@@ -867,22 +867,17 @@ describe('TakePartyActionUseCase — desfechos de combate (T-48)', () => {
       discard: [{ cardId: spare.id, copies: 1 }],
     })
     expect(game.playerState()).toMatchObject({
-      health: 0,
-      down: true,
-      peak: 12,
+      down: false,
       inventory: [{ cardId: ore.id, quantity: 1 }],
     })
+    expect(game.playerState().health).toBeGreaterThan(0)
     expect(finished.lastCombatResult?.peakDelta).toBe(2)
     expect(finished.eventDecks[0].discard).toEqual([combat.id])
     expect(finished.endSession(at).isRight()).toBe(true)
     expect(finished.startSession(at)).toBe(true)
-    expect(
-      availableActions(finished, finished.turn.memberId, new Set())
-    ).toEqual([])
-    await game.refuse({ type: 'endTurn' }, { reason: 'playerDown' })
   })
 
-  it('REQ-122: derrota aplica a coisa ruim uma vez', async () => {
+  it('REQ-122/REQ-126/REQ-127: derrota aplica a coisa ruim uma vez antes do respawn', async () => {
     const attacker = {
       ...enemy,
       modifiers: { ...enemy.modifiers, attack: 20, accuracy: 1 },
@@ -907,8 +902,9 @@ describe('TakePartyActionUseCase — desfechos de combate (T-48)', () => {
       },
       eventDecks: [{ discard: [combat.id] }],
     })
-    expect(game.playerState()).toMatchObject({ health: 0, down: true, gold: 5 })
-    await game.refuse({ type: 'endTurn' }, { reason: 'playerDown' })
+    expect(game.playerState()).toMatchObject({ down: false, gold: 5 })
+    expect(game.playerState().health).toBeGreaterThan(0)
+    await game.accept({ type: 'endTurn' })
     expect(game.playerState().gold).toBe(5)
   })
 })
@@ -1139,6 +1135,7 @@ function setup({
   noEscape = false,
   rngState = SeededRng.fromSeed(42).state(),
   outcome = emptyOutcome,
+  badOutcome = emptyOutcome,
   rewardCards = [],
   rewardConfig = GAME_CONFIG_DEFAULTS,
   additionalCards = [],
@@ -1155,6 +1152,7 @@ function setup({
   noEscape?: boolean
   rngState?: RngState
   outcome?: ReturnType<typeof makeRandomEventCard>['goodOutcome']
+  badOutcome?: ReturnType<typeof makeRandomEventCard>['badOutcome']
   rewardCards?: string[]
   rewardConfig?: typeof GAME_CONFIG_DEFAULTS
   additionalCards?: TCard[]
@@ -1164,7 +1162,7 @@ function setup({
   const event = makeRandomEventCard({
     requirements,
     goodOutcome: outcome,
-    badOutcome: emptyOutcome,
+    badOutcome,
     escapeThreshold: 10,
     noEscape,
   })
@@ -1275,6 +1273,166 @@ function setup({
     event,
   }
 }
+
+describe('TakePartyActionUseCase — doação fatal em encontro (T-51)', () => {
+  const donation = {
+    id: 'life',
+    text: 'Doe 1 PV.',
+    kind: 'donateLife',
+    amount: 1,
+  } as const
+  const lifeReceipt = { requirementId: donation.id, health: 1 }
+  const heal = {
+    type: 'effect',
+    effect: {
+      text: 'Cure 7 PV.',
+      activation: [{ kind: 'heal', amount: 7 }],
+      duration: { kind: 'immediate' },
+      mark: null,
+    },
+  } as const
+  const gain = {
+    type: 'effect',
+    effect: {
+      text: 'Ganhe 3 de ouro.',
+      activation: [{ kind: 'gainGold', amount: 3 }],
+      duration: { kind: 'immediate' },
+      mark: null,
+    },
+  } as const
+  const rewardConfig = {
+    ...GAME_CONFIG_DEFAULTS,
+    inventoryCapacity: 1,
+    soloKnockoutGoldLossPercent: 0,
+  }
+
+  it.each([false, true])(
+    'REQ-126/REQ-127: doação fatal com pagamento parcial conclui o revés (escolha pendente: %s)',
+    async (withReward) => {
+      const game = setup({
+        requirements: [randomDiscard, donation, gold],
+        player: {
+          health: 1,
+          hand: [strength.id],
+          inventory: [{ cardId: spare.id, quantity: 1 }],
+        },
+        badOutcome: {
+          text: 'Resolva o revés.',
+          steps: withReward
+            ? [
+                heal,
+                { type: 'drawRewards', count: 1 },
+                heal,
+                { type: 'drawRewards', count: 1 },
+                gain,
+              ]
+            : [heal, gain],
+        },
+        rewardCards: [ore.id, potion.id],
+        rewardConfig,
+      })
+      const encounterId = await game.reveal()
+      const partial = await game.accept({
+        type: 'payEventRequirement',
+        encounterId,
+        requirementId: randomDiscard.id,
+      })
+      const payments = [...partial.randomEventEncounter!.payments, lifeReceipt]
+      const turn = { ...partial.turn }
+      expect(turn.actionPoints).toBe(0)
+
+      let finished = await game.accept({
+        type: 'payEventRequirement',
+        encounterId,
+        requirementId: donation.id,
+      })
+      if (withReward) {
+        for (const cardId of [ore.id, potion.id]) {
+          expect(finished.randomEventEncounter).toMatchObject({
+            phase: 'setback',
+            payments,
+          })
+          expect(finished.turn).toEqual(turn)
+          expect(finished.eventDecks[0].discard).toEqual([])
+          expect(finished.pendingRewards).toMatchObject([{ cardId }])
+          expect(game.playerState()).toMatchObject({
+            health: 0,
+            down: true,
+            gold: 10,
+          })
+          expect(availableActions(finished, turn.memberId, new Set())).toEqual([
+            'resolveReward',
+          ])
+          finished = await game.accept({
+            type: 'resolveReward',
+            rewardId: pendingRewardId(finished),
+            choice: 'leave',
+          })
+        }
+      }
+      expect(finished.randomEventEncounter).toBeNull()
+      expect(finished.pendingRewards).toEqual([])
+      expect(finished.eventDecks[0].discard).toEqual([game.event.id])
+      expect(game.playerState()).toMatchObject({
+        down: false,
+        gold: 13,
+        lastRandomEvent: {
+          resolution: 'setback',
+          cause: 'gaveUp',
+          peakDelta: -1,
+          payments,
+          replacement: { requested: 1, drawn: 1 },
+        },
+      })
+      expect(game.playerState().health).toBeGreaterThan(0)
+    }
+  )
+
+  it.each([4, 5])(
+    'REQ-126/REQ-127: verifica o mínimo no último pagamento fatal com Vigor %i',
+    async (initialVigor) => {
+      const game = setup({
+        requirements: [donation, minimum],
+        player: { health: 1, vigor: initialVigor },
+        outcome: { text: 'Resolva o êxito.', steps: [gain] },
+        rewardConfig,
+      })
+      const encounterId = await game.reveal()
+      const action = {
+        type: 'payEventRequirement',
+        encounterId,
+        requirementId: donation.id,
+      }
+      if (initialVigor < minimum.value) {
+        const before = game.party().randomEventEncounter
+        const player = game.playerState()
+        await game.refuse(action, {
+          reason: 'eventMinimumNotMet',
+          checks: [
+            { requirementId: minimum.id, stat: 'vigor', minimum: 5, actual: 4 },
+          ],
+        })
+        expect(game.party().randomEventEncounter).toEqual(before)
+        expect(game.playerState()).toEqual(player)
+        expect(game.party().eventDecks[0].discard).toEqual([])
+        return
+      }
+      const finished = await game.accept(action)
+      expect(finished.randomEventEncounter).toBeNull()
+      expect(finished.eventDecks[0].discard).toEqual([game.event.id])
+      expect(game.playerState()).toMatchObject({
+        down: false,
+        gold: 13,
+        lastRandomEvent: {
+          resolution: 'success',
+          cause: 'requirementsMet',
+          payments: [lifeReceipt],
+        },
+      })
+      expect(game.playerState().health).toBeGreaterThan(0)
+    }
+  )
+})
 
 describe('TakePartyActionUseCase — encontro aleatório (T-41)', () => {
   it('REQ-117: inicializa deck misto semeado com todas as cópias executáveis', async () => {

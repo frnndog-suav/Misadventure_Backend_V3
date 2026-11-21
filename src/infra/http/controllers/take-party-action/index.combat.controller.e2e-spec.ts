@@ -85,7 +85,7 @@ describe('Combate solo (HTTP e save)', () => {
   } = {}) {
     await request(server())
       .patch('/lab/config')
-      .send({ inventoryCapacity: 1 })
+      .send({ inventoryCapacity: 1, actionPointsPerTurn: 1 })
       .expect(200)
     const { id } = await postParty(ctx.app)
     await request(server()).post(`/parties/${id}/session`).expect(200)
@@ -120,7 +120,7 @@ describe('Combate solo (HTTP e save)', () => {
     return id
   }
 
-  it('REQ-123: recarrega combate, recusa turno obsoleto e entrega recompensa ao jogador caído', async () => {
+  it('REQ-123/REQ-127: recarrega combate, preserva a escolha sem PA e devolve o respawn no POST', async () => {
     const id = await setup()
     const started = await act(id, { type: 'startEvent' }).expect(200)
     const revealed = await act(id, {
@@ -168,7 +168,10 @@ describe('Combate solo (HTTP e save)', () => {
       victory.body.combatUpdates.map(({ type }: { type: string }) => type)
     ).toEqual(['combatDamageResolved', 'combatEnded'])
     const pending = (await get(id).expect(200)).body
+    const { combatUpdates: _, ...victorySnapshot } = victory.body
+    expect(pending).toEqual(victorySnapshot)
     expect(pending).toMatchObject({
+      turn: { ...started.body.turn, actionPoints: 0 },
       combat: null,
       lastCombatResult: { resolution: 'victory', playerDown: true },
       pendingRewards: [
@@ -189,27 +192,46 @@ describe('Combate solo (HTTP e save)', () => {
     ).toEqual([])
     await request(server()).post(`/parties/${id}/session/end`).expect(200)
     await request(server()).post(`/parties/${id}/session`).expect(200)
-    expect((await get(id).expect(200)).body.pendingRewards).toEqual(
-      pending.pendingRewards
-    )
-    await act(id, {
+    const reopened = (await get(id).expect(200)).body
+    expect(reopened).toMatchObject({
+      turn: pending.turn,
+      pendingRewards: pending.pendingRewards,
+      members: [
+        {
+          player: {
+            health: 0,
+            down: true,
+            availableActions: ['resolveReward'],
+          },
+        },
+      ],
+    })
+    expect(
+      DrizzlePartyMapper.toDomain(await stored(id)).eventDecks[0].discard
+    ).toEqual([])
+    const resolved = await act(id, {
       type: 'resolveReward',
       rewardId: pending.pendingRewards[0].id,
       choice: 'keep',
       discard: [{ cardId: fish, copies: 1 }],
     }).expect(200)
-    expect((await get(id).expect(200)).body).toMatchObject({
+    const { combatUpdates: resolutionUpdates, ...snapshot } = resolved.body
+    expect(resolutionUpdates).toEqual([])
+    expect(snapshot).toMatchObject({
       pendingRewards: [],
+      lastCombatResult: { resolution: 'victory', playerDown: true },
       members: [
         {
           player: {
-            down: true,
-            availableActions: [],
+            down: false,
+            zoneId: pending.members[0].player.respawnZoneId,
             inventory: [{ cardId: ore, quantity: 1 }],
           },
         },
       ],
     })
+    expect(snapshot.members[0].player.health).toBeGreaterThan(0)
+    expect((await get(id).expect(200)).body).toEqual(snapshot)
     expect(
       DrizzlePartyMapper.toDomain(await stored(id)).eventDecks[0].discard
     ).toEqual([wolves])

@@ -60,7 +60,11 @@ const AMULET = makeEquipmentCard({
     effect({}),
     effect({
       cost: [{ kind: 'donateLife', amount: 5 }],
-      activation: [{ kind: 'restoreVigor', amount: 5 }],
+      activation: [
+        { kind: 'restoreVigor', amount: 5 },
+        { kind: 'heal', amount: 7 },
+        { kind: 'gainGold', amount: 3 },
+      ],
     }),
     effect({
       cost: [{ kind: 'discardFromHand', ...chosen }],
@@ -155,12 +159,29 @@ describe('Preparar: ativar', () => {
     })
   })
 
-  it('REQ-104: doa vida até zero e restaura Vigor até o Pico', () => {
-    const party = setup({ equipment: amuletEquipped, health: 5, vigor: 8 })
+  it('REQ-104/REQ-126/REQ-127: conclui a ativação com doação fatal antes do respawn', () => {
+    const party = setup({
+      equipment: amuletEquipped,
+      health: 5,
+      vigor: 8,
+      zoneId: 'fixture.old-mine',
+    })
 
     expect(activate(party, AMULET.id, 1).isRight()).toBe(true)
 
-    expect(playerOf(party)).toMatchObject({ health: 0, vigor: 10 })
+    expect(playerOf(party)).toMatchObject({
+      down: false,
+      zoneId: 'fixture.gray-harbor',
+      gold: 12,
+    })
+    expect(playerOf(party).health).toBeGreaterThan(0)
+    expect(party.pullDomainEvents()).toContainEqual(
+      expect.objectContaining({
+        type: 'EffectActivationApplied',
+        activation: 'heal',
+        amount: 0,
+      })
+    )
   })
 
   it('REQ-104: consome uma unidade, limita a cura e registra o envio ao limbo', () => {
@@ -354,9 +375,10 @@ describe('Custos em sequência e condições', () => {
 
     expect(playerOf(party)).toMatchObject({
       gold: 0,
-      health: 0,
-      peak: 6,
-      vigor: 5,
+      down: false,
+      health: 2,
+      peak: 5,
+      vigor: 2,
     })
     expect(party.pullDomainEvents().map(({ type }) => type)).toEqual([
       'EffectActivated',
@@ -366,6 +388,10 @@ describe('Custos em sequência e condições', () => {
       'EffectActivationApplied',
       'EffectActivationApplied',
       'EffectActivationApplied',
+      'TurnEnded',
+      'TurnStarted',
+      'TurnEnded',
+      'TurnStarted',
     ])
   })
 

@@ -99,6 +99,7 @@ export class TakePartyActionUseCase {
         )
         if (result.isLeft())
           return left(new ActionNotAllowedError(result.value))
+        party.completeKnockout(this.ids)
         break
       }
       case 'escapeCombat':
@@ -110,6 +111,7 @@ export class TakePartyActionUseCase {
         const result = party.takeCombatAction(action, cards, this.clock.now())
         if (result.isLeft())
           return left(new ActionNotAllowedError(result.value))
+        party.completeKnockout(this.ids)
         break
       }
       case 'resolveReward': {
@@ -125,6 +127,7 @@ export class TakePartyActionUseCase {
         )
         if (result.isLeft())
           return left(new ActionNotAllowedError(result.value))
+        party.completeKnockout(this.ids)
         break
       }
       case 'startEvent':
@@ -159,6 +162,7 @@ export class TakePartyActionUseCase {
                 )
           )
         }
+        party.completeKnockout(this.ids)
         break
       }
       case 'move': {
@@ -247,9 +251,15 @@ export class TakePartyActionUseCase {
                 ? new PartySessionNotActiveError()
                 : new ActionNotAllowedError(result.value)
             )
+          party.completeKnockout(this.ids)
           break
         }
-        const catalog = { cards: await this.findPrepareCatalog(party, action) }
+        const catalog = {
+          cards:
+            action.operation === 'activate' && party.eventEncounter
+              ? [...(await this.findEventCatalog(party)).cards.values()]
+              : await this.findPrepareCatalog(party, action),
+        }
         const at = this.clock.now()
         let prepared: ReturnType<Party['prepare']>
         if (action.operation === 'activate') {

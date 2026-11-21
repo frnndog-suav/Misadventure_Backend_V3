@@ -2572,9 +2572,13 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         const isLast = !requirementProgress(updated, changed, cards).some(
           ({ status }) => status === 'unpaid' || status === 'partial'
         )
+        const fell = changed.health === 0
+        const afterPayment = fell ? { ...changed, down: true } : changed
         if (isLast) {
-          const resolved = tryResolve(changed, payments)
+          const resolved = tryResolve(afterPayment, payments)
           if (resolved.isLeft()) return resolved
+        } else if (fell) {
+          finish(afterPayment, 'gaveUp', null, payments)
         } else {
           this.replaceActor(index, changed)
           this.props.eventEncounter = updated
@@ -2601,7 +2605,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             aggregateId: this.id,
           })
         }
-        return isLast ? right(undefined) : complete()
+        return isLast || fell ? right(undefined) : complete()
       }
       case 'escapeEvent': {
         const escape = this.eventEscape(encounter, player)
@@ -3647,6 +3651,72 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
    * `turnOrder` com os pontos cheios; do último para o primeiro a rodada sobe.
    * Aceito com qualquer quantidade de pontos (K2). O RNG não é usado.
    */
+  completeKnockout(ids?: IdGenerator): void {
+    if (
+      this.props.combat ||
+      this.triggeredEffectChoice ||
+      this.pendingRewards.length
+    )
+      return
+
+    const index = this.actorIndex()
+    let player = this.props.members[index].player
+    if (player.health !== 0) return
+    const encounter = this.eventEncounter
+    if (encounter?.phase === 'encounter' && encounter.card) {
+      this.finishEvent(
+        index,
+        encounter,
+        encounter.card,
+        { ...player, down: true },
+        'gaveUp',
+        null,
+        encounter.payments,
+        ids,
+        this.eventCatalog
+      )
+      if (this.pendingRewards.length) return
+      player = this.props.members[index].player
+    } else if (encounter?.phase === 'anticipation') {
+      this.props.eventEncounter = null
+    }
+
+    const config = this.config
+    const solo = this.turnOrder.length === 1
+    const peakLoss =
+      config.knockoutPeakLossPercent === 0
+        ? 0
+        : Math.max(
+            1,
+            Math.floor((player.peak * config.knockoutPeakLossPercent) / 100)
+          )
+    const peak = Math.max(0, player.peak - peakLoss)
+    const maxHealth = maxHealthOf({ ...player, peak })
+    this.replaceActor(index, {
+      ...player,
+      down: false,
+      zoneId: player.respawnZoneId,
+      peak,
+      vigor: Math.min(
+        player.vigor,
+        Math.floor((peak * config.knockoutVigorCapPercent) / 100)
+      ),
+      health: Math.max(
+        1,
+        Math.floor((maxHealth * config.knockoutHealthPercent) / 100)
+      ),
+      gold: solo
+        ? player.gold -
+          Math.floor((player.gold * config.soloKnockoutGoldLossPercent) / 100)
+        : player.gold,
+    })
+    const at = this.savedAt
+    this.endTurn(at)
+    if (solo)
+      for (let round = 0; round < config.soloKnockoutWaitRounds; round++)
+        this.endTurn(at)
+  }
+
   endTurn(at: Date): Either<'sessionNotActive', void> {
     switch (this.props.status) {
       case 'idle':
@@ -4264,6 +4334,12 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             type: 'StatusApplied',
             statusId: status.statusId,
           })
+        if (changed.down) {
+          this.eventCatalog = new Map(
+            catalog.cards.map((card) => [card.id, card])
+          )
+          this.completeKnockout(ids)
+        }
         return right(undefined)
       }
       case 'equip': {
