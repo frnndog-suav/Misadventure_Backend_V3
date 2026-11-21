@@ -9,6 +9,13 @@ const { createHash } = require('node:crypto')
 const wolves = 'fixture.howling-wolves'
 const defeat = 'fixture.t67-defeat'
 const immediateCombat = 'fixture.t67-immediate-combat'
+const supportCombat = 'fixture.t67-support-combat'
+const channelWeapon = 'fixture.t67-channel-weapon'
+const channelAbility = 'fixture.t67-channel'
+const damageCombat = 'fixture.t67-damage-combat'
+const damageWeapon = 'fixture.t67-damage-weapon'
+const zeroAccuracyStrike = 'fixture.t67-zero-accuracy-strike'
+const waterArea = 'fixture.t67-water-area'
 const ambush = 'fixture.fire-ambush'
 const blade = 'fixture.blade-of-dusk'
 const traveler = 'fixture.wounded-traveler'
@@ -74,6 +81,21 @@ async function prepareContent() {
         }],
       },
       catalogCard,
+      {
+        ...catalogCard,
+        id: damageCombat,
+        title: 'Lobos Elementais',
+        enemies: [
+          {
+            ...enemy, name: 'Lobo de Fogo', count: 1, health: 20, element: 'fire',
+            modifiers: { ...modifiers, accuracy: 0, reflection: 2 },
+          },
+          {
+            ...enemy, name: 'Lobo de Gelo', count: 1, health: 20, element: 'frost',
+            modifiers: { ...modifiers, accuracy: 0, reflection: 3 },
+          },
+        ],
+      },
       { ...catalogCard, id: `${catalogCombat}-null`, title: 'Lobos Uivantes — Limiar nulo', escapeThreshold: null },
       { ...catalogCard, id: `${catalogCombat}-zero`, title: 'Lobos Uivantes — Limiar zero', escapeThreshold: 0 },
       {
@@ -160,9 +182,62 @@ async function prepareContent() {
       },
     ])
   )
+  const combatCards = JSON.parse(await readFile(combatPath, 'utf8'))
+  combatCards.push({
+    ...card,
+    id: supportCombat,
+    title: 'Dupla de Lobos',
+    enemies: [
+      {
+        ...enemy,
+        name: 'Lobo Curandeiro',
+        count: 1,
+        health: 20,
+        behavior: 'support',
+        modifiers: { ...modifiers, attack: 5, accuracy: 100, celerity: 10 },
+        combatRules: { abilityPriority: ['supportWoundedAlly'] },
+        abilities: [{
+          ...ability,
+          id: 'fixture.t67-wolf-heal',
+          name: 'Cura da Matilha',
+          power: null,
+          element: null,
+          target: 'ally',
+          effects: [{
+            text: 'Recupere 3 PV.',
+            trigger: null,
+            cost: [],
+            activation: [{ kind: 'heal', amount: 3 }],
+            duration: { kind: 'immediate' },
+            mark: null,
+          }],
+        }],
+      },
+      {
+        ...enemy,
+        name: 'Lobo da Guarda',
+        count: 1,
+        health: 20,
+        modifiers: { ...modifiers, accuracy: 0, celerity: 1 },
+      },
+    ],
+    goodOutcome: empty,
+    badOutcome: empty,
+  })
+  await writeFile(combatPath, JSON.stringify(combatCards, null, 2))
   const equipmentPath = join(root, 'fixture', 'equipment.json')
   const equipment = JSON.parse(await readFile(equipmentPath, 'utf8'))
   const weapon = equipment.find(({ id }) => id === blade)
+  equipment.push({
+    ...weapon,
+    id: damageWeapon,
+    name: 'Lâmina das Marés',
+    modifiers: [],
+    abilities: [
+      { ...ability, id: zeroAccuracyStrike, name: 'Jato de Água', element: 'water' },
+      { ...ability, id: waterArea, name: 'Onda de Água', element: 'water', form: 'area', target: 'allOpponents' },
+    ],
+  })
   equipment.push({
     ...weapon,
     id: classWeapon,
@@ -171,6 +246,19 @@ async function prepareContent() {
       { ...ability, id: restrictedAbility, name: 'Golpe do Ladino', classRestriction: ['rogue'] },
       { ...ability, id: unrestrictedAbility, name: 'Golpe Livre' },
     ],
+  })
+  equipment.push({
+    ...weapon,
+    id: channelWeapon,
+    name: 'Lamina Canalizadora',
+    modifiers: [],
+    abilities: [{
+      ...ability,
+      id: channelAbility,
+      name: 'Chama Canalizada',
+      form: 'channeled',
+      channel: { chargesRequired: 2, releaseForm: 'targeted' },
+    }],
   })
   weapon.modifiers = []
   weapon.abilities = [
@@ -392,7 +480,15 @@ async function prepareCampaigns(mode, victoryOnly = false) {
   if (mode === 'legacy') await api(`/catalog/cards/${reserveEvent}`)
   if (mode === 'initiative' || mode === 'payments') await api(`/catalog/cards/${initiative}`)
   if (mode === 'outcomes') await api(`/catalog/cards/${defeat}`)
+  if (mode === 'support') {
+    await api(`/catalog/cards/${supportCombat}`)
+    await api(`/catalog/cards/${channelWeapon}`)
+  }
   if (mode === 'reveal') await api(`/catalog/cards/${immediateCombat}`)
+  if (mode === 'damage') {
+    await api(`/catalog/cards/${damageCombat}`)
+    await api(`/catalog/cards/${damageWeapon}`)
+  }
   if (mode === 'catalog') {
     for (const cardId of [legacyCombat, catalogCombat, `${catalogCombat}-null`, `${catalogCombat}-zero`, classWeapon]) {
       await api(`/catalog/cards/${cardId}`)
@@ -432,6 +528,14 @@ async function prepareCampaigns(mode, victoryOnly = false) {
           { name: 'T-67 — Vitória na revelação', cardId: immediateCombat, reflection: 20 },
           { name: 'T-67 — Derrota na revelação', cardId: immediateCombat, reflection: 0 },
         ]
+      : mode === 'support'
+      ? [20, 25].map(threshold => ({
+          name: `T-67 Suporte ${threshold}%`,
+          cardId: supportCombat,
+          threshold,
+        }))
+      : mode === 'damage'
+      ? [{ name: 'T-67 — Lobos Elementais', cardId: damageCombat }]
       : mode === 'outcomes'
       ? [
           { name: 'T-67 — Turno atual', cardId: wolves },
@@ -463,7 +567,26 @@ async function prepareCampaigns(mode, victoryOnly = false) {
       state.eventDecks = [
         { zoneType: 'urban', cards: [scenario.cardId], discard: [] },
       ]
-      if (mode === 'reveal') {
+      if (mode === 'support') {
+        Object.assign(player, { peak: 0, vigor: 10, health: 20, statuses: [] })
+        for (const slot of Object.keys(player.equipment)) player.equipment[slot] = null
+        player.equipment.weapon = channelWeapon
+        Object.assign(player.modifiers, {
+          attack: 6, defense: 0, accuracy: 100, evasion: 0, celerity: 100,
+          piercing: 0, reflection: 0,
+        })
+        state.config.channelInterruptDamagePercent = scenario.threshold
+      } else if (mode === 'damage') {
+        Object.assign(player, { peak: 0, vigor: 10, health: player.baseHealth, statuses: [] })
+        for (const slot of Object.keys(player.equipment)) player.equipment[slot] = null
+        player.equipment.weapon = damageWeapon
+        Object.assign(player.modifiers, { attack: 20, accuracy: 0, celerity: 100 })
+        Object.assign(state.config, {
+          areaDamagePercent: 50,
+          elementAdvantageBonusPercent: 25,
+          elementDisadvantagePenaltyPercent: 25,
+        })
+      } else if (mode === 'reveal') {
         const vigor = scenario.reflection > 0 ? 1 : 0
         Object.assign(player, { peak: vigor, vigor, health: 1 })
         for (const slot of Object.keys(player.equipment)) player.equipment[slot] = null
@@ -518,7 +641,59 @@ async function prepareCampaigns(mode, victoryOnly = false) {
         Object.assign(player.modifiers, { accuracy: 100, defense: 100 })
       }
       await db.query('update parties set state = $1 where id = $2', [state, id])
-      if (mode === 'reveal') {
+      if (mode === 'support' || mode === 'damage') {
+        const started = await api(`/parties/${id}/actions`, { type: 'startEvent' })
+        await api(`/parties/${id}/actions`, {
+          type: 'revealEvent',
+          encounterId: started.randomEventEncounter.id,
+        })
+        const { combat, members } = await api(`/parties/${id}`)
+        if (mode === 'support') {
+          const option = combat?.abilities.find(({ abilityId }) => abilityId === channelAbility)
+          if (
+            combat?.card.id !== supportCombat ||
+            combat.turn.phase !== 'prepare' ||
+            combat.turn.actorId !== combat.memberId ||
+            combat.enemies.length !== 2 ||
+            combat.enemies.some(({ health }) => health !== 20) ||
+            !option?.canPay || (option.charges ?? 0) !== 0 ||
+            members[0].player.health !== 20
+          ) {
+            throw new Error(`Campanha ${id} sem o estado inicial esperado para Suporte.`)
+          }
+          console.log(JSON.stringify({
+            id,
+            url: new URL(`/parties/${id}`, url).href,
+            threshold: scenario.threshold,
+            combatId: combat.id,
+            turnId: combat.turn.id,
+            supportId: combat.enemies[0].id,
+            guardId: combat.enemies[1].id,
+            abilityId: channelAbility,
+          }))
+          continue
+        }
+        if (
+          combat?.card.id !== damageCombat ||
+          combat.turn.phase !== 'prepare' ||
+          combat.turn.actorId !== combat.memberId ||
+          combat.enemies.length !== 2 ||
+          combat.enemies.some(({ health }) => health !== 20) ||
+          ![zeroAccuracyStrike, waterArea].every(id =>
+            combat.abilities.some(({ abilityId, canPay }) => abilityId === id && canPay)
+          ) ||
+          members[0].player.health <= 5
+        ) {
+          throw new Error(`Campanha ${id} sem o estado inicial esperado para a matriz de dano.`)
+        }
+        console.log(JSON.stringify({
+          id,
+          combatId: combat.id,
+          turnId: combat.turn.id,
+          enemyIds: combat.enemies.map(({ id }) => id),
+          playerHealth: members[0].player.health,
+        }))
+      } else if (mode === 'reveal') {
         await api(`/parties/${id}/actions`, { type: 'startEvent' })
         const party = await api(`/parties/${id}`)
         if (
@@ -719,6 +894,10 @@ async function main() {
       return prepareCampaigns('reveal')
     case 'reveal-win':
       return prepareCampaigns('reveal', true)
+    case 'support':
+      return prepareCampaigns('support')
+    case 'damage':
+      return prepareCampaigns('damage')
     case 'legacy':
       return prepareCampaigns('legacy')
     case 'initiative':
@@ -734,7 +913,7 @@ async function main() {
     case 'snapshot':
       return readSnapshot(process.argv[3])
     default:
-      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, catalog, payments, reveal, reveal-win, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
+      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, catalog, payments, reveal, reveal-win, damage, support, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
   }
 }
 
