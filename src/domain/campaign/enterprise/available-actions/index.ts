@@ -60,6 +60,7 @@ export function availableActions(
   }
 
   const member = party.members.find((m) => m.id.equals(memberId))
+  if (member?.player.down) return []
   const actions: TPartyActionType[] = []
   if (
     member &&

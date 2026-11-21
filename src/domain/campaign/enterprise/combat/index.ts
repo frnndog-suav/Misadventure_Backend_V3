@@ -37,6 +37,7 @@ export type TCombatRefusal =
   | TPaymentRefusal['reason']
   | 'notActivatable'
   | 'playerDown'
+  | 'escapeForbidden'
 
 type Participant = {
   id: string
@@ -1433,7 +1434,8 @@ export function resolveCombatTurn(
   config: TGameConfigValues,
   rng: SeededRng,
   targetId?: string,
-  resume = false
+  resume = false,
+  failedEscape = false
 ): {
   state: TCombatState
   health: number
@@ -1441,11 +1443,13 @@ export function resolveCombatTurn(
   brokenEquipment: readonly TEquipmentSlot[]
   snapshot: TPlayerState | undefined
   rngState: RngState
+  playerDownBeforeLastEnemy: boolean
 } {
   let current = state
   let health = player.health
   let statuses = player.statuses ?? []
   let brokenEquipment = player.brokenEquipment ?? []
+  let playerDownBeforeLastEnemy = false
   const roll = () => rng.nextUint32() / 2 ** 32
   const finish = () => ({
     state: current,
@@ -1454,6 +1458,7 @@ export function resolveCombatTurn(
     brokenEquipment,
     snapshot: player.snapshot,
     rngState: rng.state(),
+    playerDownBeforeLastEnemy,
   })
   const notify = (notices: readonly CombatNotice[]) => {
     const reaction = notifyCombat(
@@ -1559,6 +1564,70 @@ export function resolveCombatTurn(
     }
   }
 
+  const basicEnemyAttack = (enemy: CombatEnemy) => {
+    const [result] = resolveCombatDamage({
+      kind: 'attack',
+      form: 'basic',
+      ...enemy.effectiveModifiers,
+      element: null,
+      config,
+      roll,
+      targets: [
+        {
+          id: current.memberId,
+          health,
+          element: null,
+          defense: player.modifiers.defense,
+          evasion: player.modifiers.evasion,
+          reflection: player.modifiers.reflection,
+          resistant: false,
+          immune: false,
+          shield: false,
+        },
+      ],
+    })
+    health = Math.max(0, health - result.damage)
+    playerDownBeforeLastEnemy = health === 0
+    if (result.damage > 0)
+      statuses = statuses.filter(
+        ({ duration }) => duration.kind !== 'untilDamageTaken'
+      )
+    const before = current
+    current = interruptChannel(current, current.memberId, result.damage, config)
+    current = interruptChannel(
+      current,
+      enemy.id,
+      result.reflectedDamage,
+      config
+    )
+    current = damageEnemy(current, enemy.id, result.reflectedDamage, config)
+    notify([
+      {
+        type: 'enemyAttack',
+        behavior: current.card.enemies[enemy.blockIndex].behavior,
+      },
+      ...enemyDefeatNotices(before, current),
+    ])
+  }
+
+  if (failedEscape && !combatIsTerminal(current, health)) {
+    const position = current.order.indexOf(current.memberId)
+    const circularOrder = [
+      ...current.order.slice(position + 1),
+      ...current.order.slice(0, position),
+    ]
+    const attacker = circularOrder
+      .map((id) => current.enemies.find((enemy) => enemy.id === id))
+      .find((enemy) => enemy && enemy.health > 0)
+    current = {
+      ...current,
+      turn: { ...current.turn, phase: 'attack', attacksRemaining: 0 },
+    }
+    if (attacker) basicEnemyAttack(attacker)
+    if (player.reactionPending?.()) return finish()
+  }
+
+  if (combatIsTerminal(current, health)) return finish()
   if (current.turn.actorId === current.memberId) {
     if (resume && current.turn.attacksRemaining > 0) return finish()
     const target = current.enemies.find(({ id }) => id === targetId)
@@ -1661,55 +1730,15 @@ export function resolveCombatTurn(
       advance()
       continue
     }
-    const [result] = resolveCombatDamage({
-      kind: 'attack',
-      form: 'basic',
-      ...enemy.effectiveModifiers,
-      element: null,
-      config,
-      roll,
-      targets: [
-        {
-          id: current.memberId,
-          health,
-          element: null,
-          defense: player.modifiers.defense,
-          evasion: player.modifiers.evasion,
-          reflection: player.modifiers.reflection,
-          resistant: false,
-          immune: false,
-          shield: false,
-        },
-      ],
-    })
-    health = Math.max(0, health - result.damage)
-    if (result.damage > 0)
-      statuses = statuses.filter(
-        ({ duration }) => duration.kind !== 'untilDamageTaken'
-      )
-    const before = current
-    current = interruptChannel(current, current.memberId, result.damage, config)
-    current = interruptChannel(
-      current,
-      enemy.id,
-      result.reflectedDamage,
-      config
-    )
     current = {
-      ...damageEnemy(current, enemy.id, result.reflectedDamage, config),
+      ...current,
       turn: {
         ...current.turn,
         phase: 'attack',
         attacksRemaining: current.turn.attacksRemaining - 1,
       },
     }
-    notify([
-      {
-        type: 'enemyAttack',
-        behavior: current.card.enemies[enemy.blockIndex].behavior,
-      },
-      ...enemyDefeatNotices(before, current),
-    ])
+    basicEnemyAttack(enemy)
     if (player.reactionPending?.()) return finish()
     if (
       !combatIsTerminal(current, health) &&

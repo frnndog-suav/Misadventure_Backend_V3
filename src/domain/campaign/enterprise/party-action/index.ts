@@ -63,7 +63,7 @@ export type TRandomEventAction =
 
 export type TCombatAction = { combatId: string; turnId: string } & (
   | { type: 'combatAttack'; targetId: string }
-  | { type: 'endCombatTurn' }
+  | { type: 'endCombatTurn' | 'escapeCombat' }
   | ({ type: 'useAbility'; targetId?: string } & TAbilityIntent)
   | {
       type: 'activateCombatEffect'
@@ -162,6 +162,7 @@ export function parsePartyAction(
       return combatEnabled
         ? parseTriggeredEffectAction(body)
         : left([{ field: 'type', reason: 'unknownAction' }])
+    case 'escapeCombat':
     case 'combatAttack':
     case 'useAbility':
     case 'activateCombatEffect':

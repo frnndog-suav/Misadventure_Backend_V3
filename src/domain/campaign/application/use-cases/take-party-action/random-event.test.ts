@@ -672,6 +672,247 @@ describe('TakePartyActionUseCase — habilidades e IA (T-47)', () => {
   })
 })
 
+describe('TakePartyActionUseCase — desfechos de combate (T-48)', () => {
+  const enemy = makeEnemy({
+    count: 1,
+    health: 1,
+    modifiers: {
+      ...combat.enemies[0].modifiers,
+      attack: 0,
+      defense: 0,
+      evasion: 0,
+      celerity: 0,
+    },
+  })
+  const loss = {
+    type: 'effect',
+    effect: {
+      text: 'Perca 5 de ouro.',
+      activation: [{ kind: 'loseGold', amount: 5 }],
+      duration: { kind: 'immediate' },
+      mark: null,
+    },
+  } as const
+
+  function fight(
+    card: Partial<typeof combat> = {},
+    options: Parameters<typeof setup>[0] = {}
+  ) {
+    return setup({
+      combatOnly: true,
+      combatCard: makeCombatEventCard({
+        enemies: [enemy],
+        goodOutcome: emptyOutcome,
+        badOutcome: { text: loss.effect.text, steps: [loss] },
+        ...card,
+      }),
+      ...options,
+    })
+  }
+
+  function outcomeOf(party: ReturnType<typeof makeParty>) {
+    return {
+      combat: party.combat,
+      lastCombatResult: party.lastCombatResult,
+      pendingRewards: party.pendingRewards,
+      eventDecks: party.eventDecks,
+    }
+  }
+
+  function turnOf(game: ReturnType<typeof setup>) {
+    const battle = game.party().combat
+    if (!battle) throw new Error('O combate deveria estar aberto')
+    return { combatId: battle.id, turnId: battle.turn.id }
+  }
+
+  it('REQ-122: fuga bem-sucedida paga Vigor, perde Pico e descarta uma vez', async () => {
+    const game = fight({ escapeThreshold: 0 }, { player: { vigor: 6 } })
+    await game.reveal()
+    const turn = turnOf(game)
+    const party = await game.accept({ type: 'escapeCombat', ...turn })
+    expect(game.playerState()).toMatchObject({ peak: 8, vigor: 4, gold: 10 })
+    expect(outcomeOf(party)).toMatchObject({
+      combat: null,
+      lastCombatResult: {
+        combatId: turn.combatId,
+        resolution: 'escaped',
+        cause: 'escapeSucceeded',
+        peakDelta: -2,
+      },
+      eventDecks: [{ zoneType: 'urban', cards: [], discard: [combat.id] }],
+    })
+    expect(availableActions(party, party.turn.memberId, new Set())).toContain(
+      'endTurn'
+    )
+  })
+
+  it('REQ-122: falha de fuga dá ataque livre extra e preserva o turno normal inimigo', async () => {
+    const attacker = {
+      ...enemy,
+      modifiers: { ...enemy.modifiers, attack: 4, accuracy: 1 },
+    }
+    const game = fight(
+      { enemies: [attacker], escapeThreshold: 20 },
+      {
+        player: {
+          modifiers: { ...makePlayerState().modifiers, defense: 0, evasion: 0 },
+        },
+      }
+    )
+    await game.reveal()
+    const party = await game.accept({ type: 'escapeCombat', ...turnOf(game) })
+    expect(game.playerState()).toMatchObject({ health: 14, peak: 10, vigor: 8 })
+    expect(party.combat).toMatchObject({
+      cycle: 2,
+      turn: { actorId: 'member-1' },
+    })
+    expect(party.eventDecks[0].discard).toEqual([])
+  })
+
+  it('REQ-122: limite em Sem fuga cobra apenas Pico e devolve a vez', async () => {
+    const game = fight(
+      {
+        noEscape: true,
+        enemies: [{ ...enemy, modifiers: { ...enemy.modifiers, accuracy: 0 } }],
+      },
+      {
+        player: { vigor: 6 },
+        rewardConfig: { ...GAME_CONFIG_DEFAULTS, maxCombatCycles: 1 },
+      }
+    )
+    await game.reveal()
+    const turn = turnOf(game)
+    await game.refuse(
+      { type: 'escapeCombat', ...turn },
+      { reason: 'escapeForbidden' }
+    )
+    const rng = [...game.party().rngState]
+    const party = await game.accept({ type: 'endCombatTurn', ...turn })
+    expect(outcomeOf(party)).toMatchObject({
+      combat: null,
+      lastCombatResult: {
+        resolution: 'escaped',
+        cause: 'cycleLimit',
+        peakDelta: -2,
+      },
+      eventDecks: [{ discard: [combat.id] }],
+    })
+    expect(game.playerState()).toMatchObject({ peak: 8, vigor: 6, gold: 10 })
+    expect(party.rngState).toEqual(rng)
+  })
+
+  it('REQ-122: só resolve vitória no último inimigo e reserva a carta durante a recompensa de jogador caído', async () => {
+    const reflectingEnemy = {
+      ...enemy,
+      modifiers: { ...enemy.modifiers, reflection: 1 },
+    }
+    const game = fight(
+      {
+        enemies: [enemy, reflectingEnemy],
+        goodOutcome: {
+          text: 'Compre uma recompensa.',
+          steps: [{ type: 'drawRewards', count: 1 }],
+        },
+      },
+      {
+        player: { health: 1, inventory: [{ cardId: spare.id, quantity: 1 }] },
+        rewardCards: [ore.id],
+        rewardConfig: { ...GAME_CONFIG_DEFAULTS, inventoryCapacity: 1 },
+      }
+    )
+    await game.reveal()
+    const battle = game.party().combat!
+    await game.refuse({ type: 'endTurn' }, { reason: 'combatInProgress' })
+    const at = fixedClock('2026-11-20T12:00:00Z').now()
+    expect(game.party().endSession(at).value).toBe('combatInProgress')
+    const first = await game.accept({
+      type: 'combatAttack',
+      ...turnOf(game),
+      targetId: battle.enemies[0].id,
+    })
+    expect(first.combat?.enemies.map(({ health }) => health)).toEqual([0, 1])
+    expect(first.pendingRewards).toEqual([])
+    const victory = await game.accept({
+      type: 'combatAttack',
+      ...turnOf(game),
+      targetId: battle.enemies[1].id,
+    })
+    expect(outcomeOf(victory)).toMatchObject({
+      combat: null,
+      lastCombatResult: {
+        resolution: 'victory',
+        cause: 'enemiesDefeated',
+        playerDown: true,
+      },
+      pendingRewards: [
+        {
+          cardId: ore.id,
+          source: { type: 'combatEvent', combatId: battle.id },
+        },
+      ],
+      eventDecks: [{ discard: [] }],
+    })
+    expect(game.playerState()).toMatchObject({
+      health: 0,
+      down: true,
+      gold: 10,
+    })
+    expect(availableActions(victory, victory.turn.memberId, new Set())).toEqual(
+      ['resolveReward']
+    )
+    const finished = await game.accept({
+      type: 'resolveReward',
+      rewardId: pendingRewardId(victory),
+      choice: 'keep',
+      discard: [{ cardId: spare.id, copies: 1 }],
+    })
+    expect(game.playerState()).toMatchObject({
+      health: 0,
+      down: true,
+      peak: 12,
+      inventory: [{ cardId: ore.id, quantity: 1 }],
+    })
+    expect(finished.lastCombatResult?.peakDelta).toBe(2)
+    expect(finished.eventDecks[0].discard).toEqual([combat.id])
+    expect(finished.endSession(at).isRight()).toBe(true)
+    expect(finished.startSession(at)).toBe(true)
+    expect(
+      availableActions(finished, finished.turn.memberId, new Set())
+    ).toEqual([])
+    await game.refuse({ type: 'endTurn' }, { reason: 'playerDown' })
+  })
+
+  it('REQ-122: derrota aplica a coisa ruim uma vez', async () => {
+    const attacker = {
+      ...enemy,
+      modifiers: { ...enemy.modifiers, attack: 20, accuracy: 1 },
+    }
+    const game = fight(
+      { enemies: [attacker] },
+      {
+        player: {
+          health: 1,
+          modifiers: { ...makePlayerState().modifiers, evasion: 0 },
+        },
+      }
+    )
+    await game.reveal()
+    const party = await game.accept({ type: 'endCombatTurn', ...turnOf(game) })
+    expect(outcomeOf(party)).toMatchObject({
+      combat: null,
+      lastCombatResult: {
+        resolution: 'defeat',
+        cause: 'playerDown',
+        playerDown: true,
+      },
+      eventDecks: [{ discard: [combat.id] }],
+    })
+    expect(game.playerState()).toMatchObject({ health: 0, down: true, gold: 5 })
+    await game.refuse({ type: 'endTurn' }, { reason: 'playerDown' })
+    expect(game.playerState().gold).toBe(5)
+  })
+})
+
 describe('TakePartyActionUseCase — recompensas de encontro (T-42)', () => {
   it('REQ-114/REQ-115: pausa na primeira cópia, valida o descarte e retoma pela reserva uma vez', async () => {
     const inventory = [{ cardId: spare.id, quantity: 2 }]

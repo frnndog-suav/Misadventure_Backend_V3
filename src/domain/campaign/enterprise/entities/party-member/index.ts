@@ -53,6 +53,7 @@ export type TPlayerState = Readonly<{
   handCopySequence?: number
   nextTurnActionPointDebt?: number
   lastRandomEvent?: TEventResult | null
+  down?: boolean
   automaticEventEscape?: boolean
   discard: readonly string[]
   gold: number

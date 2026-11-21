@@ -258,7 +258,7 @@ type TriggeredEffectChoice = {
 }
 
 type TriggerContinuation =
-  | { type: 'combatTurn' }
+  | { type: 'combatTurn' | 'combatEscape' }
   | { type: 'combatEntry'; id: string; card: TCombatEventCard }
 
 type PendingTriggeredEffects = {
@@ -284,6 +284,26 @@ export type TTriggeredEffectRefusal =
   | 'choicePending'
   | 'paymentInvalid'
 
+export type TCombatResult = {
+  combatId: string
+  cardId: string
+  memberId: string
+  resolution: 'victory' | 'defeat' | 'escaped'
+  cause: 'enemiesDefeated' | 'playerDown' | 'escapeSucceeded' | 'cycleLimit'
+  playerDown: boolean
+  peakDelta: number
+}
+
+type OutcomeCursor = { nextStep: number; nextCopy?: number }
+
+type CombatOutcome = {
+  card: TCombatEventCard
+  zoneType: TEventDeck['zoneType']
+  cursor: OutcomeCursor
+  startingPeak: number
+  victoryPeak: number
+}
+
 export interface TPartyProps {
   name: string
   members: PartyMember[]
@@ -298,6 +318,9 @@ export interface TPartyProps {
   eventDecks?: readonly TEventDeck[]
   eventEncounter?: TEventEncounter | null
   combat?: TCombatState | null
+  combatZone?: TEventDeck['zoneType']
+  lastCombatResult?: TCombatResult | null
+  combatOutcome?: CombatOutcome | null
   pendingTriggeredEffects?: PendingTriggeredEffects | null
   triggeredEffectSequence?: number
   pendingReward?: TPendingReward | null
@@ -417,6 +440,23 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return this.props.pendingTriggeredEffects?.choice ?? null
   }
 
+  get lastCombatResult(): TCombatResult | null {
+    return this.props.lastCombatResult ?? null
+  }
+
+  get combatOutcomeZone() {
+    return this.props.combatOutcome?.zoneType ?? this.props.combatZone
+  }
+
+  get combatOutcomeCard() {
+    const continuation = this.props.pendingTriggeredEffects?.continuation
+    return (
+      this.props.combatOutcome?.card ??
+      this.props.combat?.card ??
+      (continuation?.type === 'combatEntry' ? continuation.card : undefined)
+    )
+  }
+
   get combat() {
     return this.describeCombat(this.eventCatalog)
   }
@@ -449,6 +489,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         effectiveModifiers: enemy.effectiveModifiers,
         statuses: enemy.statuses,
       })),
+      escape: this.combatEscape(state, player),
       attackTargetIds: combatAttackTargets(state, player.health),
       abilities: this.abilityOptions(player, cards, state),
       effects: this.combatEffectOptions(state, player, cards).map(
@@ -737,8 +778,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     if ('combatId' in action) return null
     if (this.props.combat) return 'combatInProgress'
     if (action.type === 'resolveReward') return null
-    if ('encounterId' in action) return null
     if (this.props.pendingReward) return 'choicePending'
+    if (this.props.members[this.actorIndex()]?.player.down) return 'playerDown'
+    if ('encounterId' in action) return null
     const encounter = this.eventEncounter
     if (!encounter) return null
     switch (action.type) {
@@ -790,6 +832,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const actions: TCombatAction['type'][] = []
     if (state.effects.length) actions.push('activateCombatEffect')
     if (state.abilities.length) actions.push('useAbility')
+    if (state.escape.unavailableReason === null) actions.push('escapeCombat')
     if (state.attackTargetIds.length) actions.push('combatAttack')
     actions.push('endCombatTurn')
     return actions
@@ -948,6 +991,37 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         ? this.useCombatAbility(action, state, index, player, cards, at)
         : this.activateCombatEffect(action, state, index, player, cards, at)
     }
+    if (action.type === 'escapeCombat') {
+      if (
+        state.turn.actorId !== state.memberId ||
+        combatIsTerminal(state, player.health)
+      )
+        return left('wrongCombatPhase')
+      const escape = this.combatEscape(state, player)
+      if (escape.unavailableReason) return left(escape.unavailableReason)
+      const reaction = this.resolveCombatReactions(
+        player,
+        cards,
+        this.rngState,
+        state,
+        [],
+        `${state.turn.id}:escape`,
+        (trigger) => trigger?.kind === 'onCombatFleeAttempt'
+      )
+      const battle = reaction.battle ?? state
+      this.props.rngState = reaction.rngState
+      this.eventCatalog = cards
+      const pending = this.props.pendingTriggeredEffects
+      if (pending) {
+        pending.continuation = { type: 'combatEscape' }
+        this.props.combat = battle
+        this.replaceActor(index, reaction.player)
+      } else {
+        this.resolveCombatEscape(battle, index, reaction.player, cards)
+      }
+      this.props.savedAt = at
+      return right(undefined)
+    }
     if (!this.combatActions().includes(action.type))
       return left('wrongCombatPhase')
     const targetId =
@@ -969,7 +1043,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     player: TPlayerState,
     cards: ReadonlyMap<string, TCard>,
     targetId?: string,
-    resume = false
+    resume = false,
+    failedEscape = false
   ) {
     const resolved = resolveCombatTurn(
       state,
@@ -977,47 +1052,160 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.config,
       SeededRng.fromState(this.rngState),
       targetId,
-      resume
+      resume,
+      failedEscape
     )
     const pending = this.props.pendingTriggeredEffects
     if (pending) pending.continuation = { type: 'combatTurn' }
-    this.props.combat = this.combatAfterResolution(
-      resolved.state,
-      resolved.health
-    )
     this.props.rngState = resolved.rngState
     this.eventCatalog = cards
-    this.replaceActor(
+    this.settleCombat(
       index,
-      this.afterCombatResolution(
-        {
-          ...(resolved.snapshot ?? player),
-          health: resolved.health,
-          statuses: resolved.statuses,
-          brokenEquipment: resolved.brokenEquipment,
-        },
-        resolved.state
-      )
+      resolved.state,
+      {
+        ...(resolved.snapshot ?? player),
+        health: resolved.health,
+        statuses: resolved.statuses,
+        brokenEquipment: resolved.brokenEquipment,
+      },
+      cards,
+      { playerDownBeforeLastEnemy: resolved.playerDownBeforeLastEnemy }
     )
   }
 
-  private afterCombatResolution(player: TPlayerState, state: TCombatState) {
-    if (this.triggeredEffectChoice || !combatIsTerminal(state, player.health))
-      return player
-    return {
-      ...player,
-      abilityUsage: undefined,
-      statuses: combatStatusesAfterEnd(
-        player.statuses,
-        state.enemies.every(({ health }) => health === 0)
-      ),
+  private settleCombat(
+    index: number,
+    state: TCombatState,
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>,
+    { escaped = false, playerDownBeforeLastEnemy = false } = {}
+  ) {
+    const won =
+      !playerDownBeforeLastEnemy &&
+      state.enemies.every(({ health }) => health === 0)
+    const down = player.health === 0
+    if (
+      this.triggeredEffectChoice ||
+      (!escaped && !combatIsTerminal(state, player.health))
+    ) {
+      this.props.combat = state
+      this.replaceActor(index, player)
+      return
     }
+    const resolution = won ? 'victory' : down ? 'defeat' : 'escaped'
+    const cause = won
+      ? 'enemiesDefeated'
+      : down
+        ? 'playerDown'
+        : escaped
+          ? 'escapeSucceeded'
+          : 'cycleLimit'
+    const startingPeak = player.peak
+    const peak =
+      resolution === 'escaped'
+        ? Math.max(0, player.peak - this.config.combatEscapePeakLoss)
+        : player.peak
+    player = {
+      ...player,
+      down,
+      peak,
+      vigor: Math.min(peak, player.vigor),
+      health: Math.min(player.health, maxHealthOf({ ...player, peak })),
+      abilityUsage: undefined,
+      statuses: combatStatusesAfterEnd(player.statuses, won),
+    }
+    this.props.combat = null
+    this.props.lastCombatResult = {
+      combatId: state.id,
+      cardId: state.card.id,
+      memberId: state.memberId,
+      resolution,
+      cause,
+      playerDown: down,
+      peakDelta: peak - startingPeak,
+    }
+    const zoneType = this.props.combatZone
+    this.props.combatZone = undefined
+    if (zoneType === undefined) {
+      this.replaceActor(index, player)
+      return
+    }
+    const victoryPeak =
+      won &&
+      !state.card.goodOutcome.steps?.some(
+        (step) =>
+          step.type === 'effect' &&
+          step.effect.activation.some(({ kind }) => kind === 'gainPeak')
+      )
+        ? state.card.enemies.reduce(
+            (total, enemy) =>
+              total +
+              enemy.count *
+                (enemy.enemyCategory === 'boss'
+                  ? 15
+                  : enemy.enemyCategory === 'elite'
+                    ? 3
+                    : 1),
+            0
+          )
+        : 0
+    this.props.combatOutcome = {
+      card: state.card,
+      zoneType,
+      cursor: { nextStep: 0 },
+      startingPeak,
+      victoryPeak,
+    }
+    this.finishCombatOutcome(index, player, cards)
   }
 
-  private combatAfterResolution(state: TCombatState, health: number) {
-    return !this.triggeredEffectChoice && combatIsTerminal(state, health)
-      ? { ...state, abilityUsage: [] }
-      : state
+  private finishCombatOutcome(
+    index: number,
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>,
+    ids?: IdGenerator
+  ) {
+    const result = this.props.lastCombatResult
+    const pending = this.props.combatOutcome
+    if (!result || !pending) return
+    const { card, zoneType, startingPeak } = pending
+    const phase = result.resolution === 'victory' ? 'success' : 'setback'
+    const outcome =
+      result.resolution === 'escaped'
+        ? null
+        : phase === 'success'
+          ? card.goodOutcome
+          : card.badOutcome
+    const resolved = this.resolveOutcomeSteps(
+      player,
+      outcome?.steps ?? [],
+      pending.cursor,
+      zoneType,
+      card.id,
+      result.combatId,
+      phase,
+      { type: 'combatEvent', combatId: result.combatId },
+      cards,
+      ids
+    )
+    player = {
+      ...resolved.player,
+      peak: resolved.player.peak + (resolved.cursor ? 0 : pending.victoryPeak),
+      down: resolved.player.health === 0 || result.playerDown,
+      health: result.playerDown ? 0 : resolved.player.health,
+    }
+    this.props.lastCombatResult = {
+      ...result,
+      playerDown: player.down === true,
+      peakDelta: player.peak - startingPeak,
+    }
+    this.replaceActor(index, player)
+    if (resolved.cursor) {
+      this.props.combatOutcome = { ...pending, cursor: resolved.cursor }
+      return
+    }
+    this.props.combatOutcome = null
+    this.discardEventCard(zoneType, card.id)
   }
 
   private useCombatAbility(
@@ -1185,9 +1373,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     changed = reactions.player
     combat = reactions.battle ?? combat
     this.eventCatalog = cards
-    this.props.combat = this.combatAfterResolution(combat, changed.health)
     this.props.rngState = reactions.rngState
-    this.replaceActor(index, this.afterCombatResolution(changed, combat))
+    this.settleCombat(index, combat, changed, cards)
     this.props.savedAt = at
     return right(undefined)
   }
@@ -1284,15 +1471,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       enemyDefeatNotices(state, resolved.state)
     )
     const finalCombat = reactions.battle ?? combat
-    this.props.combat = this.combatAfterResolution(
-      finalCombat,
-      reactions.player.health
-    )
-    this.replaceActor(
-      index,
-      this.afterCombatResolution(reactions.player, finalCombat)
-    )
     this.props.rngState = reactions.rngState
+    this.settleCombat(index, finalCombat, reactions.player, cards)
     this.props.savedAt = at
     this.eventCatalog = cards
     return right(undefined)
@@ -1859,15 +2039,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             undefined,
             true
           )
+        } else if (continuation?.type === 'combatEscape') {
+          this.resolveCombatEscape(battle, index, changed.player, cards)
         } else {
-          this.props.combat = this.combatAfterResolution(
-            battle,
-            changed.player.health
-          )
-          this.replaceActor(
-            index,
-            this.afterCombatResolution(changed.player, battle)
-          )
+          this.settleCombat(index, battle, changed.player, cards)
         }
       }
     }
@@ -2183,6 +2358,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           { type: 'combatEntry', id: encounter.id, card }
         )
         this.props.eventEncounter = null
+        this.props.combatZone = encounter.zoneType
+        this.props.lastCombatResult = null
         complete()
         if (this.triggeredEffectChoice) {
           this.props.rngState = started.rngState
@@ -2292,23 +2469,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       case 'escapeEvent': {
         const escape = this.eventEscape(encounter, player)
         if (escape.unavailableReason) return left(escape.unavailableReason)
-        const naturalRoll = escape.automatic ? null : rng.nextInt(1, 20)
-        const total =
-          naturalRoll === null
-            ? null
-            : player.statuses
-                .flatMap(({ activation }) => activation)
-                .reduce(
-                  (roll, effect) =>
-                    effect.kind === 'diceResultModifier'
-                      ? roll +
-                        (effect.amount === 'minusHandCount'
-                          ? -player.hand.length
-                          : effect.amount)
-                      : roll,
-                  naturalRoll
-                )
-        const succeeded = total === null || total > escape.threshold
+        const { naturalRoll, total, succeeded } = this.rollEscape(
+          player,
+          escape,
+          rng
+        )
         const actionPointsLost =
           !succeeded && this.turn.actionPoints > 0 ? 1 : 0
         const nextTurnActionPointDebtAdded =
@@ -2357,21 +2522,40 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     if (state.turn.actorId !== state.memberId) {
       this.finishCombatTurn(state, index, player, cards)
     } else {
-      this.props.combat = this.combatAfterResolution(state, player.health)
-      this.replaceActor(index, this.afterCombatResolution(player, state))
+      this.settleCombat(index, state, player, cards)
     }
   }
 
-  private eventEscape(
-    encounter: TEventEncounter,
-    player: TPlayerState
-  ): {
-    vigorCost: number
-    threshold: number
-    automatic: boolean
-    unavailableReason:
-      'eventPaymentStarted' | 'escapeForbidden' | 'notEnoughVigor' | null
-  } {
+  private rollEscape(
+    player: TPlayerState,
+    escape: { automatic: boolean; threshold: number },
+    rng: SeededRng
+  ) {
+    const naturalRoll = escape.automatic ? null : rng.nextInt(1, 20)
+    const total =
+      naturalRoll === null
+        ? null
+        : player.statuses
+            .flatMap(({ activation }) => activation)
+            .reduce(
+              (roll, effect) =>
+                effect.kind === 'diceResultModifier'
+                  ? roll +
+                    (effect.amount === 'minusHandCount'
+                      ? -player.hand.length
+                      : effect.amount)
+                  : roll,
+              naturalRoll
+            )
+    const succeeded = total === null || total > escape.threshold
+    return { naturalRoll, total, succeeded }
+  }
+
+  private escapeOption(
+    player: TPlayerState,
+    baseThreshold: number,
+    noEscape: boolean
+  ) {
     const automatic = player.automaticEventEscape === true
     const vigorCost = automatic
       ? 0
@@ -2379,13 +2563,6 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           1,
           Math.floor((player.peak * this.props.config.escapeVigorPercent) / 100)
         )
-    const unavailableReason = encounter.payments.length
-      ? 'eventPaymentStarted'
-      : encounter.card?.noEscape || (!automatic && player.peak === 0)
-        ? 'escapeForbidden'
-        : player.vigor < vigorCost
-          ? 'notEnoughVigor'
-          : null
     const threshold = player.statuses
       .flatMap(({ activation }) => activation)
       .reduce((value, effect) => {
@@ -2398,13 +2575,61 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
               : effect.amount)
           )
         return value
-      }, encounter.card?.escapeThreshold ?? 10)
+      }, baseThreshold)
+    const unavailableReason =
+      noEscape || (!automatic && player.peak === 0)
+        ? ('escapeForbidden' as const)
+        : player.vigor < vigorCost
+          ? ('notEnoughVigor' as const)
+          : null
+    return { automatic, vigorCost, threshold, unavailableReason }
+  }
+
+  private eventEscape(encounter: TEventEncounter, player: TPlayerState) {
+    const escape = this.escapeOption(
+      player,
+      encounter.card?.escapeThreshold ?? 10,
+      encounter.card?.noEscape ?? false
+    )
     return {
-      vigorCost,
-      threshold,
-      automatic,
-      unavailableReason,
+      ...escape,
+      unavailableReason: encounter.payments.length
+        ? ('eventPaymentStarted' as const)
+        : escape.unavailableReason,
     }
+  }
+
+  private combatEscape(state: TCombatState, player: TPlayerState) {
+    return this.escapeOption(
+      player,
+      state.card.escapeThreshold ?? this.config.combatEscapeThreshold,
+      state.card.noEscape
+    )
+  }
+
+  private resolveCombatEscape(
+    state: TCombatState,
+    index: number,
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>
+  ) {
+    if (combatIsTerminal(state, player.health)) {
+      this.settleCombat(index, state, player, cards)
+      return
+    }
+    const escape = this.combatEscape(state, player)
+    if (escape.unavailableReason) {
+      this.settleCombat(index, state, player, cards)
+      return
+    }
+    const rng = SeededRng.fromState(this.rngState)
+    const { succeeded } = this.rollEscape(player, escape, rng)
+    this.props.rngState = rng.state()
+    const paid = { ...player, vigor: player.vigor - escape.vigorCost }
+    if (succeeded)
+      this.settleCombat(index, state, paid, cards, { escaped: true })
+    else
+      this.finishCombatTurn(state, index, paid, cards, undefined, false, true)
   }
 
   private updateEventDeck(deck: TEventDeck): void {
@@ -2438,119 +2663,28 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         : resolution === 'setback'
           ? card.badOutcome
           : null
-    if (outcome && resolution !== 'escaped') {
-      const firstStep = encounter.outcome?.nextStep ?? 0
-      for (
-        let nextStep = firstStep;
-        nextStep < outcome.steps.length;
-        nextStep++
-      ) {
-        const step = outcome.steps[nextStep]
-        if (step.type === 'effect') {
-          player = this.applyEventOutcomeEffect(
-            player,
-            step.effect,
-            card.id,
-            nextStep,
-            encounter.id,
-            resolution,
-            ids
-          )
-          continue
-        }
-        const count =
-          step.type === 'searchReward'
-            ? 1
-            : step.type === 'drawRewards'
-              ? step.count
-              : step.copies
-        const firstCopy =
-          nextStep === firstStep ? (encounter.outcome?.nextCopy ?? 0) : 0
-        for (let copy = firstCopy; copy < count; copy++) {
-          const source = {
-            type: 'randomEvent',
-            encounterId: encounter.id,
-          } as const
-          let reward: { cardId: string; origin: TRewardOrigin } | null
-          switch (step.type) {
-            case 'drawRewards': {
-              const drawn = this.drawReward(encounter.zoneType)
-              if (drawn.type === 'gold') {
-                player = {
-                  ...player,
-                  gold: Math.min(
-                    this.config.purseCapacity,
-                    player.gold + drawn.amount
-                  ),
-                }
-                continue
-              }
-              reward = drawn
-              break
-            }
-            case 'searchReward': {
-              const found = this.searchReward(encounter.zoneType, step.cardId)
-              player = {
-                ...player,
-                lastRewardSearch: {
-                  encounterId: encounter.id,
-                  cardId: step.cardId,
-                  found,
-                },
-              }
-              reward = found
-                ? {
-                    cardId: step.cardId,
-                    origin: {
-                      type: 'rewardDeck',
-                      zoneType: encounter.zoneType,
-                    },
-                  }
-                : null
-              break
-            }
-            case 'grantReward':
-              reward = { cardId: step.cardId, origin: { type: 'fixed' } }
-              break
-          }
-          if (!reward) continue
-          const rewardCard = cards.get(reward.cardId)
-          if (
-            rewardCard?.type !== 'attribute' &&
-            rewardCard?.type !== 'item' &&
-            rewardCard?.type !== 'equipment'
-          )
-            continue
-          const delivered = this.addReward(player, rewardCard)
-          if (delivered) {
-            player = {
-              ...delivered,
-              lastRewardDelivery: {
-                rewardId: this.nextRewardId(ids),
-                cardId: reward.cardId,
-                origin: reward.origin,
-                disposition: 'kept',
-              },
-            }
-            continue
-          }
-          this.openReward(player, rewardCard, reward.origin, source, ids)
-          this.props.eventEncounter = {
-            ...encounter,
-            payments,
-            phase: resolution,
-            outcome: {
-              nextStep,
-              nextCopy: copy + 1,
-              startingPeak,
-              cause,
-              escape,
-            },
-          }
-          this.replaceActor(index, player)
-          return
-        }
+    const resolved = this.resolveOutcomeSteps(
+      player,
+      outcome?.steps ?? [],
+      encounter.outcome ?? { nextStep: 0, nextCopy: 0 },
+      encounter.zoneType,
+      card.id,
+      encounter.id,
+      resolution === 'success' ? 'success' : 'setback',
+      { type: 'randomEvent', encounterId: encounter.id },
+      cards,
+      ids
+    )
+    player = resolved.player
+    if (resolved.cursor && resolution !== 'escaped') {
+      this.props.eventEncounter = {
+        ...encounter,
+        payments,
+        phase: resolution,
+        outcome: { ...resolved.cursor, startingPeak, cause, escape },
       }
+      this.replaceActor(index, player)
+      return
     }
     const peak = Math.max(
       0,
@@ -2588,13 +2722,121 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         escape,
       },
     })
-    const deck = this.eventDecks.find(
-      ({ zoneType }) => zoneType === encounter.zoneType
-    )
-    if (deck)
-      this.updateEventDeck({ ...deck, discard: [...deck.discard, card.id] })
+    this.discardEventCard(encounter.zoneType, card.id)
     this.props.eventEncounter = null
     this.replaceActor(index, next)
+  }
+
+  private discardEventCard(zoneType: TEventDeck['zoneType'], cardId: string) {
+    const deck = this.eventDecks.find((entry) => entry.zoneType === zoneType)
+    if (deck)
+      this.updateEventDeck({ ...deck, discard: [...deck.discard, cardId] })
+  }
+
+  private resolveOutcomeSteps(
+    player: TPlayerState,
+    steps: readonly TRandomEventOutcomeStep[],
+    cursor: OutcomeCursor,
+    zoneType: TEventDeck['zoneType'],
+    cardId: string,
+    outcomeId: string,
+    phase: 'success' | 'setback',
+    source: TPendingReward['source'],
+    cards: ReadonlyMap<string, TCard>,
+    ids?: IdGenerator
+  ): { player: TPlayerState; cursor?: OutcomeCursor } {
+    const firstStep = cursor.nextStep
+    for (let nextStep = firstStep; nextStep < steps.length; nextStep++) {
+      const step = steps[nextStep]
+      if (step.type === 'effect') {
+        player = this.applyEventOutcomeEffect(
+          player,
+          step.effect,
+          cardId,
+          nextStep,
+          outcomeId,
+          phase,
+          ids,
+          source.type === 'combatEvent'
+        )
+        continue
+      }
+      const count =
+        step.type === 'searchReward'
+          ? 1
+          : step.type === 'drawRewards'
+            ? step.count
+            : step.copies
+      const firstCopy = nextStep === firstStep ? (cursor.nextCopy ?? 0) : 0
+      for (let copy = firstCopy; copy < count; copy++) {
+        let reward: { cardId: string; origin: TRewardOrigin } | null
+        switch (step.type) {
+          case 'drawRewards': {
+            const drawn = this.drawReward(zoneType)
+            if (drawn.type === 'gold') {
+              player = {
+                ...player,
+                gold: Math.min(
+                  this.config.purseCapacity,
+                  player.gold + drawn.amount
+                ),
+              }
+              continue
+            }
+            reward = drawn
+            break
+          }
+          case 'searchReward': {
+            const found = this.searchReward(zoneType, step.cardId)
+            player = {
+              ...player,
+              lastRewardSearch: {
+                encounterId: outcomeId,
+                cardId: step.cardId,
+                found,
+              },
+            }
+            reward = found
+              ? {
+                  cardId: step.cardId,
+                  origin: {
+                    type: 'rewardDeck',
+                    zoneType: zoneType,
+                  },
+                }
+              : null
+            break
+          }
+          case 'grantReward':
+            reward = { cardId: step.cardId, origin: { type: 'fixed' } }
+            break
+        }
+        if (!reward) continue
+        const rewardCard = cards.get(reward.cardId)
+        if (
+          rewardCard?.type !== 'attribute' &&
+          rewardCard?.type !== 'item' &&
+          rewardCard?.type !== 'equipment'
+        )
+          continue
+        const delivered = this.addReward(player, rewardCard)
+        if (delivered) {
+          player = {
+            ...delivered,
+            lastRewardDelivery: {
+              rewardId: this.nextRewardId(ids),
+              cardId: reward.cardId,
+              origin: reward.origin,
+              disposition: 'kept',
+            },
+          }
+          continue
+        }
+        this.openReward(player, rewardCard, reward.origin, source, ids)
+        return { player, cursor: { nextStep, nextCopy: copy + 1 } }
+      }
+    }
+    return { player }
   }
 
   private updateRewardDeck(
@@ -2828,6 +3070,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           delivery: action.choice === 'keep' ? 'inventory' : 'left',
         },
       })
+    } else if (source.type === 'combatEvent') {
+      this.finishCombatOutcome(index, player, cards, ids)
     } else {
       const encounter = this.eventEncounter
       if (encounter?.card && encounter.outcome) {
@@ -2856,9 +3100,13 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     effectIndex: number,
     encounterId: string,
     phase: 'success' | 'setback',
-    ids: IdGenerator | undefined
+    ids: IdGenerator | undefined,
+    inCombatOutcome: boolean
   ): TPlayerState {
-    const activations = effect.activation.filter(isExecutableActivation)
+    const activations = effect.activation
+      .filter(isExecutableActivation)
+      .filter(({ kind }) => !inCombatOutcome || kind !== 'heal')
+    if (activations.length === 0 && inCombatOutcome) return player
     const { player: changed } = applyActivations(
       player,
       activations,
@@ -3123,7 +3371,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 
   /** Encerrar sessão (REQ-21). Fora de sessão é rejeitado e nada muda. */
   endSession(at: Date): Either<'sessionNotActive' | 'combatInProgress', void> {
-    if (this.props.combat) return left('combatInProgress')
+    if (
+      this.props.combat ||
+      this.props.pendingTriggeredEffects?.continuation?.type === 'combatEntry'
+    )
+      return left('combatInProgress')
     switch (this.props.status) {
       case 'idle':
         return left('sessionNotActive')

@@ -98,6 +98,7 @@ export class TakePartyActionUseCase {
           return left(new ActionNotAllowedError(result.value))
         break
       }
+      case 'escapeCombat':
       case 'combatAttack':
       case 'useAbility':
       case 'activateCombatEffect':
@@ -129,7 +130,10 @@ export class TakePartyActionUseCase {
       case 'resolveEvent':
       case 'giveUpEvent':
       case 'escapeEvent': {
-        const { zone, dimension, cards } = await this.findEventCatalog(party)
+        const { zone, dimension, cards } = await this.findEventCatalog(
+          party,
+          action.type === 'revealEvent' && this.combatEnabled
+        )
         const result = party.takeEventAction(
           action,
           zone,
@@ -358,7 +362,7 @@ export class TakePartyActionUseCase {
     return right({ party })
   }
 
-  private async findEventCatalog(party: Party) {
+  private async findEventCatalog(party: Party, revealingCombat = false) {
     const player = party.members.find(({ id }) =>
       id.equals(party.turn.memberId)
     )?.player
@@ -369,7 +373,10 @@ export class TakePartyActionUseCase {
     const zone = foundZone?.type === 'zone' ? foundZone : null
     const dimension =
       foundDimension?.type === 'dimension' ? foundDimension : null
-    const zoneType = party.eventEncounter?.zoneType ?? zone?.zoneType
+    const zoneType =
+      party.eventEncounter?.zoneType ??
+      party.combatOutcomeZone ??
+      zone?.zoneType
     const deck = dimension?.eventDecks?.find(
       (entry) => entry.zoneType === zoneType
     )
@@ -389,9 +396,11 @@ export class TakePartyActionUseCase {
       ...[
         party.eventEncounter?.card?.goodOutcome,
         party.eventEncounter?.card?.badOutcome,
+        party.combatOutcomeCard?.goodOutcome,
+        party.combatOutcomeCard?.badOutcome,
       ].flatMap(
         (outcome) =>
-          outcome?.steps.flatMap((step) =>
+          outcome?.steps?.flatMap((step) =>
             step.type === 'grantReward' || step.type === 'searchReward'
               ? [step.cardId]
               : []
@@ -413,6 +422,24 @@ export class TakePartyActionUseCase {
       [...ids].map((id) => this.cardCatalog.findCard(id))
     )) {
       if (card) cards.set(card.id, card)
+    }
+    if (revealingCombat) {
+      const grants = new Set<string>()
+      for (const card of cards.values()) {
+        if (card.type !== 'combatEvent') continue
+        for (const step of [
+          ...(card.goodOutcome.steps ?? []),
+          ...(card.badOutcome.steps ?? []),
+        ]) {
+          if (step.type === 'grantReward' && !ids.has(step.cardId))
+            grants.add(step.cardId)
+        }
+      }
+      for (const card of await Promise.all(
+        [...grants].map((id) => this.cardCatalog.findCard(id))
+      )) {
+        if (card) cards.set(card.id, card)
+      }
     }
     if (zone) cards.set(zone.id, zone)
     if (dimension) cards.set(dimension.id, dimension)
