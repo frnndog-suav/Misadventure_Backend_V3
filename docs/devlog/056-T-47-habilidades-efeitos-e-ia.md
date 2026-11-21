@@ -1,7 +1,7 @@
 # 056 — T-47 — Habilidades, efeitos e IA
 
 - Data — 2026-11-20
-- Status — aguardando revisão
+- Status — concluída
 - Spec — v0.62
 - Contrato — v0.64, acordado
 - Horas — a preencher pelo autor
@@ -85,6 +85,12 @@ npm.cmd exec -- vitest run src/domain/campaign/application/use-cases/take-party-
 - Na antecipação, pagar deve terminar com 17 PV e 9 de ouro. Recusar deve terminar com 15 PV e 10 de ouro. Escolher o automático primeiro deve liberar o pagamento de 11 de ouro e terminar com 17 PV e 1 de ouro. Uma tentativa de pagar acima do saldo ou com o ID anterior deve preservar escolha, save e RNG.
 - No combate, a primeira habilidade inimiga deve pausar com 18 PV e 10 de ouro. Pagar deve aplicar a cura, executar o ataque básico pendente e devolver o turno ao jogador com 17 PV e 9 de ouro.
 - A T-49 cobre a persistência no mapper, o GET após recarga e o lote `combatUpdates` do POST na integração HTTP. O contrato segue acordado até a validação do backend.
+
+## Conferência pós-implementação em `eafdaae`
+
+- A saída inicial do Vitest disponível na retomada registrava 13 falhas em um arquivo, incluindo casos de fuga de REQ-114. Os quatro casos de escolha de efeito disparado de REQ-119 estavam ausentes e as linhas da pilha divergiam do arquivo no commit `eafdaae`.
+- Conferência em `random-event.test.ts`: `pay` espera 17 PV e 9 de ouro; `decline` espera 15 PV e 10 de ouro; `automaticFirst` espera 17 PV e 1 de ouro após recalcular `canPay`, com recusas por pagamento inválido e ID anterior sem gravação nem avanço do RNG. O quarto caso espera a pausa do turno inimigo com 18 PV e 10 de ouro e o retorno ao turno do jogador com 17 PV e 9 de ouro após o pagamento e o ataque pendente.
+- O autor confirmou que a execução de verificação passou sem erros. O retorno foi verbal, sem a contagem de suítes e testes. A revisão da T-47 foi concluída e a próxima tarefa prevista é a T-48 (REQ-122).
 
 ## Commit sugerido
 
