@@ -17,6 +17,8 @@ const haste = 'fixture.t67-haste'
 const paidStrike = 'fixture.t67-paid-strike'
 const fieldAid = 'fixture.t67-field-aid'
 const paymentEvent = 'fixture.t67-payment-event'
+const batchPayment = 'fixture.t67-batch-payment'
+const batchResources = ['fixture.iron-ore', 'fixture.silver-fish']
 const legacyCombat = 'fixture.t67-legacy-combat'
 const catalogCombat = 'fixture.t67-catalog-combat'
 const classWeapon = 'fixture.t67-class-weapon'
@@ -197,7 +199,46 @@ async function prepareContent() {
       }],
     },
   ]
+  const discard = (attribute, random) => ({
+    kind: 'discardFromHand',
+    requirements: [{ attribute, count: 1 }],
+    excludeAttributes: [],
+    constraint: 'none',
+    random,
+  })
+  const offerItem = {
+    kind: 'offerResources',
+    requirements: [{ resource: 'item', count: 1 }],
+    constraint: 'none',
+    exclude: [],
+  }
   for (const scenarioAbility of [
+    {
+      ...ability,
+      id: batchPayment,
+      name: 'Pagamento em Lote',
+      text: 'Pague o lote para recuperar 1 PV.',
+      target: 'self',
+      element: null,
+      power: null,
+      cost: [
+        { kind: 'payGold', amount: 2 },
+        discard('dexterity', true),
+        discard('strength', false),
+        discard('strength', false),
+        { kind: 'abandonEquipment', count: 1, slots: ['head'], excludeSlots: [], random: false },
+        offerItem,
+        offerItem,
+      ],
+      effects: [{
+        text: 'Recupere 1 PV.',
+        trigger: null,
+        cost: [],
+        activation: [{ kind: 'heal', amount: 1 }],
+        duration: { kind: 'immediate' },
+        mark: null,
+      }],
+    },
     {
       ...ability,
       id: paidStrike,
@@ -335,7 +376,7 @@ async function prepareCampaigns(mode) {
     throw new Error('A API ainda não está usando o catálogo da T-67.')
   if (mode !== 'stale') await api(`/catalog/cards/${ambush}`)
   if (mode === 'legacy') await api(`/catalog/cards/${reserveEvent}`)
-  if (mode === 'initiative') await api(`/catalog/cards/${initiative}`)
+  if (mode === 'initiative' || mode === 'payments') await api(`/catalog/cards/${initiative}`)
   if (mode === 'outcomes') await api(`/catalog/cards/${defeat}`)
   if (mode === 'catalog') {
     for (const cardId of [legacyCombat, catalogCombat, `${catalogCombat}-null`, `${catalogCombat}-zero`, classWeapon]) {
@@ -343,6 +384,7 @@ async function prepareCampaigns(mode) {
     }
   }
   if (mode === 'cooldown') await api(`/catalog/cards/${fieldAid}-weapon`)
+  if (mode === 'payments') await api(`/catalog/cards/${batchPayment}-weapon`)
   if (mode === 'abilities') {
     await api(`/catalog/cards/${paidStrike}-weapon`)
     await api(`/catalog/cards/${fieldAid}-weapon`)
@@ -368,6 +410,8 @@ async function prepareCampaigns(mode) {
         ]
       : mode === 'cooldown'
       ? [{ name: 'T-67 — Reset de recarga', cardId: wolves, abilityId: fieldAid }]
+      : mode === 'payments'
+      ? [{ name: 'T-67 — Pagamento em lote', cardId: initiative, abilityId: batchPayment }]
       : mode === 'outcomes'
       ? [
           { name: 'T-67 — Turno atual', cardId: wolves },
@@ -410,6 +454,16 @@ async function prepareCampaigns(mode) {
         player.equipment.weapon = `${scenario.abilityId}-weapon`
         Object.assign(player.modifiers, { celerity: 100, accuracy: 100, attack: 0, defense: 100 })
         if (mode === 'cooldown') player.health = Math.max(1, player.baseHealth - 1)
+        if (mode === 'payments') {
+          player.health = Math.max(1, player.baseHealth - 1)
+          player.equipment.head = 'fixture.iron-helm'
+          player.hand = [
+            'fixture.strength-basic', 'fixture.strength-basic',
+            'fixture.dexterity-basic', 'fixture.dexterity-basic',
+          ]
+          delete player.handCopies
+          player.inventory = batchResources.map(cardId => ({ cardId, quantity: 1 }))
+        }
         if (scenario.abilityId === paidStrike) {
           player.hand = [...player.hand, 'fixture.dexterity-basic']
           delete player.handCopies
@@ -472,6 +526,34 @@ async function prepareCampaigns(mode) {
         })
         const party = await api(`/parties/${id}`)
         const playerState = party.members[0].player
+        if (mode === 'payments') {
+          const option = party.combat?.abilities.find(({ abilityId }) => abilityId === batchPayment)
+          const costs = option?.paymentCosts ?? []
+          const strengthIds = playerState.handCopies
+            .filter(({ cardId }) => cardId === 'fixture.strength-basic')
+            .map(({ copyId }) => copyId)
+          const expectedTypes = [
+            'automatic', 'automatic', 'handCards', 'handCards', 'equipmentSlots', 'resources', 'resources',
+          ]
+          if (
+            party.combat?.turn.phase !== 'prepare' ||
+            party.combat.turn.actorId !== party.combat.memberId ||
+            !playerState.availableActions.includes('useAbility') ||
+            costs.length !== expectedTypes.length ||
+            costs.some((cost, index) => cost.costIndex !== index || cost.type !== expectedTypes[index]) ||
+            new Set(strengthIds).size !== 2 ||
+            !costs.slice(2, 4).every(cost => cost.count === 1 &&
+              cost.eligibleCopyIds.length === 2 && strengthIds.every(id => cost.eligibleCopyIds.includes(id))) ||
+            costs[4].count !== 1 || costs[4].eligibleSlots.join() !== 'head' ||
+            !costs.slice(5).every(cost => cost.count === 1 && cost.eligibleResources.length === 2 &&
+              batchResources.every(id => cost.eligibleResources.some(({ cardId, maxCopies }) => cardId === id && maxCopies === 1)))
+          ) {
+            throw new Error(`Campanha ${id} sem as opções de pagamento esperadas.`)
+          }
+          console.log(`${scenario.name}  ${url}/parties/${id}`)
+          console.log(JSON.stringify({ combatId: party.combat.id, turnId: party.combat.turn.id, ...option }))
+          continue
+        }
         const inCombat = scenario.abilityId === paidStrike
         const options = inCombat ? party.combat?.abilities : playerState.usableAbilities
         const action = inCombat ? 'combatAttack' : 'prepare'
@@ -590,6 +672,8 @@ async function main() {
       return prepareCampaigns('outcomes')
     case 'catalog':
       return prepareCampaigns('catalog')
+    case 'payments':
+      return prepareCampaigns('payments')
     case 'legacy':
       return prepareCampaigns('legacy')
     case 'initiative':
@@ -605,7 +689,7 @@ async function main() {
     case 'snapshot':
       return readSnapshot(process.argv[3])
     default:
-      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, catalog, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
+      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, catalog, payments, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
   }
 }
 
