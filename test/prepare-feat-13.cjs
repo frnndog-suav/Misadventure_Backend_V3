@@ -9,6 +9,12 @@ const { createHash } = require('node:crypto')
 const wolves = 'fixture.howling-wolves'
 const ambush = 'fixture.fire-ambush'
 const blade = 'fixture.blade-of-dusk'
+const traveler = 'fixture.wounded-traveler'
+const reserveEvent = 'fixture.t67-traveler-reserve'
+const initiative = 'fixture.t67-initiative'
+const haste = 'fixture.t67-haste'
+const tiedCelerity = 10
+const hasteDuration = { kind: 'forCombatCycles', cycles: 2 }
 const ability = {
   id: 'fixture.fire',
   name: 'Fogo',
@@ -72,6 +78,18 @@ async function prepareContent() {
         goodOutcome: empty,
         badOutcome: empty,
       },
+      {
+        ...card,
+        id: initiative,
+        title: 'Lobos Uivantes — Celeridade',
+        enemies: [{
+          ...enemy,
+          count: 2,
+          modifiers: { ...modifiers, accuracy: 0, celerity: tiedCelerity },
+        }],
+        goodOutcome: empty,
+        badOutcome: empty,
+      },
     ])
   )
   const equipmentPath = join(root, 'fixture', 'equipment.json')
@@ -98,9 +116,80 @@ async function prepareContent() {
         },
       ],
     },
+    {
+      ...ability,
+      id: haste,
+      name: 'Acelerar',
+      text: 'Ganhe 5 de Celeridade por 2 ciclos.',
+      form: 'continuous',
+      element: null,
+      power: null,
+      target: 'self',
+      duration: hasteDuration,
+      effects: [{
+        text: 'Ganhe 5 de Celeridade.',
+        trigger: null,
+        cost: [],
+        activation: [{ kind: 'modifierFlat', changes: [{ modifier: 'celerity', amount: 5 }] }],
+        duration: hasteDuration,
+        mark: 'buff',
+      }],
+    },
   ]
   await writeFile(equipmentPath, JSON.stringify(equipment))
+  const randomEventPath = join(root, 'fixture', 'randomEvent.json')
+  const randomEvents = JSON.parse(await readFile(randomEventPath, 'utf8'))
+  const travelerCard = randomEvents.find(({ id }) => id === traveler)
+  randomEvents.push({ ...travelerCard, id: reserveEvent, title: 'Viajante na Reserva' })
+  await writeFile(randomEventPath, JSON.stringify(randomEvents))
+
+  const dimensionPath = join(root, 'fixture', 'dimension.json')
+  const dimensions = JSON.parse(await readFile(dimensionPath, 'utf8'))
+  const urban = dimensions[0].eventDecks.find(({ zoneType }) => zoneType === 'urban')
+  urban.cards.find(({ cardId }) => cardId === wolves).copies = 2
+  urban.cards.push({ cardId: reserveEvent, copies: 2 })
+  await writeFile(dimensionPath, JSON.stringify(dimensions))
   console.log(root)
+}
+
+async function prepareLegacyCampaigns(api, db, url) {
+  for (const pile of [[reserveEvent], []]) {
+    const name = `T-67 v8 - ${pile.length ? 'deck misto' : 'pilha vazia'}`
+    const { id } = await api('/parties', {
+      name,
+      characterName: 'Lia',
+      playerClass: 'warrior',
+    })
+    await api(`/parties/${id}/session`, {})
+    const { rows: [initial] } = await db.query('select state from parties where id = $1', [id])
+    initial.state.rngState = [0, 0, 0, 10]
+    initial.state.eventDecks = [{ zoneType: 'urban', cards: [traveler], discard: [] }]
+    await db.query('update parties set state = $1 where id = $2', [initial.state, id])
+
+    const actionPath = `/parties/${id}/actions`
+    const started = await api(actionPath, { type: 'startEvent' })
+    await api(actionPath, {
+      type: 'revealEvent',
+      encounterId: started.randomEventEncounter.id,
+    })
+    const { rows: [{ state }] } = await db.query('select state from parties where id = $1', [id])
+    if (state.eventEncounter?.card?.id !== traveler)
+      throw new Error(`A campanha ${id} não abriu o encontro esperado.`)
+    state.schemaVersion = 8
+    for (const { player } of state.members) {
+      delete player.abilityUsage
+      delete player.brokenEquipment
+    }
+    for (const key of ['combat', 'combatZone', 'lastCombatResult', 'combatOutcome',
+      'pendingTriggeredEffects', 'triggeredEffectSequence', 'upgradedCombatDecks']) {
+      delete state[key]
+    }
+    state.eventDecks = [{ zoneType: 'urban', cards: pile, discard: [reserveEvent] }]
+    await db.query('update parties set state = $1 where id = $2', [state, id])
+    const saveUrl = `/parties/${id}`
+    await api(saveUrl)
+    console.log(JSON.stringify({ name, id, url: new URL(saveUrl, url).href, encounter: traveler, pile, discard: [reserveEvent] }))
+  }
 }
 
 async function prepareCampaigns(mode) {
@@ -128,14 +217,23 @@ async function prepareCampaigns(mode) {
   if (!JSON.stringify(wolfCard).includes('Compre uma recompensa.'))
     throw new Error('A API ainda não está usando o catálogo da T-67.')
   if (mode !== 'stale') await api(`/catalog/cards/${ambush}`)
+  if (mode === 'legacy') await api(`/catalog/cards/${reserveEvent}`)
+  if (mode === 'initiative') await api(`/catalog/cards/${initiative}`)
   const db = new Client({ connectionString: process.env.DATABASE_URL })
   await db.connect()
   try {
+    if (mode === 'legacy') return await prepareLegacyCampaigns(api, db, url)
     const scenarios = [
       { name: 'T-67 — Efeito disparado', cardId: ambush },
       { name: 'T-67 — Reflexão fatal', cardId: wolves },
     ]
-    for (const scenario of mode === 'stale' ? [scenarios[1]] : scenarios) {
+    const selected = mode === 'initiative'
+      ? [
+          { name: 'T-67 — Empate de Celeridade', cardId: initiative },
+          { name: 'T-67 — Mudança de Celeridade', cardId: initiative, equipHaste: true },
+        ]
+      : mode === 'stale' ? [scenarios[1]] : scenarios
+    for (const scenario of selected) {
       const pause = scenario.cardId === ambush
       const { id } = await api('/parties', {
         name: scenario.name,
@@ -151,7 +249,12 @@ async function prepareCampaigns(mode) {
       state.eventDecks = [
         { zoneType: 'urban', cards: [scenario.cardId], discard: [] },
       ]
-      if (pause) {
+      if (scenario.cardId === initiative) {
+        player.peak = 0
+        Object.assign(player.modifiers, { celerity: tiedCelerity, evasion: 100 })
+        for (const slot of Object.keys(player.equipment)) player.equipment[slot] = null
+        if (scenario.equipHaste) player.equipment.weapon = blade
+      } else if (pause) {
         Object.assign(player, { peak: 0, health: 20, gold: 10, vigor: 0 })
         player.equipment.weapon = blade
         Object.assign(player.modifiers, { defense: 0, evasion: 0, celerity: 8 })
@@ -163,6 +266,7 @@ async function prepareCampaigns(mode) {
         Object.assign(player.modifiers, { accuracy: 100, defense: 100 })
       }
       await db.query('update parties set state = $1 where id = $2', [state, id])
+      if (mode === 'initiative') await api(`/parties/${id}`)
       console.log(`${scenario.name}  ${url}/parties/${id}`)
       if (mode === 'stale') {
         const started = await api(`/parties/${id}/actions`, {
@@ -233,10 +337,14 @@ async function main() {
       return prepareCampaigns()
     case 'stale':
       return prepareCampaigns('stale')
+    case 'legacy':
+      return prepareCampaigns('legacy')
+    case 'initiative':
+      return prepareCampaigns('initiative')
     case 'snapshot':
       return readSnapshot(process.argv[3])
     default:
-      throw new Error('Use content, campaigns, stale ou snapshot <id>.')
+      throw new Error('Use content, campaigns, legacy, initiative, stale ou snapshot <id>.')
   }
 }
 

@@ -83,6 +83,20 @@ Use uma campanha solo com carta executável de dois inimigos de 1 PV, Reflexão 
 - O frontend reenviou o ataque obsoleto uma vez e recebeu HTTP 409 `ACTION_NOT_ALLOWED` com motivo `staleCombatTurn`. Sem outra ação na campanha, a segunda leitura no PostgreSQL retornou o mesmo SHA-256 da linha completa, o mesmo `rngState` e o mesmo `savedAt`. O cenário integrado de recusa foi aprovado. A T-67 segue aberta para os demais cenários da matriz.
 - O frontend confirmou o registro da aprovação no devlog 086 e a liberação da campanha. O próximo ponto da T-67 é preparar os saves para os demais cenários da matriz do CONTRATO v0.65.
 
+### Preparação da próxima rodada da T-67
+
+- `test/prepare-feat-13.cjs` ganhou o modo `legacy`. Prepara duas campanhas v8 com o Viajante Ferido revelado, um evento no descarte e duas ocorrências de Lobos Uivantes na composição urbana. Uma variante começa com `fixture.t67-traveler-reserve` na pilha e a outra com a pilha vazia.
+- O validador de conteúdo aceitou o catálogo temporário com 26 cartas. `node --check` e `git diff --check` passaram. A criação e a leitura dos saves pela API aguardam a confirmação do PostgreSQL de teste e do backend com o catálogo atualizado.
+- Após fechar a escolha antiga, a próxima inicialização elegível deve acrescentar as duas ocorrências de Lobos Uivantes no fundo da pilha. Na variante vazia, os lobos devem aparecer antes da reciclagem do descarte. Os demais grupos da matriz ainda precisam de fixtures e saves próprios.
+- Após a confirmação do ambiente, `node test/prepare-feat-13.cjs legacy` criou o deck misto `f739c4d8-18e9-4090-89f1-968623044dd3` e a pilha vazia `6a2e39f1-940a-4631-95a2-1134be32e2a0`. Em `http://localhost:3333`, `GET /parties/:id` retornou HTTP 200, fase `encounter` e carta `fixture.wounded-traveler` nos dois saves. A resolução fica para a validação integrada.
+
+- O frontend confirmou a recarga e a primeira revelação de ambas as variantes. A consulta ao PostgreSQL após a revelação confirmou snapshot v9 nos dois saves. No deck misto, a carta revelada foi `fixture.t67-traveler-reserve` e a pilha ficou com dois `fixture.howling-wolves`. Na variante vazia, a API confirmou combate com `fixture.howling-wolves` e a pilha ficou com um lobo. O descarte urbano em ambos, em ordem, foi `fixture.t67-traveler-reserve`, `fixture.wounded-traveler`. O RNG persistido permaneceu `[0,0,0,10]`, a mesma semente da preparação. A compra foi da primeira carta elegível, sem reciclagem, e o save de combate ficou na janela `prepare`. Cenário v8 aprovado. Os demais cenários da T-67 seguem pendentes.
+
 ## Commit sugerido
 
 `feat/persist and expose combat state (t-49)`
+### Empate e mudança de Celeridade na T-67
+
+- O modo `initiative` de `test/prepare-feat-13.cjs` cria duas campanhas com Celeridade 10 para o jogador e para as duas cópias do mesmo lobo. A campanha de mudança equipa a arma com Acelerar, habilidade gratuita que concede +5 de Celeridade por dois ciclos.
+- `node --check test/prepare-feat-13.cjs` e `git diff --check` passaram. `npm.cmd run validate:content` aprovou o catálogo temporário com 27 cartas.
+- A criação das campanhas aguarda a confirmação do PostgreSQL de teste e do backend iniciado com esse catálogo. Na revelação, conferir os IDs distintos na ordem impressa e cruzá-los com `combatTurnStarted`. Depois de Acelerar, conferir que `combat.order` permanece igual no ciclo 1 e que o jogador abre o ciclo 2 após `endCombatTurn`. A campanha de controle deve manter os lobos na frente no ciclo 2.
