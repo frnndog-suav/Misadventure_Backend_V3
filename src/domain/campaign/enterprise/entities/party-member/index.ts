@@ -16,6 +16,18 @@ import type { TVault } from '../../vault'
 /** Na FEAT-20 entra o ajudante de IA. */
 export type TPartyMemberKind = 'human'
 
+export type TKnockoutResult = Readonly<{
+  id: string
+  combatId: string | null
+  respawnZoneId: string
+  healthRestored: number
+  peakLost: number
+  vigorLost: number
+  purseGoldLost: number
+  roundAtKnockout: number
+  roundAfterRespawn: number
+}>
+
 /** Estado do jogador na partida (D-42). `maxHealth` é derivado (README 7.4). */
 export type TPlayerState = Readonly<{
   /** Na ordem em que foram obtidas (README 8.2). */
@@ -54,6 +66,7 @@ export type TPlayerState = Readonly<{
   nextTurnActionPointDebt?: number
   lastRandomEvent?: TEventResult | null
   down?: boolean
+  lastKnockout?: TKnockoutResult | null
   skipNextTurn?: boolean
   automaticEventEscape?: boolean
   discard: readonly string[]
@@ -107,6 +120,16 @@ export class PartyMember extends Entity<TPartyMemberProps> {
   }
 
   static create(props: TPartyMemberProps, id: UniqueEntityID): PartyMember {
-    return new PartyMember({ ...props }, id)
+    return new PartyMember(
+      {
+        ...props,
+        player: {
+          ...props.player,
+          lastKnockout: props.player.lastKnockout ?? null,
+          skipNextTurn: props.player.skipNextTurn ?? false,
+        },
+      },
+      id
+    )
   }
 }

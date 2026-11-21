@@ -4,6 +4,7 @@ import { PartiesRepository } from '@/domain/campaign/application/repositories/pa
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
 
 import { PartyNotFoundError } from '../_errors/party-not-found-error'
+import type { ResumeLegacyKnockout } from '../resume-legacy-knockout'
 
 export interface TStartSessionUseCaseRequest {
   partyId: string
@@ -18,7 +19,8 @@ export type TStartSessionUseCaseResponse = Either<
 export class StartSessionUseCase {
   constructor(
     private readonly partiesRepository: PartiesRepository,
-    private readonly clock: Clock
+    private readonly clock: Clock,
+    private readonly resumeKnockout: ResumeLegacyKnockout
   ) {}
 
   execute({
@@ -28,7 +30,10 @@ export class StartSessionUseCase {
       partyId,
       async (party, save) => {
         if (!party) return left(new PartyNotFoundError())
-        if (party.startSession(this.clock.now())) await save(party)
+        const at = this.clock.now()
+        const started = party.startSession(at)
+        const resumed = await this.resumeKnockout.execute(party, at)
+        if (started || resumed) await save(party)
         return right({ party })
       }
     )

@@ -120,7 +120,7 @@ describe('Combate solo (HTTP e save)', () => {
     return id
   }
 
-  it('REQ-123/REQ-127: recarrega combate, preserva a escolha sem PA e devolve o respawn no POST', async () => {
+  it('REQ-123/REQ-127/REQ-129: preserva a escolha legada sem PA e persiste o respawn no POST', async () => {
     const id = await setup()
     const started = await act(id, { type: 'startEvent' }).expect(200)
     const revealed = await act(id, {
@@ -164,11 +164,12 @@ describe('Combate solo (HTTP e save)', () => {
       turnId: active.turn.id,
       targetId: active.enemies[1].id,
     }).expect(200)
-    expect(
-      victory.body.combatUpdates.map(({ type }: { type: string }) => type)
-    ).toEqual(['combatDamageResolved', 'combatEnded'])
+    const { combatUpdates: victoryUpdates, ...victorySnapshot } = victory.body
+    expect(victoryUpdates.map(({ type }: { type: string }) => type)).toEqual([
+      'combatDamageResolved',
+      'combatEnded',
+    ])
     const pending = (await get(id).expect(200)).body
-    const { combatUpdates: _, ...victorySnapshot } = victory.body
     expect(pending).toEqual(victorySnapshot)
     expect(pending).toMatchObject({
       turn: { ...started.body.turn, actionPoints: 0 },
@@ -187,12 +188,34 @@ describe('Combate solo (HTTP e save)', () => {
         },
       ],
     })
-    expect(
-      DrizzlePartyMapper.toDomain(await stored(id)).eventDecks[0].discard
-    ).toEqual([])
+    const paused = DrizzlePartyMapper.toDrizzle(
+      DrizzlePartyMapper.toDomain(await stored(id))
+    ).state
+    expect(paused.eventDecks?.[0].discard).toEqual([])
+    expect(paused.rewardDecks?.[0].cards).toEqual([])
+    expect(paused.combatOutcome?.cursor).toEqual({ nextStep: 0, nextCopy: 1 })
+    await db()
+      .update(parties)
+      .set({
+        state: {
+          ...paused,
+          schemaVersion: 9,
+          members: paused.members.map((member) => ({
+            ...member,
+            player: {
+              ...member.player,
+              lastKnockout: undefined,
+              skipNextTurn: undefined,
+            },
+          })),
+        },
+      })
+      .where(eq(parties.id, id))
+    expect((await get(id).expect(200)).body).toEqual(pending)
     await request(server()).post(`/parties/${id}/session/end`).expect(200)
-    await request(server()).post(`/parties/${id}/session`).expect(200)
-    const reopened = (await get(id).expect(200)).body
+    const { body: reopened } = await request(server())
+      .post(`/parties/${id}/session`)
+      .expect(200)
     expect(reopened).toMatchObject({
       turn: pending.turn,
       pendingRewards: pending.pendingRewards,
@@ -206,9 +229,13 @@ describe('Combate solo (HTTP e save)', () => {
         },
       ],
     })
-    expect(
-      DrizzlePartyMapper.toDomain(await stored(id)).eventDecks[0].discard
-    ).toEqual([])
+    const resumed = DrizzlePartyMapper.toDrizzle(
+      DrizzlePartyMapper.toDomain(await stored(id))
+    ).state
+    expect(resumed.combatOutcome).toEqual(paused.combatOutcome)
+    expect(resumed.rngState).toEqual(paused.rngState)
+    expect(resumed.eventDecks).toEqual(paused.eventDecks)
+    expect(resumed.rewardDecks).toEqual(paused.rewardDecks)
     const resolved = await act(id, {
       type: 'resolveReward',
       rewardId: pending.pendingRewards[0].id,
@@ -230,12 +257,145 @@ describe('Combate solo (HTTP e save)', () => {
         },
       ],
     })
-    expect(snapshot.members[0].player.health).toBeGreaterThan(0)
+    const player = snapshot.members[0].player
+    expect(player.health).toBeGreaterThan(0)
+    expect(snapshot.turn.round).toBe(pending.turn.round + 2)
+    expect(player.lastKnockout).toMatchObject({
+      id: expect.any(String),
+      combatId: combat.id,
+      respawnZoneId: player.zoneId,
+      healthRestored: player.health,
+      roundAtKnockout: pending.turn.round,
+      roundAfterRespawn: snapshot.turn.round,
+    })
+    const persisted = await stored(id)
     expect((await get(id).expect(200)).body).toEqual(snapshot)
-    expect(
-      DrizzlePartyMapper.toDomain(await stored(id)).eventDecks[0].discard
-    ).toEqual([wolves])
+    expect(await stored(id)).toEqual(persisted)
+    const finished = DrizzlePartyMapper.toDrizzle(
+      DrizzlePartyMapper.toDomain(persisted)
+    ).state
+    expect(finished.eventDecks?.[0].discard).toEqual([wolves])
+    expect(finished.rewardDecks).toEqual(paused.rewardDecks)
+    expect(finished.rngState).toEqual(paused.rngState)
+    expect(pending.members[0].player.lastKnockout).toBeNull()
   })
+
+  it.each([
+    { entry: 'GET inativo', respawn: 'saved' },
+    { entry: 'GET inativo', respawn: 'missing' },
+    { entry: 'reabertura', respawn: 'invalid' },
+  ])(
+    'REQ-129: conclui derrota legada uma vez via $entry ($respawn)',
+    async ({ entry, respawn }) => {
+      const id = await setup()
+      await request(server()).post(`/parties/${id}/session/end`).expect(200)
+      const state = DrizzlePartyMapper.toDrizzle(
+        DrizzlePartyMapper.toDomain(await stored(id))
+      ).state
+      const [member] = state.members
+      const city = state.dimension.startingCityZoneId
+      const lastCombatResult = {
+        combatId: 'legacy-combat',
+        cardId: wolves,
+        memberId: member.id,
+        resolution: 'defeat',
+        cause: 'playerDown',
+        playerDown: true,
+        peakDelta: 0,
+      }
+      await db()
+        .update(parties)
+        .set({
+          state: {
+            ...state,
+            schemaVersion: 9,
+            turn: { ...state.turn, round: 6, actionPoints: 0 },
+            eventDecks: [{ zoneType: 'urban', cards: [], discard: [wolves] }],
+            lastCombatResult,
+            members: [
+              {
+                ...member,
+                player: {
+                  ...member.player,
+                  health: 0,
+                  down: true,
+                  lastKnockout: undefined,
+                  skipNextTurn: undefined,
+                  peak: 10,
+                  vigor: 9,
+                  gold: 32,
+                  vault: { ...member.player.vault, gold: 80 },
+                  respawnZoneId: {
+                    saved: city,
+                    missing: undefined,
+                    invalid: 'missing-zone',
+                  }[respawn],
+                },
+              },
+            ],
+          },
+        })
+        .where(eq(parties.id, id))
+
+      const open = () => request(server()).post(`/parties/${id}/session`)
+      const { body: first } = await (
+        entry === 'reabertura' ? open() : get(id)
+      ).expect(200)
+      expect(first).not.toHaveProperty('combatUpdates')
+      expect(first).toMatchObject({
+        status: entry === 'reabertura' ? 'inSession' : 'idle',
+        turn: { round: 8, actionPoints: 1 },
+        lastCombatResult,
+        pendingRewards: [],
+        members: [
+          {
+            player: {
+              down: false,
+              skipNextTurn: false,
+              zoneId: city,
+              respawnZoneId: city,
+              peak: 9,
+              vigor: 4,
+              gold: 29,
+              vault: { gold: 80 },
+              lastKnockout: {
+                id: expect.any(String),
+                combatId: lastCombatResult.combatId,
+                respawnZoneId: city,
+                peakLost: 1,
+                vigorLost: 5,
+                purseGoldLost: 3,
+                roundAtKnockout: 6,
+                roundAfterRespawn: 8,
+              },
+            },
+          },
+        ],
+      })
+      const persisted = await stored(id)
+      expect((await get(id).expect(200)).body).toEqual(first)
+      expect(await stored(id)).toEqual(persisted)
+      const restored = DrizzlePartyMapper.toDomain(persisted)
+      expect(restored.rngState).toEqual(state.rngState)
+      expect(restored.eventDecks[0].discard).toEqual([wolves])
+      if (entry === 'reabertura')
+        await request(server()).post(`/parties/${id}/session/end`).expect(200)
+      const { body: reopened } = await open().expect(200)
+      expect(reopened.turn).toEqual(first.turn)
+      expect(reopened.lastCombatResult).toEqual(first.lastCombatResult)
+      const player = first.members[0].player
+      expect(reopened.members[0].player).toMatchObject({
+        lastKnockout: player.lastKnockout,
+        health: player.health,
+        peak: player.peak,
+        vigor: player.vigor,
+        gold: player.gold,
+        vault: player.vault,
+        zoneId: player.zoneId,
+        respawnZoneId: player.respawnZoneId,
+      })
+    }
+  )
 
   it('D-110: inicializa o deck v8 uma vez, antes de reciclar e sem gastar RNG', async () => {
     const id = await setup({ legacy: true, pile: [], discard: [traveler] })

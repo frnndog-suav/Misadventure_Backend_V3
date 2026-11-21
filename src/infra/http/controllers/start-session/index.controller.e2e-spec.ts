@@ -1,6 +1,7 @@
 import type { INestApplication } from '@nestjs/common'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import type { TPartyHttp } from '../../presenters/party-presenter'
 import { createApp } from '../../../../../test/lab-app'
 import {
   ISO_UTC,
@@ -26,6 +27,7 @@ describe('POST /parties/:partyId/session (e2e)', () => {
 
   it('REQ-20: idle → inSession, gravado; repetir devolve o grupo inalterado', async () => {
     const created = await postParty(app)
+    const [member] = created.members as TPartyHttp['members']
 
     const started = await request(app.getHttpServer()).post(
       `/parties/${created.id}/session`
@@ -36,6 +38,23 @@ describe('POST /parties/:partyId/session (e2e)', () => {
       ...created,
       status: 'inSession',
       savedAt: expect.stringMatching(ISO_UTC),
+      members: [
+        {
+          ...member,
+          player: {
+            ...member.player,
+            availableActions: [
+              'move',
+              'recover',
+              'adjustDeck',
+              'useVault',
+              'saveRespawnPoint',
+              'startEvent',
+              'endTurn',
+            ],
+          },
+        },
+      ],
     })
     expect(Date.parse(started.body.savedAt)).toBeGreaterThanOrEqual(
       Date.parse(created.savedAt)

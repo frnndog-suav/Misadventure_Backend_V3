@@ -103,6 +103,8 @@ export function createStartingPlayer({
       : defaultModifiers(config),
     zoneId: startingCityZoneId,
     respawnZoneId: startingCityZoneId,
+    lastKnockout: null,
+    skipNextTurn: false,
   }
 }
 

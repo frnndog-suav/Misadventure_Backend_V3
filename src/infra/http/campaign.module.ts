@@ -8,6 +8,7 @@ import { CreatePartyUseCase } from '@/domain/campaign/application/use-cases/crea
 import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import { EndSessionUseCase } from '@/domain/campaign/application/use-cases/end-session'
 import { GetPartyUseCase } from '@/domain/campaign/application/use-cases/get-party'
+import { ResumeLegacyKnockout } from '@/domain/campaign/application/use-cases/resume-legacy-knockout'
 import { ListPartiesUseCase } from '@/domain/campaign/application/use-cases/list-parties'
 import { StartSessionUseCase } from '@/domain/campaign/application/use-cases/start-session'
 import { TakePartyActionUseCase } from '@/domain/campaign/application/use-cases/take-party-action'
@@ -81,15 +82,28 @@ import { TakePartyActionController } from './controllers/take-party-action/index
         new ListPartiesUseCase(parties),
     },
     {
+      provide: ResumeLegacyKnockout,
+      inject: [CardCatalog, IdGenerator],
+      useFactory: (catalog: CardCatalog, ids: IdGenerator) =>
+        new ResumeLegacyKnockout(catalog, ids),
+    },
+    {
       provide: GetPartyUseCase,
-      inject: [PartiesRepository],
-      useFactory: (parties: PartiesRepository) => new GetPartyUseCase(parties),
+      inject: [PartiesRepository, Clock, ResumeLegacyKnockout],
+      useFactory: (
+        parties: PartiesRepository,
+        clock: Clock,
+        resume: ResumeLegacyKnockout
+      ) => new GetPartyUseCase(parties, clock, resume),
     },
     {
       provide: StartSessionUseCase,
-      inject: [PartiesRepository, Clock],
-      useFactory: (parties: PartiesRepository, clock: Clock) =>
-        new StartSessionUseCase(parties, clock),
+      inject: [PartiesRepository, Clock, ResumeLegacyKnockout],
+      useFactory: (
+        parties: PartiesRepository,
+        clock: Clock,
+        resume: ResumeLegacyKnockout
+      ) => new StartSessionUseCase(parties, clock, resume),
     },
     {
       provide: EndSessionUseCase,

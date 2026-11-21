@@ -2,9 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { makeParty } from '../../../../../../test/factories/make-party'
 import { fixedClock } from '../../../../../../test/fakes/fixed-clock'
+import { InMemoryCardCatalog } from '../../../../../../test/fakes/in-memory-card-catalog'
+import { sequentialIds } from '../../../../../../test/fakes/sequential-ids'
 import { InMemoryPartiesRepository } from '../../../../../../test/repositories/in-memory-parties-repository'
 
 import { PartyNotFoundError } from '../_errors/party-not-found-error'
+import { ResumeLegacyKnockout } from '../resume-legacy-knockout'
 import { StartSessionUseCase } from '.'
 
 const BEFORE = '2026-11-14T10:00:00.000Z'
@@ -16,7 +19,11 @@ let sut: StartSessionUseCase
 describe('StartSessionUseCase', () => {
   beforeEach(() => {
     repository = new InMemoryPartiesRepository()
-    sut = new StartSessionUseCase(repository, fixedClock(NOW))
+    sut = new StartSessionUseCase(
+      repository,
+      fixedClock(NOW),
+      new ResumeLegacyKnockout(new InMemoryCardCatalog(), sequentialIds())
+    )
   })
 
   it('REQ-20: idle → inSession, gravado com savedAt do Clock e SessionStarted', async () => {

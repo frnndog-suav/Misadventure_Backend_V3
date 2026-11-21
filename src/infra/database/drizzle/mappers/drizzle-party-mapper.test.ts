@@ -193,11 +193,14 @@ describe('DrizzlePartyMapper', () => {
 
   it('D-31/D-87/REQ-103: guarda o state v9 com a lista de status', () => {
     const party = usedRngParty()
-    const storedPlayer = party.members[0].player
+    const { lastKnockout, skipNextTurn, ...storedPlayer } =
+      party.members[0].player
 
     const row = DrizzlePartyMapper.toDrizzle(party)
 
     expect(storedPlayer.statuses).toEqual([])
+    expect(lastKnockout).toBeNull()
+    expect(skipNextTurn).toBe(false)
     expect(row).toEqual({
       id: 'party-1',
       name: 'Os Teimosos',

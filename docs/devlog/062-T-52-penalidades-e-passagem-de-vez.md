@@ -1,7 +1,7 @@
 # T-52 — Penalidades e passagem de vez
 
 - Data — 2026-11-21
-- Status — aguardando revisão
+- Status — concluída
 - Spec — v0.65, REQ-128
 - Contrato — v0.69, FEAT-14 acordada
 - Horas — a preencher pelo autor
@@ -30,10 +30,10 @@ O autor executou os três casos. A espera zero passou e o grupo falhou pela aus�
 
 ## Verificação após implementar
 
-- `npm run typecheck` e `git diff --check` passaram. A execução dos testes unitários pelo autor está pendente. Os três casos de `knockout.test.ts` devem passar na suíte.
+- `npm run typecheck` e `git diff --check` passaram. O autor confirmou que todos os testes unitários passaram, incluindo os três casos de `knockout.test.ts`. Implementação registrada no commit `c120919`.
 - Caso de borda — com a ordem A, B, C e B nocauteado na rodada 1, C joga na rodada 1, A e C jogam na rodada 2, e B volta a jogar na rodada 3. A marca permanece até a vez de B na rodada 2.
 - A validação de combate em grupo com IA e de reanimação depende das FEATs 20 e 22. O resumo persistido e a retomada de saves legados seguem na T-53.
 
-## Commit sugerido
+## Commit
 
 `feat/apply knockout penalties and turn skips (t-52)`

@@ -4,6 +4,7 @@ import type {
 } from '@/domain/campaign/enterprise/entities/party'
 import type {
   PartyMember,
+  TKnockoutResult,
   TPartyMemberKind,
   TPlayerState,
 } from '@/domain/campaign/enterprise/entities/party-member'
@@ -50,6 +51,7 @@ export interface TCardCopiesHttp {
 export interface TPlayerStateHttp {
   down: boolean
   skipNextTurn: boolean
+  lastKnockout: TKnockoutResult | null
   usableAbilities: ReturnType<Party['adventureAbilityOptions']>
   playerClasses: { playerClass: TPlayerClass; deckLockMet: boolean }[]
   gold: number
@@ -198,6 +200,7 @@ function playerToHTTP(
   return {
     down: player.down ?? false,
     skipNextTurn: player.skipNextTurn ?? false,
+    lastKnockout: player.lastKnockout ?? null,
     usableAbilities,
     playerClasses: player.playerClasses.map(({ playerClass, deckLockMet }) => ({
       playerClass,

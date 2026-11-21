@@ -77,6 +77,7 @@ describe('POST /parties (e2e)', () => {
             handCopies: expect.any(Array),
             nextTurnActionPointDebt: 0,
             skipNextTurn: false,
+            lastKnockout: null,
             lastRandomEvent: null,
             lastRewardSearch: null,
             lastRewardDelivery: null,

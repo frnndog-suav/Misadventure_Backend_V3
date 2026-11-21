@@ -221,7 +221,7 @@ const playerFields = {
   vigor: z.number().int(),
   modifiers: modifiersSchema,
   zoneId: id,
-  respawnZoneId: id,
+  respawnZoneId: id.optional(),
 }
 
 const legacyPlayerSchema = z.strictObject(playerFields)
@@ -733,6 +733,20 @@ const stateSchema = z
         playerSchema.extend({
           down: z.boolean().optional(),
           skipNextTurn: z.boolean().optional(),
+          lastKnockout: z
+            .strictObject({
+              id,
+              combatId: id.nullable(),
+              respawnZoneId: id,
+              healthRestored: count,
+              peakLost: count,
+              vigorLost: count,
+              purseGoldLost: count,
+              roundAtKnockout: count,
+              roundAfterRespawn: count,
+            })
+            .nullable()
+            .optional(),
           abilityUsage: z
             .record(id, z.strictObject({ uses: count, cooldown: count }))
             .optional(),
@@ -805,7 +819,11 @@ export class DrizzlePartyMapper {
             {
               characterName: m.characterName,
               kind: m.kind,
-              player: upgradePlayer(m.player, config.purseCapacity),
+              player: upgradePlayer(
+                m.player,
+                config.purseCapacity,
+                state.dimension
+              ),
             },
             new UniqueEntityID(m.id)
           )
@@ -927,8 +945,9 @@ export class DrizzlePartyMapper {
               lastRewardDelivery: m.player.lastRewardDelivery,
             }),
             ...(m.player.down !== undefined && { down: m.player.down }),
-            ...(m.player.skipNextTurn !== undefined && {
-              skipNextTurn: m.player.skipNextTurn,
+            ...(m.player.skipNextTurn && { skipNextTurn: true }),
+            ...(m.player.lastKnockout && {
+              lastKnockout: m.player.lastKnockout,
             }),
             ...(m.player.abilityUsage && {
               abilityUsage: { ...m.player.abilityUsage },
@@ -1018,6 +1037,7 @@ type TStoredPlayer = z.infer<typeof legacyPlayerSchema> &
       | 'lastRandomEvent'
       | 'lastRewardSearch'
       | 'lastRewardDelivery'
+      | 'lastKnockout'
     >
   >
 
@@ -1028,10 +1048,16 @@ type TStoredPlayer = z.infer<typeof legacyPlayerSchema> &
  */
 function upgradePlayer(
   player: TStoredPlayer,
-  purseCapacity: number
+  purseCapacity: number,
+  dimension: Party['dimension']
 ): TPlayerState {
+  const respawn = player.respawnZoneId
   return {
     ...player,
+    respawnZoneId:
+      respawn && dimension.map.zones.some(({ zoneId }) => zoneId === respawn)
+        ? respawn
+        : dimension.startingCityZoneId,
     gold: Math.min(player.gold, purseCapacity),
     build:
       player.tcgFolder === undefined

@@ -2,9 +2,13 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { SeededRng } from '@/core/rng/seeded-rng'
 import { makeParty } from '../../../../../../test/factories/make-party'
+import { fixedClock } from '../../../../../../test/fakes/fixed-clock'
+import { InMemoryCardCatalog } from '../../../../../../test/fakes/in-memory-card-catalog'
+import { sequentialIds } from '../../../../../../test/fakes/sequential-ids'
 import { InMemoryPartiesRepository } from '../../../../../../test/repositories/in-memory-parties-repository'
 
 import { PartyNotFoundError } from '../_errors/party-not-found-error'
+import { ResumeLegacyKnockout } from '../resume-legacy-knockout'
 import { GetPartyUseCase } from '.'
 
 let repository: InMemoryPartiesRepository
@@ -13,7 +17,11 @@ let sut: GetPartyUseCase
 describe('GetPartyUseCase', () => {
   beforeEach(() => {
     repository = new InMemoryPartiesRepository()
-    sut = new GetPartyUseCase(repository)
+    sut = new GetPartyUseCase(
+      repository,
+      fixedClock(),
+      new ResumeLegacyKnockout(new InMemoryCardCatalog(), sequentialIds())
+    )
   })
 
   it('REQ-19: devolve o grupo existente', async () => {

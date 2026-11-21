@@ -127,7 +127,12 @@ export class TakePartyActionUseCase {
         )
         if (result.isLeft())
           return left(new ActionNotAllowedError(result.value))
-        party.completeKnockout(this.ids)
+        party.completeKnockout(
+          this.ids,
+          pending.source.type === 'combatEvent'
+            ? pending.source.combatId
+            : undefined
+        )
         break
       }
       case 'startEvent':

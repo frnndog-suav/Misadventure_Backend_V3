@@ -3646,12 +3646,39 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return right(undefined)
   }
 
-  /**
-   * Encerrar a vez (README 11.1, 2.1; REQ-57). Passa ao membro seguinte de
-   * `turnOrder` com os pontos cheios; do último para o primeiro a rodada sobe.
-   * Aceito com qualquer quantidade de pontos (K2). O RNG não é usado.
-   */
-  completeKnockout(ids?: IdGenerator): void {
+  get canResumeLegacyKnockout(): boolean {
+    const member = this.props.members[this.actorIndex()]
+    const result = this.props.lastCombatResult
+    return (
+      member.player.down === true &&
+      member.player.health === 0 &&
+      result?.playerDown === true &&
+      result.memberId === member.id.toString() &&
+      !this.props.combat &&
+      !this.props.combatOutcome &&
+      !this.eventEncounter &&
+      !this.triggeredEffectChoice &&
+      !this.pendingRewards.length
+    )
+  }
+
+  resumeLegacyKnockout(
+    at: Date,
+    cards: ReadonlyMap<string, TCard>,
+    ids: IdGenerator
+  ): boolean {
+    if (!this.canResumeLegacyKnockout) return false
+    this.respawn(
+      this.actorIndex(),
+      at,
+      cards,
+      this.props.lastCombatResult!.combatId,
+      ids
+    )
+    return true
+  }
+
+  completeKnockout(ids?: IdGenerator, rewardCombatId?: string): void {
     if (
       this.props.combat ||
       this.triggeredEffectChoice ||
@@ -3681,12 +3708,30 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.props.eventEncounter = null
     }
 
+    const ended = this.updates.find((update) => update.type === 'combatEnded')
+    this.respawn(
+      index,
+      this.savedAt,
+      this.eventCatalog,
+      rewardCombatId ?? ended?.combatId ?? null,
+      ids
+    )
+  }
+
+  private respawn(
+    index: number,
+    at: Date,
+    cards: ReadonlyMap<string, TCard>,
+    combatId: string | null,
+    ids?: IdGenerator
+  ): void {
+    let player = this.props.members[index].player
     const config = this.config
     const solo = this.turnOrder.length === 1
-    const at = this.savedAt
+    const roundAtKnockout = this.turn.round
     const equipped = EQUIPMENT_SLOTS.flatMap((slot) => {
       const id = player.equipment[slot]
-      const card = id ? this.eventCatalog.get(id) : undefined
+      const card = id ? cards.get(id) : undefined
       return card?.type === 'equipment' ? [card] : []
     })
     const inactiveSources = new Set(
@@ -3698,8 +3743,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         )
         .map(({ id }) => id)
     )
-    const protectsPeak = (effect: { activation: readonly { kind: string }[] }) =>
-      effect.activation.some(({ kind }) => kind === 'keepPeakOnKnockout')
+    const protectsPeak = (effect: {
+      activation: readonly { kind: string }[]
+    }) => effect.activation.some(({ kind }) => kind === 'keepPeakOnKnockout')
     const peakProtected =
       player.statuses.some(
         (status) =>
@@ -3732,31 +3778,56 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           )
     const peak = Math.max(0, player.peak - peakLoss)
     const maxHealth = maxHealthOf({ ...player, peak })
+    const vigor = Math.min(
+      player.vigor,
+      Math.floor((peak * config.knockoutVigorCapPercent) / 100)
+    )
+    const health = Math.max(
+      1,
+      Math.floor((maxHealth * config.knockoutHealthPercent) / 100)
+    )
+    const purseGoldLost = solo
+      ? Math.floor((player.gold * config.soloKnockoutGoldLossPercent) / 100)
+      : 0
+    const respawnZoneId = player.respawnZoneId
     this.replaceActor(index, {
       ...player,
       down: false,
       skipNextTurn: !solo,
-      zoneId: player.respawnZoneId,
+      zoneId: respawnZoneId,
       peak,
-      vigor: Math.min(
-        player.vigor,
-        Math.floor((peak * config.knockoutVigorCapPercent) / 100)
-      ),
-      health: Math.max(
-        1,
-        Math.floor((maxHealth * config.knockoutHealthPercent) / 100)
-      ),
-      gold: solo
-        ? player.gold -
-          Math.floor((player.gold * config.soloKnockoutGoldLossPercent) / 100)
-        : player.gold,
+      vigor,
+      health,
+      gold: player.gold - purseGoldLost,
     })
-    this.endTurn(at)
+    this.advancePlayableTurn(at)
     if (solo)
       for (let round = 0; round < config.soloKnockoutWaitRounds; round++)
-        this.endTurn(at)
+        this.advancePlayableTurn(at)
+    const member = this.props.members[index]
+    this.replaceActor(index, {
+      ...member.player,
+      lastKnockout: {
+        id:
+          ids?.next().toValue() ??
+          `${member.id.toString()}-knockout-${roundAtKnockout}`,
+        combatId,
+        respawnZoneId,
+        healthRestored: health,
+        peakLost: player.peak - peak,
+        vigorLost: player.vigor - vigor,
+        purseGoldLost,
+        roundAtKnockout,
+        roundAfterRespawn: this.turn.round,
+      },
+    })
   }
 
+  /**
+   * Encerrar a vez (README 11.1, 2.1; REQ-57). Passa ao membro seguinte de
+   * `turnOrder` com os pontos cheios; do último para o primeiro a rodada sobe.
+   * Aceito com qualquer quantidade de pontos (K2). O RNG não é usado.
+   */
   endTurn(at: Date): Either<'sessionNotActive', void> {
     switch (this.props.status) {
       case 'idle':
@@ -3769,9 +3840,13 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       }
     }
 
+    this.advancePlayableTurn(at)
+    return right(undefined)
+  }
+
+  private advancePlayableTurn(at: Date): void {
     let skipped = this.advanceTurn(at)
     while (skipped) skipped = this.advanceTurn(at)
-    return right(undefined)
   }
 
   private advanceTurn(at: Date): boolean {
