@@ -364,7 +364,7 @@ async function prepareLegacyCampaigns(api, db, url) {
   }
 }
 
-async function prepareCampaigns(mode) {
+async function prepareCampaigns(mode, victoryOnly = false) {
   config({ path: ['.env.test', '.env'], quiet: true })
   const url = process.env.FEAT13_API_URL ?? 'http://localhost:3333'
   if (!process.env.DATABASE_URL)
@@ -447,6 +447,7 @@ async function prepareCampaigns(mode) {
         ]
       : mode === 'stale' ? [scenarios[1]] : scenarios
     for (const scenario of selected) {
+      if (victoryOnly && scenario.reflection === 0) continue
       const pause = scenario.cardId === ambush
       const { id } = await api('/parties', {
         name: scenario.name,
@@ -463,7 +464,8 @@ async function prepareCampaigns(mode) {
         { zoneType: 'urban', cards: [scenario.cardId], discard: [] },
       ]
       if (mode === 'reveal') {
-        Object.assign(player, { peak: 0, vigor: 0, health: 1 })
+        const vigor = scenario.reflection > 0 ? 1 : 0
+        Object.assign(player, { peak: vigor, vigor, health: 1 })
         for (const slot of Object.keys(player.equipment)) player.equipment[slot] = null
         player.statuses = []
         Object.assign(player.modifiers, {
@@ -528,7 +530,6 @@ async function prepareCampaigns(mode) {
         ) {
           throw new Error(`Campanha ${id} sem a antecipação esperada para a revelação.`)
         }
-        console.log(`${scenario.name}  ${url}/parties/${id}`)
       } else if (mode === 'catalog') {
         const started = await api(`/parties/${id}/actions`, { type: 'startEvent' })
         await api(`/parties/${id}/actions`, {
@@ -716,6 +717,8 @@ async function main() {
       return prepareCampaigns('payments')
     case 'reveal':
       return prepareCampaigns('reveal')
+    case 'reveal-win':
+      return prepareCampaigns('reveal', true)
     case 'legacy':
       return prepareCampaigns('legacy')
     case 'initiative':
@@ -731,7 +734,7 @@ async function main() {
     case 'snapshot':
       return readSnapshot(process.argv[3])
     default:
-      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, catalog, payments, reveal, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
+      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, catalog, payments, reveal, reveal-win, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
   }
 }
 
