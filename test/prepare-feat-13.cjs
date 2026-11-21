@@ -7,6 +7,7 @@ const { Client } = require('pg')
 const { createHash } = require('node:crypto')
 
 const wolves = 'fixture.howling-wolves'
+const defeat = 'fixture.t67-defeat'
 const ambush = 'fixture.fire-ambush'
 const blade = 'fixture.blade-of-dusk'
 const traveler = 'fixture.wounded-traveler'
@@ -63,6 +64,29 @@ async function prepareContent() {
           steps: [{ type: 'drawRewards', count: 1 }],
         },
         badOutcome: empty,
+      },
+      {
+        ...card,
+        id: defeat,
+        title: 'Lobos Uivantes — Derrota',
+        enemies: [{
+          ...enemy,
+          count: 1,
+          modifiers: { ...modifiers, attack: 20, accuracy: 100, celerity: 0 },
+        }],
+        goodOutcome: empty,
+        badOutcome: {
+          text: 'Perca 5 de ouro.',
+          steps: [{
+            type: 'effect',
+            effect: {
+              text: 'Perca 5 de ouro.',
+              activation: [{ kind: 'loseGold', amount: 5 }],
+              duration: { kind: 'immediate' },
+              mark: null,
+            },
+          }],
+        },
       },
       {
         ...card,
@@ -278,6 +302,7 @@ async function prepareCampaigns(mode) {
   if (mode !== 'stale') await api(`/catalog/cards/${ambush}`)
   if (mode === 'legacy') await api(`/catalog/cards/${reserveEvent}`)
   if (mode === 'initiative') await api(`/catalog/cards/${initiative}`)
+  if (mode === 'outcomes') await api(`/catalog/cards/${defeat}`)
   if (mode === 'cooldown') await api(`/catalog/cards/${fieldAid}-weapon`)
   if (mode === 'abilities') {
     await api(`/catalog/cards/${paidStrike}-weapon`)
@@ -304,6 +329,13 @@ async function prepareCampaigns(mode) {
         ]
       : mode === 'cooldown'
       ? [{ name: 'T-67 — Reset de recarga', cardId: wolves, abilityId: fieldAid }]
+      : mode === 'outcomes'
+      ? [
+          { name: 'T-67 — Turno atual', cardId: wolves },
+          { name: 'T-67 — Manter recompensa', cardId: wolves },
+          { name: 'T-67 — Deixar recompensa', cardId: wolves },
+          { name: 'T-67 — Derrota', cardId: defeat },
+        ]
       : mode === 'stale' ? [scenarios[1]] : scenarios
     for (const scenario of selected) {
       const pause = scenario.cardId === ambush
@@ -337,6 +369,10 @@ async function prepareCampaigns(mode) {
         Object.assign(player.modifiers, { celerity: tiedCelerity, evasion: 100 })
         for (const slot of Object.keys(player.equipment)) player.equipment[slot] = null
         if (scenario.equipHaste) player.equipment.weapon = blade
+      } else if (scenario.cardId === defeat) {
+        Object.assign(player, { peak: 0, health: 1, gold: 10 })
+        for (const slot of Object.keys(player.equipment)) player.equipment[slot] = null
+        Object.assign(player.modifiers, { defense: 0, evasion: 0, celerity: 100 })
       } else if (pause) {
         Object.assign(player, { peak: 0, health: 20, gold: 10, vigor: 0 })
         player.equipment.weapon = blade
@@ -381,8 +417,7 @@ async function prepareCampaigns(mode) {
         }
       }
       if (mode === 'initiative') await api(`/parties/${id}`)
-      console.log(`${scenario.name}  ${url}/parties/${id}`)
-      if (mode === 'stale') {
+      if (mode === 'stale' || mode === 'outcomes') {
         const started = await api(`/parties/${id}/actions`, {
           type: 'startEvent',
         })
@@ -390,13 +425,27 @@ async function prepareCampaigns(mode) {
           type: 'revealEvent',
           encounterId: started.randomEventEncounter.id,
         })
+        console.log(`${scenario.name}  ${url}/parties/${id}`)
+        if (scenario.cardId === defeat) {
+          const party = await api(`/parties/${id}`)
+          const playerState = party.members[0].player
+          if (
+            playerState.health !== 1 ||
+            playerState.gold !== 10 ||
+            !playerState.availableActions.includes('endCombatTurn')
+          ) {
+            throw new Error(`Campanha ${id} sem o turno inicial esperado para a derrota.`)
+          }
+          continue
+        }
         const attack = {
           type: 'combatAttack',
           combatId: combat.id,
           turnId: combat.turn.id,
           targetId: combat.enemies[0].id,
         }
-        const current = await api(`/parties/${id}/actions`, attack)
+        await api(`/parties/${id}/actions`, attack)
+        const current = await api(`/parties/${id}`)
         if (
           current.combat?.enemies[0].health !== 0 ||
           current.combat.turn.id === attack.turnId ||
@@ -411,6 +460,8 @@ async function prepareCampaigns(mode) {
             targetIds: current.combat.attackTargetIds,
           })
         )
+      } else {
+        console.log(`${scenario.name}  ${url}/parties/${id}`)
       }
     }
   } finally {
@@ -418,7 +469,7 @@ async function prepareCampaigns(mode) {
   }
 }
 
-async function readSnapshot(id, showCooldown = false) {
+async function readSnapshot(id, detail) {
   if (!id) throw new Error('Informe o ID da campanha.')
   config({ path: ['.env.test', '.env'], quiet: true })
   const db = new Client({ connectionString: process.env.DATABASE_URL })
@@ -432,7 +483,7 @@ async function readSnapshot(id, showCooldown = false) {
     )
     if (!entry) throw new Error('Campanha não encontrada.')
     const { snapshot, ...fields } = entry
-    if (showCooldown) {
+    if (detail === 'cooldown') {
       const { state } = JSON.parse(snapshot)
       const player = state.members[0].player
       const key = JSON.stringify(['weapon', `${fieldAid}-weapon`, fieldAid])
@@ -443,10 +494,16 @@ async function readSnapshot(id, showCooldown = false) {
       }))
       return
     }
+    const { state } = JSON.parse(snapshot)
     console.log(
       JSON.stringify({
         ...fields,
         sha256: createHash('sha256').update(snapshot).digest('hex'),
+        ...(detail === 'outcomes' && {
+          gold: state.members[0].player.gold,
+          urbanEventDiscard: state.eventDecks.find(({ zoneType }) => zoneType === 'urban')?.discard,
+          urbanRewards: state.rewardDecks.find(({ zoneType }) => zoneType === 'urban')?.cards,
+        }),
       })
     )
   } finally {
@@ -462,6 +519,8 @@ async function main() {
       return prepareCampaigns()
     case 'stale':
       return prepareCampaigns('stale')
+    case 'outcomes':
+      return prepareCampaigns('outcomes')
     case 'legacy':
       return prepareCampaigns('legacy')
     case 'initiative':
@@ -471,11 +530,13 @@ async function main() {
     case 'cooldown':
       return prepareCampaigns('cooldown')
     case 'cooldown-state':
-      return readSnapshot(process.argv[3], true)
+      return readSnapshot(process.argv[3], 'cooldown')
+    case 'outcome-state':
+      return readSnapshot(process.argv[3], 'outcomes')
     case 'snapshot':
       return readSnapshot(process.argv[3])
     default:
-      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, cooldown, cooldown-state <id> ou snapshot <id>.')
+      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
   }
 }
 
