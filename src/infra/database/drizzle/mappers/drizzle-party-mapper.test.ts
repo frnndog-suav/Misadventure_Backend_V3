@@ -3,7 +3,12 @@ import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { SeededRng } from '@/core/rng/seeded-rng'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
-import { makeParty } from '../../../../../test/factories/make-party'
+import { removeCombatConfig } from '../../../../../test/factories/remove-combat-config'
+import { makeCombatEventCard } from '../../../../../test/factories/make-card'
+import {
+  makeParty,
+  makePlayerState,
+} from '../../../../../test/factories/make-party'
 import { DrizzlePartyMapper, type TPartyRow } from './drizzle-party-mapper'
 
 function usedRngParty() {
@@ -18,6 +23,153 @@ function usedRngParty() {
 }
 
 describe('DrizzlePartyMapper', () => {
+  it('REQ-123: preserva combate ativo, janela, avanço de habilidades e RNG no save', () => {
+    const card = makeCombatEventCard({
+      goodOutcome: { text: 'Vitória.', steps: [] },
+      badOutcome: { text: 'Derrota.', steps: [] },
+    })
+    const combat = {
+      id: 'fight',
+      card,
+      memberId: 'member-1',
+      cycle: 2,
+      maxCycles: 20,
+      order: ['member-1', 'enemy-1'],
+      turn: {
+        id: 'fight:2:member-1',
+        actorId: 'member-1',
+        phase: 'attack' as const,
+        attacksRemaining: 1,
+      },
+      enemies: [
+        {
+          id: 'enemy-1',
+          blockIndex: 0,
+          copyIndex: 0,
+          health: 3,
+          maxHealth: 10,
+          vigor: null,
+          element: null,
+          effectiveModifiers: card.enemies[0].modifiers,
+          statuses: [
+            {
+              statusId: 'enemy-status',
+              sourceCardId: card.id,
+              effectIndex: 0,
+              text: 'Ataque reduzido.',
+              mark: 'debuff' as const,
+              activation: [
+                {
+                  kind: 'modifierFlat' as const,
+                  changes: [{ modifier: 'attack' as const, amount: -1 }],
+                },
+              ],
+              duration: { kind: 'forOwnCombatTurns' as const, turns: 2 },
+              remaining: 1,
+            },
+          ],
+        },
+      ],
+      abilityUsage: [
+        {
+          actorId: 'member-1',
+          equipmentSlot: null,
+          abilityId: 'channel',
+          sourceCardId: 'fixture.channel',
+          element: null,
+          uses: 1,
+          cooldown: 2,
+          charges: 1,
+          channelHealth: 8,
+          activeUntilCycle: null,
+        },
+      ],
+      actedThisCycle: ['enemy-1'],
+    }
+    const party = makeParty({
+      status: 'inSession',
+      combat,
+      combatZone: 'urban',
+      rngState: usedRngParty().rngState,
+    })
+    const row = DrizzlePartyMapper.toDrizzle(party)
+    const restored = DrizzlePartyMapper.toDomain({
+      ...row,
+      state: JSON.parse(JSON.stringify(row.state)),
+    })
+
+    expect(restored.combat).toEqual(party.combat)
+    expect(DrizzlePartyMapper.toDrizzle(restored).state).toMatchObject({
+      schemaVersion: 9,
+      combat,
+      combatZone: 'urban',
+      rngState: [...party.rngState],
+    })
+  })
+
+  it('REQ-123: preserva recompensa de vitória pendente e queda por Reflexão', () => {
+    const card = makeCombatEventCard({
+      goodOutcome: {
+        text: 'Compre uma recompensa.',
+        steps: [{ type: 'drawRewards', count: 1 }],
+      },
+      badOutcome: { text: 'Derrota.', steps: [] },
+    })
+    const party = makeParty({
+      status: 'inSession',
+      members: [
+        PartyMember.create(
+          {
+            characterName: 'Lia',
+            kind: 'human',
+            player: makePlayerState({ health: 0, down: true }),
+          },
+          new UniqueEntityID('member-1')
+        ),
+      ],
+      lastCombatResult: {
+        combatId: 'fight',
+        cardId: card.id,
+        memberId: 'member-1',
+        resolution: 'victory',
+        cause: 'enemiesDefeated',
+        playerDown: true,
+        peakDelta: 0,
+      },
+      combatOutcome: {
+        card,
+        zoneType: 'urban',
+        cursor: { nextStep: 0, nextCopy: 1 },
+        startingPeak: 10,
+        victoryPeak: 12,
+      },
+      pendingReward: {
+        id: 'reward',
+        memberId: 'member-1',
+        cardId: 'fixture.iron-ore',
+        source: { type: 'combatEvent', combatId: 'fight' },
+        origin: { type: 'rewardDeck', zoneType: 'urban' },
+        destination: 'inventory',
+        discardOptions: [{ cardId: 'fixture.silver-fish', maxCopies: 1 }],
+        decisionDeadlineAt: null,
+      },
+      eventDecks: [{ zoneType: 'urban', cards: [], discard: [] }],
+    })
+    const row = DrizzlePartyMapper.toDrizzle(party)
+    const restored = DrizzlePartyMapper.toDomain({
+      ...row,
+      state: JSON.parse(JSON.stringify(row.state)),
+    })
+
+    expect(restored.members[0].player.down).toBe(true)
+    expect(restored.lastCombatResult).toEqual(party.lastCombatResult)
+    expect(restored.pendingRewards).toEqual(party.pendingRewards)
+    expect(restored.eventDecks).toEqual(party.eventDecks)
+    expect(DrizzlePartyMapper.toDrizzle(restored).state).toMatchObject({
+      combatOutcome: { card, cursor: { nextStep: 0, nextCopy: 1 } },
+    })
+  })
+
   it('REQ-111/REQ-116: preserva a ordem dos decks e descartes de evento e o RNG ao recarregar', () => {
     const party = makeParty({
       eventDecks: [
@@ -39,7 +191,7 @@ describe('DrizzlePartyMapper', () => {
     expect(restored.rngState).toEqual(party.rngState)
   })
 
-  it('D-31/D-87/REQ-103: guarda o state v8 com a lista de status', () => {
+  it('D-31/D-87/REQ-103: guarda o state v9 com a lista de status', () => {
     const party = usedRngParty()
     const storedPlayer = party.members[0].player
 
@@ -53,7 +205,7 @@ describe('DrizzlePartyMapper', () => {
       createdAt: party.createdAt,
       savedAt: party.savedAt,
       state: {
-        schemaVersion: 8,
+        schemaVersion: 9,
         members: [
           {
             id: 'member-1',
@@ -79,6 +231,7 @@ describe('DrizzlePartyMapper', () => {
     })
     const row = DrizzlePartyMapper.toDrizzle(party)
     const legacyConfig = { ...row.state.config }
+    removeCombatConfig(legacyConfig)
     delete legacyConfig.escapeVigorPercent
     delete legacyConfig.reserveDeck
     const v6 = {
@@ -173,6 +326,7 @@ describe('DrizzlePartyMapper', () => {
       ...row.state.config,
       actionPointsPerTurn,
     }
+    removeCombatConfig(config)
     const removedKeys = [
       'vaultCapacity',
       'vaultDeckSlots',
@@ -214,7 +368,7 @@ describe('DrizzlePartyMapper', () => {
     }
   }
 
-  it('REQ-59/D-64: save v2 é lido (rodada 1, 1º de turnOrder, pontos do config) e regravado como v8', () => {
+  it('REQ-59/D-64: save v2 é lido (rodada 1, 1º de turnOrder, pontos do config) e regravado como v9', () => {
     const { row } = legacyRow(2, 5)
 
     const restored = DrizzlePartyMapper.toDomain(row)
@@ -224,7 +378,7 @@ describe('DrizzlePartyMapper', () => {
     expect(restored.turn.actionPoints).toBe(5)
     expect(restored.pullDomainEvents()).toEqual([])
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(8)
+    expect(rewritten.schemaVersion).toBe(9)
     expect(rewritten.turn).toEqual({
       round: 1,
       memberId: 'member-1',
@@ -232,7 +386,7 @@ describe('DrizzlePartyMapper', () => {
     })
   })
 
-  it('REQ-68/D-70: save v3 é lido com a pasta vazia, a vez intacta e as chaves novas nos padrões; regravado como v8', () => {
+  it('REQ-68/D-70: save v3 é lido com a pasta vazia, a vez intacta e as chaves novas nos padrões; regravado como v9', () => {
     const { party, row } = legacyRow(3)
 
     const restored = DrizzlePartyMapper.toDomain(row)
@@ -253,11 +407,11 @@ describe('DrizzlePartyMapper', () => {
     })
     expect(restored.pullDomainEvents()).toEqual([])
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(8)
+    expect(rewritten.schemaVersion).toBe(9)
     expect(rewritten.members[0].player.tcgFolder).toEqual([])
   })
 
-  it('REQ-79/D-79: save v4 é lido com inventário vazio, nada equipado e as chaves de REQ-69 nos padrões; regravado como v8', () => {
+  it('REQ-79/D-79: save v4 é lido com inventário vazio, nada equipado e as chaves de REQ-69 nos padrões; regravado como v9', () => {
     const { party, row } = legacyRow(4)
 
     const restored = DrizzlePartyMapper.toDomain(row)
@@ -283,11 +437,11 @@ describe('DrizzlePartyMapper', () => {
     })
     expect(restored.turn).toEqual(party.turn)
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(8)
+    expect(rewritten.schemaVersion).toBe(9)
     expect(rewritten.members[0].player.inventory).toEqual([])
   })
 
-  it('REQ-95/D-87: save v5 é lido com cofre vazio e as chaves de REQ-80 nos padrões; regravado como v8', () => {
+  it('REQ-95/D-87: save v5 é lido com cofre vazio e as chaves de REQ-80 nos padrões; regravado como v9', () => {
     const { party, row } = legacyRow(5)
     row.state.config.inventoryCapacity = 12
 
@@ -309,7 +463,7 @@ describe('DrizzlePartyMapper', () => {
     expect(restored.turn).toEqual(party.turn)
     expect(restored.pullDomainEvents()).toEqual([])
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(8)
+    expect(rewritten.schemaVersion).toBe(9)
     expect(rewritten.members[0].player.vault).toEqual({
       slots: [],
       decks: [],
@@ -543,7 +697,7 @@ describe('DrizzlePartyMapper', () => {
       'host fora dos membros',
       (r: ReturnType<typeof validRow>) => (r.state.hostMemberId = 'x'),
     ],
-    ['v8 sem turn', (r: ReturnType<typeof validRow>) => delete r.state.turn],
+    ['v9 sem turn', (r: ReturnType<typeof validRow>) => delete r.state.turn],
     [
       'turn com membro fora de turnOrder',
       (r: ReturnType<typeof validRow>) =>

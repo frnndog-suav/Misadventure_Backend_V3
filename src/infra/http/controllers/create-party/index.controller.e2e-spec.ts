@@ -55,6 +55,8 @@ describe('POST /parties (e2e)', () => {
           kind: 'human',
           isHost: true,
           player: {
+            down: false,
+            usableAbilities: [],
             playerClasses: [{ playerClass: 'warrior', deckLockMet: true }],
             gold: 10,
             baseHealth: 20,
@@ -139,6 +141,9 @@ describe('POST /parties (e2e)', () => {
       turn: { round: 1, memberId, actionPoints: 3 },
       randomEventEncounter: null,
       pendingRewards: [],
+      triggeredEffectChoice: null,
+      combat: null,
+      lastCombatResult: null,
       createdAt: expect.stringMatching(ISO_UTC),
       savedAt: expect.stringMatching(ISO_UTC),
     })

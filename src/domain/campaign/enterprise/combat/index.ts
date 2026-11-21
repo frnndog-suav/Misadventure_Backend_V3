@@ -29,6 +29,7 @@ import {
 
 export type TCombatRefusal =
   | 'combatInProgress'
+  | 'choicePending'
   | 'staleCombat'
   | 'staleCombatTurn'
   | 'wrongCombatPhase'
@@ -265,6 +266,58 @@ type CombatAbilityUsage = {
   activeUntilCycle: number | null
 }
 
+export type TCombatUpdate = { combatId: string } & (
+  | {
+      type: 'combatStarted'
+      cardId: string
+      cardTitle: string
+      participants: (
+        | { type: 'player'; id: string; name: string }
+        | {
+            type: 'enemy'
+            id: string
+            name: string
+            blockIndex: number
+            copyIndex: number
+          }
+      )[]
+    }
+  | {
+      type: 'combatTurnStarted'
+      actorId: string
+      turnId: string
+      cycle: number
+    }
+  | {
+      type: 'combatAbilityUsed'
+      actorId: string
+      abilityId: string
+      equipmentSlot: TEquipmentSlot | null
+    }
+  | { type: 'combatEffectActivated'; actorId: string; effectId: string }
+  | {
+      type: 'combatDamageResolved'
+      actorId: string | null
+      targetId: string
+      source: 'attack' | 'ability' | 'effect'
+      hit: boolean | null
+      damage: number
+      reflectedDamage: number
+      targetHealth: number
+      actorHealth: number | null
+    }
+  | {
+      type: 'combatEscapeAttempted'
+      actorId: string
+      naturalRoll: number | null
+      total: number | null
+      threshold: number
+      vigorSpent: number
+      succeeded: boolean
+    }
+  | { type: 'combatEnded'; result: import('../entities/party').TCombatResult }
+)
+
 type CombatPlayer = {
   health: number
   modifiers: Readonly<Record<TModifier, number>>
@@ -274,6 +327,7 @@ type CombatPlayer = {
   brokenEquipment?: readonly TEquipmentSlot[]
   equippedSlots?: readonly TEquipmentSlot[]
   snapshot?: TPlayerState
+  update?: (update: TCombatUpdate) => void
   withSnapshot?: (player: TPlayerState) => CombatPlayer
   reactionPending?: () => boolean
   react?: (
@@ -287,6 +341,39 @@ type CombatPlayer = {
     statuses: readonly TPlayerStatus[],
     broken: readonly TEquipmentSlot[]
   ) => CombatPlayer
+}
+
+export function combatTurnStarted(state: TCombatState): TCombatUpdate {
+  return {
+    type: 'combatTurnStarted',
+    combatId: state.id,
+    actorId: state.turn.actorId,
+    turnId: state.turn.id,
+    cycle: state.cycle,
+  }
+}
+
+function reportDamage(
+  player: CombatPlayer,
+  state: TCombatState,
+  actorId: string,
+  source: 'attack' | 'ability' | 'effect',
+  result: ReturnType<typeof resolveCombatDamage>[number],
+  playerHealth: number
+) {
+  const health = (id: string) =>
+    id === state.memberId
+      ? playerHealth
+      : state.enemies.find((enemy) => enemy.id === id)!.health
+  player.update?.({
+    type: 'combatDamageResolved',
+    combatId: state.id,
+    actorId,
+    source,
+    ...result,
+    targetHealth: health(result.targetId),
+    actorHealth: health(actorId),
+  })
 }
 
 export type CombatNotice =
@@ -829,6 +916,7 @@ export function resolvePlayerAbility(
         ability.element
       )
       health = Math.max(0, health - result.reflectedDamage)
+      reportDamage(player, current, state.memberId, 'ability', result, health)
       current = interruptChannel(
         current,
         state.memberId,
@@ -883,6 +971,14 @@ export function resolvePlayerAbility(
             result.damage,
             config,
             ability.element
+          )
+          reportDamage(
+            player,
+            current,
+            state.memberId,
+            'effect',
+            result,
+            health
           )
         }
         if (activation.kind === 'swapCombatOrder') {
@@ -1172,6 +1268,13 @@ function resolveEnemyAbilities(
     const option = chooseEnemyAbility(current, actor, config)
     if (!option) break
     const { ability, paid, wounded } = option
+    player.update?.({
+      type: 'combatAbilityUsed',
+      combatId: state.id,
+      actorId: actor.id,
+      abilityId: ability.id,
+      equipmentSlot: null,
+    })
     const registered = registerCombatAbility(
       current,
       actor.id,
@@ -1311,6 +1414,7 @@ function resolveEnemyAbilities(
       health = Math.max(0, health - result.damage)
       current = interruptChannel(current, state.memberId, result.damage, config)
       current = damageEnemy(current, actor.id, result.reflectedDamage, config)
+      reportDamage(player, current, actor.id, 'ability', result, health)
       if (result.damage > 0)
         statuses = statuses.filter(
           ({ duration }) => duration.kind !== 'untilDamageTaken'
@@ -1357,6 +1461,7 @@ function resolveEnemyAbilities(
           elemental: elementalRules(actor.statuses),
         })
         health = Math.max(0, health - result.damage)
+        reportDamage(player, current, actor.id, 'effect', result, health)
         current = interruptChannel(
           current,
           state.memberId,
@@ -1524,6 +1629,11 @@ export function resolveCombatTurn(
     } else {
       current = advanced
     }
+    if (
+      current.turn.id !== participants.turn.id &&
+      current.cycle <= current.maxCycles
+    )
+      player.update?.(combatTurnStarted(current))
     const expires = (status: TPlayerStatus, actor: string) => {
       const { duration } = status
       return (
@@ -1601,6 +1711,7 @@ export function resolveCombatTurn(
       config
     )
     current = damageEnemy(current, enemy.id, result.reflectedDamage, config)
+    reportDamage(player, current, enemy.id, 'attack', result, health)
     notify([
       {
         type: 'enemyAttack',
@@ -1664,6 +1775,7 @@ export function resolveCombatTurn(
         },
       }
       health = Math.max(0, health - result.reflectedDamage)
+      reportDamage(player, current, state.memberId, 'attack', result, health)
       statuses = statuses.filter(
         ({ duration }) =>
           duration.kind !== 'untilAttackMade' &&

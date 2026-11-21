@@ -7,6 +7,7 @@ import { parties } from '@/infra/database/drizzle/schema'
 import { GameConfigRepository } from '@/domain/lab/application/repositories/game-config-repository'
 import { GameConfig } from '@/domain/lab/enterprise/value-objects/game-config'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
+import { removeCombatConfig } from '../../../../../test/factories/remove-combat-config'
 import { createApp } from '../../../../../test/lab-app'
 import {
   PARTY_NOT_FOUND,
@@ -108,7 +109,11 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
     expect(Date.parse(moved.body.savedAt)).toBeGreaterThanOrEqual(
       Date.parse(party.savedAt)
     )
-    expect(await get(party.id)).toEqual(moved.body)
+    {
+      const { combatUpdates, ...snapshot } = moved.body
+      expect(combatUpdates).toEqual([])
+      expect(await get(party.id)).toEqual(snapshot)
+    }
 
     const back = await act(party.id, { type: 'move', zoneId: CITY })
     expect(back.status).toBe(200)
@@ -288,7 +293,11 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
     expect(Date.parse(ended.body.savedAt)).toBeGreaterThanOrEqual(
       Date.parse(last.savedAt)
     )
-    expect(await get(party.id)).toEqual(ended.body)
+    {
+      const { combatUpdates, ...snapshot } = ended.body
+      expect(combatUpdates).toEqual([])
+      expect(await get(party.id)).toEqual(snapshot)
+    }
 
     const again = await act(party.id, { type: 'endTurn' })
     expect(again.status).toBe(200)
@@ -343,7 +352,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
     expect(ended.body.turn.actionPoints).toBe(3)
   })
 
-  it('REQ-59/D-64/D-70/D-79: save v2 inserido à mão é lido com turn na rodada 1 e regravado como v8', async () => {
+  it('REQ-59/D-64/D-70/D-79: save v2 inserido à mão é lido com turn na rodada 1 e regravado como v9', async () => {
     const party = await startedParty()
     const db = app.get<Database>(DRIZZLE)
     const [row] = await db
@@ -368,6 +377,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
       ...GAME_CONFIG_DEFAULTS,
       actionPointsPerTurn: 4,
     }
+    removeCombatConfig(legacyConfig)
     for (const key of [...V4_KEYS, 'escapeVigorPercent', 'reserveDeck']) {
       delete legacyConfig[key]
     }
@@ -397,7 +407,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
       .from(parties)
       .where(eq(parties.id, party.id))
     expect(saved.state).toMatchObject({
-      schemaVersion: 8,
+      schemaVersion: 9,
       turn: { round: 2, memberId: party.members[0].id, actionPoints: 4 },
     })
   })

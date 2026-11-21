@@ -60,14 +60,27 @@ describe('Conteúdo em uso no editor (e2e)', () => {
     const server = ctx.app.getHttpServer()
     await postParty(ctx.app)
     const exported = (
-      await request(server).get('/lab/content/collections/fixture/export')
+      await request(server)
+        .get('/lab/content/collections/fixture/export')
+        .expect(200)
     ).body
+    // A importação valida o deck publicado antes de conferir os saves.
+    const replacement = structuredClone(exported)
+    const dimension = replacement.cards.find(
+      ({ card }: { card: { id: string } }) =>
+        card.id === 'fixture.test-dimension'
+    ).card
+    for (const deck of dimension.eventDecks) {
+      deck.cards = deck.cards.filter(
+        ({ cardId }: { cardId: string }) => cardId !== 'fixture.howling-wolves'
+      )
+    }
 
     const response = await request(server)
       .post('/lab/content/import?replace=true')
-      .send(exported)
+      .send(replacement)
 
-    expect(response.status).toBe(409)
+    expect(response.status, JSON.stringify(response.body)).toBe(409)
     expect(response.body).toEqual(CONTENT_IN_USE)
     expect(
       (await request(server).get('/lab/content/collections/fixture/export'))

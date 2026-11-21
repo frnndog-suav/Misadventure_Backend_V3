@@ -1,7 +1,7 @@
 # 057 — T-48 — Desfechos e retorno à vez
 
 - Data — 2026-11-20
-- Status — aguardando revisão
+- Status — concluída
 - Spec — v0.62
 - Contrato — v0.64, acordado
 - Horas — a preencher pelo autor
@@ -48,7 +48,11 @@ node ./node_modules/vitest/vitest.mjs run src/domain/campaign/application/use-ca
 
 - Antes da implementação, o autor executou o Vitest 5.1.0. Resultado de 5 falhas e 36 casos filtrados. As duas fugas retornaram `ACTION_INVALID` com `unknownAction`. Nos cenários de limite, vitória e derrota, o matcher encontrou propriedades com getter no agregado e lançou `TypeError`. As asserções passaram a comparar uma projeção simples desses valores.
 - Após a implementação, `npm.cmd run typecheck`, ESLint nos arquivos TypeScript alterados e `git diff --check` passaram.
-- Aguardando o resultado pós-implementação do Vitest pelo autor.
+- O autor confirmou que as suítes afetadas passaram após a implementação. A contagem de suítes e testes não foi informada. A implementação foi registrada no commit `ffce769`.
+
+## Retomada
+
+- T-49 (REQ-123, D-110) — persistir e projetar o combate, integrar a atualização dos decks legados à gravação e verificar por HTTP os estados após recarga, incluindo recompensa pendente e jogador caído.
 
 ## Commit sugerido
 

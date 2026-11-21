@@ -74,7 +74,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 054 | T-45 | [Catálogo, laboratório e decks de combate](054-T-45-catalogo-laboratorio-decks.md) | concluída |
 | 055 | T-46 | [Estado de combate e dano](055-T-46-estado-de-combate-e-dano.md) | concluída |
 | 056 | T-47 | [Habilidades, efeitos e IA](056-T-47-habilidades-efeitos-e-ia.md) | concluída |
-| 057 | T-48 | [Desfechos e retorno à vez](057-T-48-desfechos-e-retorno-a-vez.md) | aguardando revisão |
+| 057 | T-48 | [Desfechos e retorno à vez](057-T-48-desfechos-e-retorno-a-vez.md) | concluída |
+| 058 | T-49 | [Save e HTTP de combate](058-T-49-save-e-http-de-combate.md) | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.62 · **Data:** 2026-11-20
+> **Versão da spec:** 0.63 · **Data:** 2026-11-20
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -631,7 +631,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 - [ ] **T-46 — Estado de combate e dano (REQ-118, REQ-120).** Implementar entrada, turnos, alvos e cálculos puros. Verificar empates, Celeridade entre ciclos, Precisão zero, Área, Perfuração, elemento e Reflexão.
 - [ ] **T-47 — Habilidades, efeitos e IA (REQ-119, REQ-121).** Implementar formas, pagamento, recargas, status, execução nos momentos autorizados e perfis. Verificar Canalizada após dano, apoio a aliado ferido e ordem dos gatilhos.
 - [ ] **T-48 — Desfechos e retorno à vez (REQ-122).** Verificar fuga, ataque livre, limite em Sem fuga, última derrota inimiga, recompensa com inventário cheio, Reflexão fatal e jogador caído após recarga.
-- [ ] **T-49 — Save, HTTP e validação (REQ-123).** Persistir e projetar o combate e integrar D-110 à gravação. Preparar restaurações determinísticas e entregar ao autor os testes e cenários HTTP. Marcar `implementado (BE)` após validação BE e fechar a FEAT após retorno da integração.
+- [x] **T-49 — Save, HTTP e validação (REQ-123).** Persistir e projetar o combate e integrar D-110 à gravação. Preparar restaurações determinísticas e entregar ao autor os testes e cenários HTTP. Validação BE registrada no devlog 058. O fechamento da FEAT aguarda retorno da integração.
 
 ## 8. Histórico
 
@@ -699,6 +699,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.60 | 2026-11-20 | T-42 e T-43 concluídas. O autor confirmou os testes do backend. FEAT-12 implementada no backend (CONTRATO v0.58), com validação integrada pendente. Ver devlogs 051 e 052. |
 | 0.61 | 2026-11-20 | T-44 da FEAT-13 após a validação da FEAT-12 no devlog 052. REQ-117 a REQ-123, D-108 a D-110 e T-44 a T-49. CONTRATO v0.60 proposto pelo backend. |
 | 0.62 | 2026-11-20 | T-44 concluída com o acordo da FEAT-13 no CONTRATO v0.62. T-45 aguarda autorização. |
+| 0.63 | 2026-11-20 | T-49 concluída após confirmação dos unitários e e2e. FEAT-13 aguarda a validação integrada. |
 
 ## Apêndice A — Conteúdo de teste
 

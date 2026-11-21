@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { DRIZZLE, type Database } from '@/infra/database/database.tokens'
 import { parties } from '@/infra/database/drizzle/schema'
+import { removeCombatConfig } from '../../../../../test/factories/remove-combat-config'
 import { createContentApp } from '../../../../../test/content-app'
 import { postParty, resetCampaign } from '../../../../../test/parties-e2e'
 
@@ -261,7 +262,11 @@ describe('Cofre e Vasculhar (e2e)', () => {
         },
       ],
     })
-    expect(await get(party.id)).toEqual(full.body)
+    {
+      const { combatUpdates, ...snapshot } = full.body
+      expect(combatUpdates).toEqual([])
+      expect(await get(party.id)).toEqual(snapshot)
+    }
     const left = await act(party.id, {
       type: 'resolveReward',
       rewardId: full.body.pendingRewards[0].id,
@@ -528,7 +533,7 @@ describe('Cofre e Vasculhar (e2e)', () => {
     expect(referenced.body.error.code).toBe('CONTENT_REFERENCED')
   })
 
-  it('REQ-95/REQ-96/D-87: save v5 inserido à mão é lido com cofre vazio, lastScavenge null, sem deck (Vasculhar não acha) e regravado como v8', async () => {
+  it('REQ-95/REQ-96/D-87: save v5 inserido à mão é lido com cofre vazio, lastScavenge null, sem deck (Vasculhar não acha) e regravado como v9', async () => {
     const party = await startedParty()
     await give(party, F)
     const state = (await rawState(party.id)) as {
@@ -537,6 +542,7 @@ describe('Cofre e Vasculhar (e2e)', () => {
       rewardDecks?: unknown
     }
     const config = { ...state.config }
+    removeCombatConfig(config)
     delete config.escapeVigorPercent
     delete config.reserveDeck
     delete config.vaultCapacity
@@ -567,7 +573,7 @@ describe('Cofre e Vasculhar (e2e)', () => {
       delivery: 'none',
     })
     const rewritten = await rawState(party.id)
-    expect(rewritten.schemaVersion).toBe(8)
+    expect(rewritten.schemaVersion).toBe(9)
     expect(rewritten.rewardDecks).toEqual([])
   })
 })

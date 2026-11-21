@@ -48,6 +48,8 @@ export interface TCardCopiesHttp {
 
 /** CONTRATO FEAT-06/FEAT-09, tipo `PlayerState`. A ordem do deck não trafega (D-42). */
 export interface TPlayerStateHttp {
+  down: boolean
+  usableAbilities: ReturnType<Party['adventureAbilityOptions']>
   playerClasses: { playerClass: TPlayerClass; deckLockMet: boolean }[]
   gold: number
   baseHealth: number
@@ -143,6 +145,8 @@ export interface TPartyHttp {
   randomEventEncounter: ReturnType<Party['describeRandomEvent']>
   triggeredEffectChoice: Party['triggeredEffectChoice']
   pendingRewards: readonly TPendingReward[]
+  combat: Party['combat']
+  lastCombatResult: Party['lastCombatResult']
   createdAt: string
   savedAt: string
 }
@@ -170,6 +174,9 @@ function playerToHTTP(
   const dimension = dimensionCard?.type === 'dimension' ? dimensionCard : null
   const catalogCards = [...cards.values()]
   const effects =
+    !party.combat &&
+    !player.down &&
+    !party.triggeredEffectChoice &&
     party.turn.memberId.equals(member.id) &&
     party.pendingRewards.length === 0 &&
     (!encounter ||
@@ -184,7 +191,12 @@ function playerToHTTP(
     dimension,
     cards: catalogCards,
   })
+  const usableAbilities = party.turn.memberId.equals(member.id)
+    ? party.adventureAbilityOptions(cards)
+    : []
   return {
+    down: player.down ?? false,
+    usableAbilities,
     playerClasses: player.playerClasses.map(({ playerClass, deckLockMet }) => ({
       playerClass,
       deckLockMet,
@@ -214,9 +226,10 @@ function playerToHTTP(
       zone?.zoneActions ?? [],
       targets,
       effects,
-      party.canStartEvent(zone, dimension, cards, false),
+      party.canStartEvent(zone, dimension, cards),
       encounter,
-      false
+      usableAbilities.length > 0,
+      party.describeCombat(cards)
     ),
     build: copiesToHTTP(player.build),
     buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),
@@ -231,12 +244,17 @@ function playerToHTTP(
     inventoryCapacity: party.config.inventoryCapacity,
     equipment: { ...player.equipment },
     purseCapacity: party.config.purseCapacity,
-    effectiveModifiers: effectiveModifiers({
-      modifiers: player.modifiers,
-      peak: player.peak,
-      equipment: equipmentCards,
-      statuses: player.statuses,
-    }),
+    effectiveModifiers:
+      (party.turn.memberId.equals(member.id)
+        ? party.combatPlayerModifiers(cards)
+        : null) ??
+      effectiveModifiers({
+        modifiers: player.modifiers,
+        peak: player.peak,
+        equipment: equipmentCards,
+        statuses: player.statuses,
+        abilityOwner: player,
+      }),
     vault: {
       slots: player.vault.slots.map(({ cardId, quantity }) => ({
         cardId,
@@ -349,6 +367,8 @@ export class PartyPresenter {
       randomEventEncounter: encounter,
       triggeredEffectChoice: party.triggeredEffectChoice,
       pendingRewards: party.pendingRewards,
+      combat: party.describeCombat(cards),
+      lastCombatResult: party.lastCombatResult,
       createdAt: party.createdAt.toISOString(),
       savedAt: party.savedAt.toISOString(),
     }

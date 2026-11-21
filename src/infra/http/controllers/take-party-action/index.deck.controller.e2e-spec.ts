@@ -11,6 +11,7 @@ import {
   createContentApp,
   MAGE_INPUT,
 } from '../../../../../test/content-app'
+import { removeCombatConfig } from '../../../../../test/factories/remove-combat-config'
 import { postParty, resetCampaign } from '../../../../../test/parties-e2e'
 
 // CONTRATO FEAT-09 (REQ-60 a REQ-68). A pasta ainda não enche no jogo (D-69):
@@ -242,7 +243,11 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
     const drawn = await act(party.id, { type: 'recover', option: 'drawToHand' })
     expect(drawn.body.members[0].player.hand).toHaveLength(7)
     expect(drawn.body.members[0].player.attributeDeckCount).toBe(53)
-    expect(await get(party.id)).toEqual(drawn.body)
+    {
+      const { combatUpdates, ...snapshot } = drawn.body
+      expect(combatUpdates).toEqual([])
+      expect(await get(party.id)).toEqual(snapshot)
+    }
   })
 
   it('REQ-63: recupera vida e Vigor (mínimo 1) e shuffleDiscard devolve a pilha ao deck', async () => {
@@ -337,7 +342,11 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
     expect(player.playerClasses).toEqual([
       { playerClass: 'warrior', deckLockMet: true },
     ])
-    expect(await get(party.id)).toEqual(response.body)
+    {
+      const { combatUpdates, ...snapshot } = response.body
+      expect(combatUpdates).toEqual([])
+      expect(await get(party.id)).toEqual(snapshot)
+    }
   })
 
   it('REQ-65: trocar a Força pela Destreza da pasta desliga a trava; o resto vai para a pasta', async () => {
@@ -369,7 +378,11 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
     expect(player.playerClasses).toEqual([
       { playerClass: 'warrior', deckLockMet: false },
     ])
-    expect(await get(party.id)).toEqual(response.body)
+    {
+      const { combatUpdates, ...snapshot } = response.body
+      expect(combatUpdates).toEqual([])
+      expect(await get(party.id)).toEqual(snapshot)
+    }
   })
 
   it('REQ-66: forma inválida → 400 ACTION_INVALID com todos os campos, em ordem de índice', async () => {
@@ -484,7 +497,7 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
     expect(response.body).toEqual(notAllowed({ reason: 'tcgFolderFull' }))
   })
 
-  it('REQ-68/D-70/D-79: save v3 inserido à mão é lido (pasta vazia, chaves novas nos padrões) e regravado como v8', async () => {
+  it('REQ-68/D-70/D-79: save v3 inserido à mão é lido (pasta vazia, chaves novas nos padrões) e regravado como v9', async () => {
     await request(server())
       .patch('/lab/config')
       .send({ recoverHandSize: 10, tcgFolderCapacity: 50 })
@@ -500,6 +513,7 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
       members: { player: Record<string, unknown> }[]
     }
     const config: Record<string, number> = { ...state.config }
+    removeCombatConfig(config)
     for (const key of Object.keys(NEW_KEYS)) delete config[key]
     delete config.inventoryCapacity
     delete config.purseCapacity
@@ -551,7 +565,7 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
       .from(parties)
       .where(eq(parties.id, party.id))
     expect(saved.state).toMatchObject({
-      schemaVersion: 8,
+      schemaVersion: 9,
       config: NEW_KEYS,
       members: [{ player: { tcgFolder: [] } }],
     })

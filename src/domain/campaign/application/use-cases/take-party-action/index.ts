@@ -86,6 +86,7 @@ export class TakePartyActionUseCase {
     const blocked = party.eventActionBlock(action)
     if (typeof blocked === 'string')
       return left(new ActionNotAllowedError(blocked))
+    party.clearCombatUpdates()
     switch (action.type) {
       case 'resolveTriggeredEffect': {
         const { cards } = await this.findEventCatalog(party)
@@ -431,7 +432,10 @@ export class TakePartyActionUseCase {
           ...(card.goodOutcome.steps ?? []),
           ...(card.badOutcome.steps ?? []),
         ]) {
-          if (step.type === 'grantReward' && !ids.has(step.cardId))
+          if (
+            (step.type === 'grantReward' || step.type === 'searchReward') &&
+            !ids.has(step.cardId)
+          )
             grants.add(step.cardId)
         }
       }

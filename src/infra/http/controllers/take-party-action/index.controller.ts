@@ -14,6 +14,7 @@ import {
   PartyPresenter,
   type TPartyHttp,
 } from '../../presenters/party-presenter'
+import type { TCombatUpdate } from '@/domain/campaign/enterprise/combat'
 
 @Controller('parties/:partyId/actions')
 export class TakePartyActionController {
@@ -28,15 +29,18 @@ export class TakePartyActionController {
   async handle(
     @Param('partyId') partyId: string,
     @Body() body: unknown
-  ): Promise<TPartyHttp> {
+  ): Promise<TPartyHttp & { combatUpdates: readonly TCombatUpdate[] }> {
     const result = await this.takePartyAction.execute({ partyId, body })
     if (result.isLeft()) {
       throw new DomainErrorException(result.value)
     }
     const { party } = result.value
-    return PartyPresenter.toHTTP(
-      party,
-      await findPartyCards(this.cardCatalog, party)
-    )
+    return {
+      ...PartyPresenter.toHTTP(
+        party,
+        await findPartyCards(this.cardCatalog, party)
+      ),
+      combatUpdates: party.combatUpdates,
+    }
   }
 }

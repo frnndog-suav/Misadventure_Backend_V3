@@ -26,7 +26,8 @@ export function availableActions(
   activatableEffects: readonly TActivatableEffect[] = [],
   canStartEvent = false,
   encounter = party.randomEventEncounter,
-  canUseAbility = party.adventureAbilityOptions().length > 0
+  canUseAbility = party.adventureAbilityOptions().length > 0,
+  combat = party.combat
 ): TPartyActionType[] {
   const { turn } = party
   const choice = party.triggeredEffectChoice
@@ -35,7 +36,7 @@ export function availableActions(
       ? ['resolveTriggeredEffect']
       : []
   if (!turn.memberId.equals(memberId)) return []
-  if (party.combat) return party.combatActions()
+  if (combat) return party.combatActions(combat)
   if (party.pendingRewards.length) return ['resolveReward']
   if (encounter) {
     if (encounter.phase === 'success' || encounter.phase === 'setback')

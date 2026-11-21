@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { DRIZZLE, type Database } from '@/infra/database/database.tokens'
 import { parties } from '@/infra/database/drizzle/schema'
+import { removeCombatConfig } from '../../../../../test/factories/remove-combat-config'
 import { createContentApp } from '../../../../../test/content-app'
 import { postParty, resetCampaign } from '../../../../../test/parties-e2e'
 
@@ -360,7 +361,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
     expect(player.availableActions).toContain('prepare')
   })
 
-  it('REQ-79/D-79: save v4 inserido à mão é lido (vazio, padrões, ouro limitado) e regravado como v8', async () => {
+  it('REQ-79/D-79: save v4 inserido à mão é lido (vazio, padrões, ouro limitado) e regravado como v9', async () => {
     const party = await startedParty()
     await give(party, B)
     const state = (await rawState(party.id)) as {
@@ -368,6 +369,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
       members: { player: Record<string, unknown> }[]
     }
     const config = { ...state.config }
+    removeCombatConfig(config)
     delete config.inventoryCapacity
     delete config.purseCapacity
     delete config.escapeVigorPercent
@@ -400,7 +402,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
 
     await act(party.id, { type: 'endTurn' }).expect(200)
     expect(await rawState(party.id)).toMatchObject({
-      schemaVersion: 8,
+      schemaVersion: 9,
       config: { inventoryCapacity: 10, purseCapacity: 300 },
       members: [{ player: { inventory: [], gold: 300 } }],
     })

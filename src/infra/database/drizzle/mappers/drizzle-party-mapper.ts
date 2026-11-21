@@ -11,7 +11,10 @@ import {
 } from '@/domain/catalog/enterprise/value-objects/effect'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { RngState } from '@/core/rng/seeded-rng'
-import { Party } from '@/domain/campaign/enterprise/entities/party'
+import {
+  Party,
+  type TPartyProps,
+} from '@/domain/campaign/enterprise/entities/party'
 import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
 import { DIRECTIONS } from '@/domain/campaign/enterprise/map-assembly'
 import { sortedByCardId } from '@/domain/campaign/enterprise/starting-player'
@@ -24,6 +27,7 @@ import {
 import {
   ENEMY_ABILITY_PRIORITIES,
   ENEMY_BEHAVIORS,
+  ELEMENTS,
   EQUIPMENT_SLOTS,
   MODIFIERS,
   type TEquipmentSlot,
@@ -40,7 +44,7 @@ import {
 } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
 // REQ-107: saves v2 a v6 ganham a lista de status na leitura.
-const SCHEMA_VERSION = 8
+const SCHEMA_VERSION = 9
 
 const uint32 = z
   .number()
@@ -266,6 +270,12 @@ const statusSchema = z.strictObject({
         'infinite',
         'untilPartyEnd',
         'untilEventEnd',
+        'untilOwnCombatTurnEnd',
+        'untilDamageTaken',
+        'untilAttackMade',
+        'untilAttackMissed',
+        'untilNextCombatEnd',
+        'untilCombatWon',
       ]),
     }),
     z.strictObject({
@@ -280,6 +290,23 @@ const statusSchema = z.strictObject({
       kind: z.literal('untilEventPhaseEnd'),
       phase: z.enum(EVENT_PHASES),
     }),
+    z.strictObject({
+      kind: z.literal('forOwnCombatTurns'),
+      turns: z.number().int().positive(),
+    }),
+    z.strictObject({
+      kind: z.literal('forCombatCycles'),
+      cycles: z.number().int().positive(),
+    }),
+    z.strictObject({
+      kind: z.enum(['forAbilitiesUsed', 'forCombats']),
+      count: z.number().int().positive(),
+    }),
+    z.strictObject({
+      kind: z.literal('untilAbilityUsed'),
+      element: z.enum(ELEMENTS).nullable(),
+    }),
+    z.strictObject({ kind: z.literal('whileAbilityActive'), cardId: id }),
   ]),
   remaining: z.number().int().positive().nullable(),
 })
@@ -373,6 +400,7 @@ const pendingReward = z.strictObject({
   source: z.discriminatedUnion('type', [
     z.strictObject({ type: z.literal('scavenge') }),
     z.strictObject({ type: z.literal('randomEvent'), encounterId: id }),
+    z.strictObject({ type: z.literal('combatEvent'), combatId: id }),
   ]),
   destination: z.enum(['inventory', 'tcgFolder']),
   discardOptions: z.array(z.strictObject({ cardId: id, maxCopies: copies })),
@@ -408,6 +436,186 @@ const playerSchema = v7PlayerSchema.extend({
       disposition: z.enum(['kept', 'returnedToDeck', 'removed', 'sentToLimbo']),
     })
     .nullable()
+    .optional(),
+})
+
+const slot = z.enum(EQUIPMENT_SLOTS)
+const element = z.enum(ELEMENTS)
+const combatCard = cardFileSchemas.combatEvent.omit({ status: true }).extend({
+  type: z.literal('combatEvent'),
+  collectionId: id,
+})
+const combat = z.strictObject({
+  id,
+  card: combatCard,
+  memberId: id,
+  cycle: count,
+  maxCycles: count,
+  order: z.array(id),
+  turn: z.strictObject({
+    id,
+    actorId: id,
+    phase: z.enum(['prepare', 'attack']),
+    attacksRemaining: count,
+    enemyAbilitiesResolved: count.optional(),
+  }),
+  enemies: z.array(
+    z.strictObject({
+      id,
+      blockIndex: count,
+      copyIndex: count,
+      health: count,
+      maxHealth: count,
+      vigor: count.nullable(),
+      element: element.nullable(),
+      effectiveModifiers: modifiersSchema,
+      statuses: z.array(statusSchema),
+      skippedTurns: count.optional(),
+    })
+  ),
+  abilityUsage: z
+    .array(
+      z.strictObject({
+        actorId: id,
+        equipmentSlot: slot.nullable(),
+        abilityId: id,
+        sourceCardId: id,
+        element: element.nullable(),
+        uses: count,
+        cooldown: count,
+        charges: count.nullable(),
+        channelHealth: count.nullable(),
+        activeUntilCycle: count.nullable(),
+      })
+    )
+    .optional(),
+  actedThisCycle: z.array(id).optional(),
+})
+const combatOutcome = z.strictObject({
+  card: combatCard,
+  zoneType,
+  cursor: z.strictObject({ nextStep: count, nextCopy: count.optional() }),
+  startingPeak: count,
+  victoryPeak: count,
+})
+const combatResult = z.strictObject({
+  combatId: id,
+  cardId: id,
+  memberId: id,
+  resolution: z.enum(['victory', 'defeat', 'escaped']),
+  cause: z.enum([
+    'enemiesDefeated',
+    'playerDown',
+    'escapeSucceeded',
+    'cycleLimit',
+  ]),
+  playerDown: z.boolean(),
+  peakDelta: z.number().int(),
+})
+const triggeredEffects = z.strictObject({
+  effects: z.array(
+    z.strictObject({
+      sourceKey: id,
+      effectIndex: count,
+      effectId: id,
+      usedAbility: z.strictObject({ slot, abilityId: id }).optional(),
+      targetIds: z.array(id).optional(),
+    })
+  ),
+  choice: z.strictObject({
+    choiceId: id,
+    memberId: id,
+    decisionDeadlineAt: z.null(),
+    effects: z.array(
+      z
+        .object({
+          effectId: id,
+          origin: z.discriminatedUnion('type', [
+            z.strictObject({
+              type: z.literal('inventory'),
+              cardId: id,
+              effectIndex: count,
+            }),
+            z.strictObject({
+              type: z.literal('equipment'),
+              cardId: id,
+              equipmentSlot: slot,
+              effectIndex: count,
+            }),
+            z.strictObject({
+              type: z.literal('equipmentAbility'),
+              cardId: id,
+              equipmentSlot: slot,
+              abilityId: id,
+              effectIndex: count,
+            }),
+          ]),
+          text: z.string(),
+        })
+        .and(
+          z.discriminatedUnion('mode', [
+            z.object({
+              mode: z.literal('automatic'),
+              paymentCosts: z.tuple([]),
+            }),
+            z.object({
+              mode: z.literal('optional'),
+              canPay: z.boolean(),
+              paymentCosts: z.array(
+                z.discriminatedUnion('type', [
+                  z.object({
+                    type: z.literal('automatic'),
+                    costIndex: count,
+                    text: z.string(),
+                  }),
+                  z.object({
+                    type: z.literal('handCards'),
+                    costIndex: count,
+                    text: z.string(),
+                    count,
+                    eligibleCopyIds: z.array(id),
+                  }),
+                  z.object({
+                    type: z.literal('equipmentSlots'),
+                    costIndex: count,
+                    text: z.string(),
+                    count,
+                    eligibleSlots: z.array(slot),
+                  }),
+                  z.object({
+                    type: z.literal('resources'),
+                    costIndex: count,
+                    text: z.string(),
+                    count,
+                    eligibleResources: z.array(
+                      z.object({ cardId: id, maxCopies: count })
+                    ),
+                  }),
+                ])
+              ),
+            }),
+          ])
+        )
+    ),
+  }),
+  continuation: z
+    .discriminatedUnion('type', [
+      z.strictObject({ type: z.enum(['combatTurn', 'combatEscape']) }),
+      z.strictObject({ type: z.literal('combatEntry'), id, card: combatCard }),
+    ])
+    .optional(),
+  defeats: z
+    .array(
+      z.discriminatedUnion('type', [
+        z.strictObject({ type: z.literal('enemyDefeated'), id }),
+        z.strictObject({
+          type: z.literal('enemyAttack'),
+          behavior: z.enum(ENEMY_BEHAVIORS),
+        }),
+        z.strictObject({ type: z.literal('elementDamage'), element }),
+        z.strictObject({ type: z.literal('elementalAdvantage') }),
+      ])
+    )
     .optional(),
 })
 
@@ -459,6 +667,25 @@ const stateFields = <TConfig extends z.ZodType, TPlayer extends z.ZodType>(
 })
 
 // D-31: o banco não valida o jsonb; o mapper valida antes de `SeededRng.fromState` (D-32).
+const v8State = z.strictObject({
+  schemaVersion: z.literal(8),
+  ...stateFields(currentConfigSchema, playerSchema),
+  turn: turnSchema,
+  rewardDecks: rewardDecksSchema.optional(),
+  eventDecks: z
+    .array(
+      z.strictObject({
+        zoneType,
+        cards: z.array(id),
+        discard: z.array(id),
+      })
+    )
+    .optional(),
+  eventEncounter: eventEncounter.nullable().optional(),
+  pendingReward: pendingReward.nullable().optional(),
+  rewardSequence: count.optional(),
+})
+
 const stateSchema = z
   .discriminatedUnion('schemaVersion', [
     z.strictObject({
@@ -492,23 +719,26 @@ const stateSchema = z
       turn: turnSchema,
       rewardDecks: rewardDecksSchema.optional(),
     }),
-    z.strictObject({
+    v8State,
+    v8State.extend({
       schemaVersion: z.literal(SCHEMA_VERSION),
-      ...stateFields(currentConfigSchema, playerSchema),
-      turn: turnSchema,
-      rewardDecks: rewardDecksSchema.optional(),
-      eventDecks: z
-        .array(
-          z.strictObject({
-            zoneType,
-            cards: z.array(id),
-            discard: z.array(id),
-          })
-        )
-        .optional(),
-      eventEncounter: eventEncounter.nullable().optional(),
-      pendingReward: pendingReward.nullable().optional(),
-      rewardSequence: count.optional(),
+      ...stateFields(
+        currentConfigSchema,
+        playerSchema.extend({
+          down: z.boolean().optional(),
+          abilityUsage: z
+            .record(id, z.strictObject({ uses: count, cooldown: count }))
+            .optional(),
+          brokenEquipment: z.array(slot).optional(),
+        })
+      ),
+      combat: combat.nullable().optional(),
+      combatZone: zoneType.optional(),
+      lastCombatResult: combatResult.nullable().optional(),
+      combatOutcome: combatOutcome.nullable().optional(),
+      pendingTriggeredEffects: triggeredEffects.nullable().optional(),
+      triggeredEffectSequence: count.optional(),
+      upgradedCombatDecks: z.array(zoneType).optional(),
     }),
   ])
   .refine((state) => state.members.some((m) => m.id === state.hostMemberId), {
@@ -580,13 +810,27 @@ export class DrizzlePartyMapper {
         dimension: state.dimension,
         // D-87: save antigo fica sem decks de recompensas.
         rewardDecks: 'rewardDecks' in state ? (state.rewardDecks ?? []) : [],
-        ...(state.schemaVersion === SCHEMA_VERSION && {
+        ...((state.schemaVersion === 8 ||
+          state.schemaVersion === SCHEMA_VERSION) && {
           eventDecks: state.eventDecks,
           eventEncounter: state.eventEncounter as
             TEventEncounter | null | undefined,
           pendingReward: state.pendingReward,
           rewardSequence: state.rewardSequence,
         }),
+        ...(state.schemaVersion === SCHEMA_VERSION
+          ? {
+              combat: state.combat as TPartyProps['combat'],
+              combatZone: state.combatZone,
+              lastCombatResult: state.lastCombatResult,
+              combatOutcome:
+                state.combatOutcome as TPartyProps['combatOutcome'],
+              pendingTriggeredEffects:
+                state.pendingTriggeredEffects as TPartyProps['pendingTriggeredEffects'],
+              triggeredEffectSequence: state.triggeredEffectSequence,
+              upgradedCombatDecks: state.upgradedCombatDecks,
+            }
+          : { upgradedCombatDecks: [] }),
         turnOrder,
         // D-64: o save v2 ganha a vez na rodada 1, com o 1º de `turnOrder` e pontos cheios.
         turn:
@@ -609,6 +853,7 @@ export class DrizzlePartyMapper {
   }
 
   static toDrizzle(party: Party): TPartyRow & { state: TPartyState } {
+    const snapshot = party.combatSnapshot()
     const [a, b, c, d] = party.rngState
     const { dimensionCardId, startingCityZoneId, map } = party.dimension
     return {
@@ -674,6 +919,13 @@ export class DrizzlePartyMapper {
             ...(m.player.lastRewardDelivery !== undefined && {
               lastRewardDelivery: m.player.lastRewardDelivery,
             }),
+            ...(m.player.down !== undefined && { down: m.player.down }),
+            ...(m.player.abilityUsage && {
+              abilityUsage: { ...m.player.abilityUsage },
+            }),
+            ...(m.player.brokenEquipment && {
+              brokenEquipment: [...m.player.brokenEquipment],
+            }),
           },
         })),
         hostMemberId: party.hostMemberId.toString(),
@@ -708,6 +960,25 @@ export class DrizzlePartyMapper {
         }),
         ...(party.rewardSequence > 0 && {
           rewardSequence: party.rewardSequence,
+        }),
+        ...(snapshot.combat && { combat: combat.parse(snapshot.combat) }),
+        ...(snapshot.combatZone && { combatZone: snapshot.combatZone }),
+        ...(snapshot.lastCombatResult && {
+          lastCombatResult: snapshot.lastCombatResult,
+        }),
+        ...(snapshot.combatOutcome && {
+          combatOutcome: combatOutcome.parse(snapshot.combatOutcome),
+        }),
+        ...(snapshot.pendingTriggeredEffects && {
+          pendingTriggeredEffects: triggeredEffects.parse(
+            snapshot.pendingTriggeredEffects
+          ),
+        }),
+        ...(snapshot.triggeredEffectSequence && {
+          triggeredEffectSequence: snapshot.triggeredEffectSequence,
+        }),
+        ...(snapshot.upgradedCombatDecks && {
+          upgradedCombatDecks: [...snapshot.upgradedCombatDecks],
         }),
         turnOrder: party.turnOrder.map((m) => m.toString()),
         turn: {

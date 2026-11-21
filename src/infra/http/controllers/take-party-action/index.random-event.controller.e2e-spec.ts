@@ -131,7 +131,11 @@ describe('Eventos aleatórios (HTTP e save)', () => {
       members: [{ player: { availableActions: ['revealEvent'] } }],
     })
     expect(started.body).not.toHaveProperty('eventDecks')
-    expect((await get(id).expect(200)).body).toEqual(started.body)
+    {
+      const { combatUpdates, ...snapshot } = started.body
+      expect(combatUpdates).toEqual([])
+      expect((await get(id).expect(200)).body).toEqual(snapshot)
+    }
     await act(id, { type: 'endTurn' })
       .expect(409)
       .expect(({ body }) =>
@@ -244,7 +248,11 @@ describe('Eventos aleatórios (HTTP e save)', () => {
       eligibleHandCopyIds: [],
     })
     expect(paid.body.members[0].player.handCopies).toHaveLength(2)
-    expect((await get(id).expect(200)).body).toEqual(paid.body)
+    {
+      const { combatUpdates, ...snapshot } = paid.body
+      expect(combatUpdates).toEqual([])
+      expect((await get(id).expect(200)).body).toEqual(snapshot)
+    }
     const before = await stored(id)
     await act(id, pay)
       .expect(409)
@@ -260,7 +268,11 @@ describe('Eventos aleatórios (HTTP e save)', () => {
         })
       })
     expect(await stored(id)).toEqual(before)
-    expect((await get(id).expect(200)).body).toEqual(paid.body)
+    {
+      const { combatUpdates, ...snapshot } = paid.body
+      expect(combatUpdates).toEqual([])
+      expect((await get(id).expect(200)).body).toEqual(snapshot)
+    }
     const gaveUp = await act(id, {
       type: 'giveUpEvent',
       encounterId: pay.encounterId,
@@ -313,7 +325,11 @@ describe('Eventos aleatórios (HTTP e save)', () => {
           },
         ],
       })
-      expect((await get(id).expect(200)).body).toEqual(escaped.body)
+      {
+        const { combatUpdates, ...snapshot } = escaped.body
+        expect(combatUpdates).toEqual([])
+        expect((await get(id).expect(200)).body).toEqual(snapshot)
+      }
       const next = await act(id, { type: 'endTurn' }).expect(200)
       expect(next.body.turn.actionPoints).toBe(1 - debt)
       expect(next.body.members[0].player.nextTurnActionPointDebt).toBe(0)
@@ -338,7 +354,11 @@ describe('Eventos aleatórios (HTTP e save)', () => {
         },
       ],
     })
-    expect((await get(id).expect(200)).body).toEqual(paused.body)
+    {
+      const { combatUpdates, ...snapshot } = paused.body
+      expect(combatUpdates).toEqual([])
+      expect((await get(id).expect(200)).body).toEqual(snapshot)
+    }
     const keep = {
       type: 'resolveReward',
       rewardId: paused.body.pendingRewards[0].id,
@@ -365,9 +385,11 @@ describe('Eventos aleatórios (HTTP e save)', () => {
       results.find(({ status }) => status === 409)?.body.error.details.reason
     ).toBe('staleReward')
     const resumed = await get(id).expect(200)
-    expect(resumed.body).toEqual(
-      results.find(({ status }) => status === 200)?.body
-    )
+    const { combatUpdates, ...snapshot } = results.find(
+      ({ status }) => status === 200
+    )!.body
+    expect(combatUpdates).toEqual([])
+    expect(resumed.body).toEqual(snapshot)
     expect(resumed.body.pendingRewards).toMatchObject([
       { cardId: potion, origin: { type: 'reserveDeck' } },
     ])
