@@ -17,6 +17,11 @@ const haste = 'fixture.t67-haste'
 const paidStrike = 'fixture.t67-paid-strike'
 const fieldAid = 'fixture.t67-field-aid'
 const paymentEvent = 'fixture.t67-payment-event'
+const legacyCombat = 'fixture.t67-legacy-combat'
+const catalogCombat = 'fixture.t67-catalog-combat'
+const classWeapon = 'fixture.t67-class-weapon'
+const restrictedAbility = 'fixture.t67-rogue-ability'
+const unrestrictedAbility = 'fixture.t67-open-ability'
 const tiedCelerity = 10
 const hasteDuration = { kind: 'forCombatCycles', cycles: 2 }
 const ability = {
@@ -45,9 +50,29 @@ async function prepareContent() {
   const [enemy] = card.enemies
   const modifiers = { ...enemy.modifiers, attack: 0, defense: 0, evasion: 0 }
   const empty = { text: 'Fim do combate.', steps: [] }
+  const catalogCard = {
+    ...card,
+    id: catalogCombat,
+    title: 'Lobos Uivantes — Limiar ausente',
+    enemies: [{ ...enemy, count: 1, health: 1, modifiers }],
+    goodOutcome: empty,
+    badOutcome: empty,
+  }
   await writeFile(
     combatPath,
     JSON.stringify([
+      {
+        ...card,
+        id: legacyCombat,
+        title: 'Lobos Uivantes — Catálogo legado',
+        enemies: [{
+          ...enemy,
+          abilities: [{ name: 'Uivo', text: 'A matilha uiva.' }],
+        }],
+      },
+      catalogCard,
+      { ...catalogCard, id: `${catalogCombat}-null`, title: 'Lobos Uivantes — Limiar nulo', escapeThreshold: null },
+      { ...catalogCard, id: `${catalogCombat}-zero`, title: 'Lobos Uivantes — Limiar zero', escapeThreshold: 0 },
       {
         ...card,
         enemies: [
@@ -122,6 +147,15 @@ async function prepareContent() {
   const equipmentPath = join(root, 'fixture', 'equipment.json')
   const equipment = JSON.parse(await readFile(equipmentPath, 'utf8'))
   const weapon = equipment.find(({ id }) => id === blade)
+  equipment.push({
+    ...weapon,
+    id: classWeapon,
+    name: 'Lâmina de Classe',
+    abilities: [
+      { ...ability, id: restrictedAbility, name: 'Golpe do Ladino', classRestriction: ['rogue'] },
+      { ...ability, id: unrestrictedAbility, name: 'Golpe Livre' },
+    ],
+  })
   weapon.modifiers = []
   weapon.abilities = [
     {
@@ -303,6 +337,11 @@ async function prepareCampaigns(mode) {
   if (mode === 'legacy') await api(`/catalog/cards/${reserveEvent}`)
   if (mode === 'initiative') await api(`/catalog/cards/${initiative}`)
   if (mode === 'outcomes') await api(`/catalog/cards/${defeat}`)
+  if (mode === 'catalog') {
+    for (const cardId of [legacyCombat, catalogCombat, `${catalogCombat}-null`, `${catalogCombat}-zero`, classWeapon]) {
+      await api(`/catalog/cards/${cardId}`)
+    }
+  }
   if (mode === 'cooldown') await api(`/catalog/cards/${fieldAid}-weapon`)
   if (mode === 'abilities') {
     await api(`/catalog/cards/${paidStrike}-weapon`)
@@ -336,6 +375,12 @@ async function prepareCampaigns(mode) {
           { name: 'T-67 — Deixar recompensa', cardId: wolves },
           { name: 'T-67 — Derrota', cardId: defeat },
         ]
+      : mode === 'catalog'
+      ? [
+          { name: 'T-67 — Limiar ausente', cardId: catalogCombat, threshold: 13 },
+          { name: 'T-67 — Limiar nulo', cardId: `${catalogCombat}-null`, threshold: 13 },
+          { name: 'T-67 — Limiar zero', cardId: `${catalogCombat}-zero`, threshold: 0 },
+        ]
       : mode === 'stale' ? [scenarios[1]] : scenarios
     for (const scenario of selected) {
       const pause = scenario.cardId === ambush
@@ -353,7 +398,12 @@ async function prepareCampaigns(mode) {
       state.eventDecks = [
         { zoneType: 'urban', cards: [scenario.cardId], discard: [] },
       ]
-      if (scenario.abilityId) {
+      if (mode === 'catalog') {
+        state.config.combatEscapeThreshold = 13
+        Object.assign(player, { peak: 0, vigor: 10 })
+        player.equipment.weapon = classWeapon
+        Object.assign(player.modifiers, { accuracy: 100, celerity: 100 })
+      } else if (scenario.abilityId) {
         state.turn.actionPoints = 1
         Object.assign(player, { peak: 0, health: 10, gold: 10, vigor: 10, inventory: [] })
         for (const slot of Object.keys(player.equipment)) player.equipment[slot] = null
@@ -385,7 +435,24 @@ async function prepareCampaigns(mode) {
         Object.assign(player.modifiers, { accuracy: 100, defense: 100 })
       }
       await db.query('update parties set state = $1 where id = $2', [state, id])
-      if (mode === 'cooldown') {
+      if (mode === 'catalog') {
+        const started = await api(`/parties/${id}/actions`, { type: 'startEvent' })
+        await api(`/parties/${id}/actions`, {
+          type: 'revealEvent',
+          encounterId: started.randomEventEncounter.id,
+        })
+        const party = await api(`/parties/${id}`)
+        const options = party.combat?.abilities ?? []
+        if (
+          party.combat?.card.id !== scenario.cardId ||
+          party.combat.escape.threshold !== scenario.threshold ||
+          party.members[0].player.equipment.weapon !== classWeapon ||
+          !options.some(({ abilityId }) => abilityId === unrestrictedAbility) ||
+          options.some(({ abilityId }) => abilityId === restrictedAbility)
+        ) {
+          throw new Error(`Campanha ${id} sem o limiar ou as opções de habilidade esperadas.`)
+        }
+      } else if (mode === 'cooldown') {
         await api(`/parties/${id}/actions`, { type: 'startEvent' })
         const party = await api(`/parties/${id}`)
         const playerState = party.members[0].player
@@ -521,6 +588,8 @@ async function main() {
       return prepareCampaigns('stale')
     case 'outcomes':
       return prepareCampaigns('outcomes')
+    case 'catalog':
+      return prepareCampaigns('catalog')
     case 'legacy':
       return prepareCampaigns('legacy')
     case 'initiative':
@@ -536,7 +605,7 @@ async function main() {
     case 'snapshot':
       return readSnapshot(process.argv[3])
     default:
-      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
+      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, catalog, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
   }
 }
 
