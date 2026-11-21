@@ -8,6 +8,7 @@ const { createHash } = require('node:crypto')
 
 const wolves = 'fixture.howling-wolves'
 const defeat = 'fixture.t67-defeat'
+const immediateCombat = 'fixture.t67-immediate-combat'
 const ambush = 'fixture.fire-ambush'
 const blade = 'fixture.blade-of-dusk'
 const traveler = 'fixture.wounded-traveler'
@@ -90,6 +91,19 @@ async function prepareContent() {
           text: 'Compre uma recompensa.',
           steps: [{ type: 'drawRewards', count: 1 }],
         },
+        badOutcome: empty,
+      },
+      {
+        ...card,
+        id: immediateCombat,
+        title: 'Lobo da Revelação',
+        enemies: [{
+          ...enemy,
+          count: 1,
+          health: 1,
+          modifiers: { ...modifiers, attack: 20, accuracy: 100, celerity: 100 },
+        }],
+        goodOutcome: empty,
         badOutcome: empty,
       },
       {
@@ -378,6 +392,7 @@ async function prepareCampaigns(mode) {
   if (mode === 'legacy') await api(`/catalog/cards/${reserveEvent}`)
   if (mode === 'initiative' || mode === 'payments') await api(`/catalog/cards/${initiative}`)
   if (mode === 'outcomes') await api(`/catalog/cards/${defeat}`)
+  if (mode === 'reveal') await api(`/catalog/cards/${immediateCombat}`)
   if (mode === 'catalog') {
     for (const cardId of [legacyCombat, catalogCombat, `${catalogCombat}-null`, `${catalogCombat}-zero`, classWeapon]) {
       await api(`/catalog/cards/${cardId}`)
@@ -412,6 +427,11 @@ async function prepareCampaigns(mode) {
       ? [{ name: 'T-67 — Reset de recarga', cardId: wolves, abilityId: fieldAid }]
       : mode === 'payments'
       ? [{ name: 'T-67 — Pagamento em lote', cardId: initiative, abilityId: batchPayment }]
+      : mode === 'reveal'
+      ? [
+          { name: 'T-67 — Vitória na revelação', cardId: immediateCombat, reflection: 20 },
+          { name: 'T-67 — Derrota na revelação', cardId: immediateCombat, reflection: 0 },
+        ]
       : mode === 'outcomes'
       ? [
           { name: 'T-67 — Turno atual', cardId: wolves },
@@ -442,7 +462,14 @@ async function prepareCampaigns(mode) {
       state.eventDecks = [
         { zoneType: 'urban', cards: [scenario.cardId], discard: [] },
       ]
-      if (mode === 'catalog') {
+      if (mode === 'reveal') {
+        Object.assign(player, { peak: 0, vigor: 0, health: 1 })
+        for (const slot of Object.keys(player.equipment)) player.equipment[slot] = null
+        player.statuses = []
+        Object.assign(player.modifiers, {
+          defense: 0, evasion: 0, celerity: 0, reflection: scenario.reflection,
+        })
+      } else if (mode === 'catalog') {
         state.config.combatEscapeThreshold = 13
         Object.assign(player, { peak: 0, vigor: 10 })
         player.equipment.weapon = classWeapon
@@ -489,7 +516,20 @@ async function prepareCampaigns(mode) {
         Object.assign(player.modifiers, { accuracy: 100, defense: 100 })
       }
       await db.query('update parties set state = $1 where id = $2', [state, id])
-      if (mode === 'catalog') {
+      if (mode === 'reveal') {
+        await api(`/parties/${id}/actions`, { type: 'startEvent' })
+        const party = await api(`/parties/${id}`)
+        if (
+          party.randomEventEncounter?.phase !== 'anticipation' ||
+          party.combat !== null ||
+          party.lastCombatResult !== null ||
+          party.members[0].player.health !== 1 ||
+          !party.members[0].player.availableActions.includes('revealEvent')
+        ) {
+          throw new Error(`Campanha ${id} sem a antecipação esperada para a revelação.`)
+        }
+        console.log(`${scenario.name}  ${url}/parties/${id}`)
+      } else if (mode === 'catalog') {
         const started = await api(`/parties/${id}/actions`, { type: 'startEvent' })
         await api(`/parties/${id}/actions`, {
           type: 'revealEvent',
@@ -674,6 +714,8 @@ async function main() {
       return prepareCampaigns('catalog')
     case 'payments':
       return prepareCampaigns('payments')
+    case 'reveal':
+      return prepareCampaigns('reveal')
     case 'legacy':
       return prepareCampaigns('legacy')
     case 'initiative':
@@ -689,7 +731,7 @@ async function main() {
     case 'snapshot':
       return readSnapshot(process.argv[3])
     default:
-      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, catalog, payments, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
+      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, catalog, payments, reveal, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
   }
 }
 
