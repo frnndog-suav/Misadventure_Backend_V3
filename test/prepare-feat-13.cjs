@@ -7,6 +7,8 @@ const { Client } = require('pg')
 const { createHash } = require('node:crypto')
 
 const wolves = 'fixture.howling-wolves'
+const escapeCombat = 'fixture.t67-failed-escape'
+const noEscapeCombat = 'fixture.t67-no-escape'
 const defeat = 'fixture.t67-defeat'
 const immediateCombat = 'fixture.t67-immediate-combat'
 const supportCombat = 'fixture.t67-support-combat'
@@ -81,6 +83,46 @@ async function prepareContent() {
         }],
       },
       catalogCard,
+      {
+        ...catalogCard,
+        id: escapeCombat,
+        title: 'Lobo da Fuga',
+        escapeThreshold: 20,
+        enemies: [{
+          ...enemy,
+          count: 1,
+          health: 20,
+          modifiers: { ...modifiers, attack: 4, accuracy: 100, celerity: 1 },
+        }],
+      },
+      {
+        ...catalogCard,
+        id: noEscapeCombat,
+        title: 'Lobo sem Fuga',
+        noEscape: true,
+        enemies: [{
+          ...enemy,
+          count: 1,
+          health: 20,
+          modifiers: { ...modifiers, attack: 4, accuracy: 0, celerity: 1 },
+        }],
+        goodOutcome: {
+          text: 'Compre uma recompensa.',
+          steps: [{ type: 'drawRewards', count: 1 }],
+        },
+        badOutcome: {
+          text: 'Perca 5 de ouro.',
+          steps: [{
+            type: 'effect',
+            effect: {
+              text: 'Perca 5 de ouro.',
+              activation: [{ kind: 'loseGold', amount: 5 }],
+              duration: { kind: 'immediate' },
+              mark: null,
+            },
+          }],
+        },
+      },
       {
         ...catalogCard,
         id: damageCombat,
@@ -480,6 +522,10 @@ async function prepareCampaigns(mode, victoryOnly = false) {
   if (mode === 'legacy') await api(`/catalog/cards/${reserveEvent}`)
   if (mode === 'initiative' || mode === 'payments') await api(`/catalog/cards/${initiative}`)
   if (mode === 'outcomes') await api(`/catalog/cards/${defeat}`)
+  if (mode === 'escape') {
+    await api(`/catalog/cards/${escapeCombat}`)
+    await api(`/catalog/cards/${noEscapeCombat}`)
+  }
   if (mode === 'support') {
     await api(`/catalog/cards/${supportCombat}`)
     await api(`/catalog/cards/${channelWeapon}`)
@@ -528,6 +574,11 @@ async function prepareCampaigns(mode, victoryOnly = false) {
           { name: 'T-67 — Vitória na revelação', cardId: immediateCombat, reflection: 20 },
           { name: 'T-67 — Derrota na revelação', cardId: immediateCombat, reflection: 0 },
         ]
+      : mode === 'escape'
+      ? [
+          { name: 'T-67 Fuga falha', cardId: escapeCombat },
+          { name: 'T-67 Sem fuga', cardId: noEscapeCombat },
+        ]
       : mode === 'support'
       ? [20, 25].map(threshold => ({
           name: `T-67 Suporte ${threshold}%`,
@@ -567,7 +618,18 @@ async function prepareCampaigns(mode, victoryOnly = false) {
       state.eventDecks = [
         { zoneType: 'urban', cards: [scenario.cardId], discard: [] },
       ]
-      if (mode === 'support') {
+      if (mode === 'escape') {
+        const noEscape = scenario.cardId === noEscapeCombat
+        Object.assign(player, { peak: 10, vigor: noEscape ? 6 : 10, health: 20, gold: 10, statuses: [] })
+        for (const slot of Object.keys(player.equipment)) player.equipment[slot] = null
+        Object.assign(player.modifiers, { defense: 0, evasion: 0, celerity: 100, reflection: 0 })
+        Object.assign(state.config, {
+          maxCombatCycles: noEscape ? 1 : 20,
+          escapeVigorPercent: 20,
+          combatEscapePeakLoss: 2,
+        })
+        state.rewardDecks = [{ zoneType: 'urban', cards: ['fixture.iron-ore'] }]
+      } else if (mode === 'support') {
         Object.assign(player, { peak: 0, vigor: 10, health: 20, statuses: [] })
         for (const slot of Object.keys(player.equipment)) player.equipment[slot] = null
         player.equipment.weapon = channelWeapon
@@ -641,13 +703,41 @@ async function prepareCampaigns(mode, victoryOnly = false) {
         Object.assign(player.modifiers, { accuracy: 100, defense: 100 })
       }
       await db.query('update parties set state = $1 where id = $2', [state, id])
-      if (mode === 'support' || mode === 'damage') {
+      if (mode === 'escape' || mode === 'support' || mode === 'damage') {
         const started = await api(`/parties/${id}/actions`, { type: 'startEvent' })
         await api(`/parties/${id}/actions`, {
           type: 'revealEvent',
           encounterId: started.randomEventEncounter.id,
         })
         const { combat, members } = await api(`/parties/${id}`)
+        if (mode === 'escape') {
+          const noEscape = scenario.cardId === noEscapeCombat
+          const { player: active } = members[0]
+          if (
+            combat?.card.id !== scenario.cardId ||
+            combat.turn.actorId !== combat.memberId ||
+            combat.turn.phase !== 'prepare' ||
+            combat.cycle !== 1 ||
+            combat.maxCycles !== (noEscape ? 1 : 20) ||
+            combat.escape.unavailableReason !== (noEscape ? 'escapeForbidden' : null) ||
+            combat.escape.vigorCost !== 2 ||
+            (!noEscape && (combat.escape.threshold !== 20 || combat.escape.automatic)) ||
+            active.peak !== 10 || active.vigor !== (noEscape ? 6 : 10) ||
+            active.health !== 20 || active.gold !== 10
+          ) {
+            throw new Error(`Campanha ${id} sem o estado inicial esperado para Fuga.`)
+          }
+          console.log(JSON.stringify({
+            id,
+            url: new URL(`/parties/${id}`, url).href,
+            action: {
+              type: noEscape ? 'endCombatTurn' : 'escapeCombat',
+              combatId: combat.id,
+              turnId: combat.turn.id,
+            },
+          }))
+          continue
+        }
         if (mode === 'support') {
           const option = combat?.abilities.find(({ abilityId }) => abilityId === channelAbility)
           if (
@@ -894,6 +984,8 @@ async function main() {
       return prepareCampaigns('reveal')
     case 'reveal-win':
       return prepareCampaigns('reveal', true)
+    case 'escape':
+      return prepareCampaigns('escape')
     case 'support':
       return prepareCampaigns('support')
     case 'damage':
@@ -913,7 +1005,7 @@ async function main() {
     case 'snapshot':
       return readSnapshot(process.argv[3])
     default:
-      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, catalog, payments, reveal, reveal-win, damage, support, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
+      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, catalog, payments, reveal, reveal-win, damage, support, escape, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
   }
 }
 
