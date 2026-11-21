@@ -26,6 +26,9 @@ const initiative = 'fixture.t67-initiative'
 const haste = 'fixture.t67-haste'
 const paidStrike = 'fixture.t67-paid-strike'
 const fieldAid = 'fixture.t67-field-aid'
+const triggerAbility = 'fixture.t67-trigger-ability'
+const triggerWeapon = 'fixture.t67-trigger-weapon'
+const mixedTriggerWeapon = 'fixture.t67-mixed-trigger-weapon'
 const paymentEvent = 'fixture.t67-payment-event'
 const batchPayment = 'fixture.t67-batch-payment'
 const batchResources = ['fixture.iron-ore', 'fixture.silver-fish']
@@ -429,6 +432,50 @@ async function prepareContent() {
       abilities: [scenarioAbility],
     })
   }
+  const trigger = {
+    kind: 'onAbilityUsed', slots: ['weapon'], excludeSlots: [], tags: [], cardId: null,
+  }
+  const immediate = { trigger, duration: { kind: 'immediate' }, mark: null }
+  for (const [id, cost] of [[triggerWeapon, 1], [mixedTriggerWeapon, 11]]) {
+    const effects = [{
+      ...immediate,
+      text: `Pague ${cost} de ouro para recuperar 2 PV.`,
+      cost: [{ kind: 'payGold', amount: cost }],
+      activation: [{ kind: 'heal', amount: 2 }],
+    }]
+    if (id === mixedTriggerWeapon) {
+      effects.push({
+        ...immediate,
+        text: 'Ganhe 2 de ouro.',
+        cost: [],
+        activation: [{ kind: 'gainGold', amount: 2 }],
+      })
+    }
+    const active = {
+      ...ability,
+      id: triggerAbility,
+      name: 'Sinal de Campo',
+      text: 'Dispare a passiva da arma.',
+      timing: 'outsideCombat',
+      target: 'self',
+      element: null,
+      power: null,
+    }
+    equipment.push({
+      ...weapon,
+      id,
+      name: id === mixedTriggerWeapon ? 'Lâmina de Dois Gatilhos' : 'Lâmina de Antecipação',
+      abilities: [active, {
+        ...active,
+        id: 'fixture.t67-trigger-passive',
+        name: 'Resposta de Campo',
+        text: 'Resolva os efeitos ao usar uma habilidade de arma.',
+        form: 'passive',
+        timing: 'both',
+        effects,
+      }],
+    })
+  }
   await writeFile(equipmentPath, JSON.stringify(equipment))
   const randomEventPath = join(root, 'fixture', 'randomEvent.json')
   const randomEvents = JSON.parse(await readFile(randomEventPath, 'utf8'))
@@ -541,6 +588,10 @@ async function prepareCampaigns(mode, victoryOnly = false) {
     }
   }
   if (mode === 'cooldown') await api(`/catalog/cards/${fieldAid}-weapon`)
+  if (mode === 'triggered' || mode === 'triggered-resolve') {
+    await api(`/catalog/cards/${triggerWeapon}`)
+    await api(`/catalog/cards/${mixedTriggerWeapon}`)
+  }
   if (mode === 'payments') await api(`/catalog/cards/${batchPayment}-weapon`)
   if (mode === 'abilities') {
     await api(`/catalog/cards/${paidStrike}-weapon`)
@@ -555,7 +606,18 @@ async function prepareCampaigns(mode, victoryOnly = false) {
       { name: 'T-67 — Efeito disparado', cardId: ambush },
       { name: 'T-67 — Reflexão fatal', cardId: wolves },
     ]
-    const selected = mode === 'abilities'
+    const mixedTrigger = {
+      name: 'T-67 Gatilhos juntos', cardId: wolves, triggerWeapon: mixedTriggerWeapon,
+    }
+    const selected = mode === 'triggered-resolve'
+      ? [mixedTrigger]
+      : mode === 'triggered'
+      ? [
+          { name: 'T-67 Pagar gatilho', cardId: wolves, triggerWeapon },
+          { name: 'T-67 Recusar gatilho', cardId: wolves, triggerWeapon },
+          mixedTrigger,
+        ]
+      : mode === 'abilities'
       ? [
           { name: 'T-67 — Golpe Pago', cardId: ambush, abilityId: paidStrike },
           { name: 'T-67 — Socorro de Campo', cardId: paymentEvent, abilityId: fieldAid },
@@ -618,7 +680,12 @@ async function prepareCampaigns(mode, victoryOnly = false) {
       state.eventDecks = [
         { zoneType: 'urban', cards: [scenario.cardId], discard: [] },
       ]
-      if (mode === 'escape') {
+      if (scenario.triggerWeapon) {
+        state.turn.actionPoints = 1
+        Object.assign(player, { peak: 0, health: player.baseHealth - 5, gold: 10, statuses: [] })
+        for (const slot of Object.keys(player.equipment)) player.equipment[slot] = null
+        player.equipment.weapon = scenario.triggerWeapon
+      } else if (mode === 'escape') {
         const noEscape = scenario.cardId === noEscapeCombat
         Object.assign(player, { peak: 10, vigor: noEscape ? 6 : 10, health: 20, gold: 10, statuses: [] })
         for (const slot of Object.keys(player.equipment)) player.equipment[slot] = null
@@ -703,6 +770,42 @@ async function prepareCampaigns(mode, victoryOnly = false) {
         Object.assign(player.modifiers, { accuracy: 100, defense: 100 })
       }
       await db.query('update parties set state = $1 where id = $2', [state, id])
+      if (scenario.triggerWeapon) {
+        await api(`/parties/${id}/actions`, { type: 'startEvent' })
+        await api(`/parties/${id}/actions`, {
+          type: 'prepare',
+          operation: 'useAbility',
+          equipmentSlot: 'weapon',
+          abilityId: triggerAbility,
+        })
+        const party = await api(`/parties/${id}`)
+        const choice = party.triggeredEffectChoice
+        const playerState = party.members[0].player
+        const mixed = scenario.triggerWeapon === mixedTriggerWeapon
+        const optional = choice?.effects.find(({ mode }) => mode === 'optional')
+        const automatic = choice?.effects.find(({ mode }) => mode === 'automatic')
+        if (
+          party.randomEventEncounter?.phase !== 'anticipation' ||
+          choice?.decisionDeadlineAt !== null ||
+          choice.effects.length !== (mixed ? 2 : 1) ||
+          optional?.canPay !== !mixed ||
+          Boolean(automatic) !== mixed ||
+          playerState.gold !== 10 ||
+          playerState.health !== player.health ||
+          playerState.availableActions.join() !== 'resolveTriggeredEffect'
+        ) {
+          throw new Error(`Campanha ${id} sem a escolha de gatilho esperada.`)
+        }
+        console.log(JSON.stringify({
+          scenario: scenario.name,
+          id,
+          url: new URL(`/parties/${id}`, url).href,
+          health: playerState.health,
+          gold: playerState.gold,
+          choice,
+        }))
+        continue
+      }
       if (mode === 'escape' || mode === 'support' || mode === 'damage') {
         const started = await api(`/parties/${id}/actions`, { type: 'startEvent' })
         await api(`/parties/${id}/actions`, {
@@ -980,6 +1083,10 @@ async function main() {
       return prepareCampaigns('catalog')
     case 'payments':
       return prepareCampaigns('payments')
+    case 'triggered':
+      return prepareCampaigns('triggered')
+    case 'triggered-resolve':
+      return prepareCampaigns('triggered-resolve')
     case 'reveal':
       return prepareCampaigns('reveal')
     case 'reveal-win':
@@ -1005,7 +1112,7 @@ async function main() {
     case 'snapshot':
       return readSnapshot(process.argv[3])
     default:
-      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, catalog, payments, reveal, reveal-win, damage, support, escape, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
+      throw new Error('Use content, campaigns, legacy, initiative, abilities, stale, outcomes, catalog, payments, triggered, triggered-resolve, reveal, reveal-win, damage, support, escape, cooldown, cooldown-state <id>, outcome-state <id> ou snapshot <id>.')
   }
 }
 
