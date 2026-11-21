@@ -78,7 +78,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 058 | T-49 | [Save e HTTP de combate](058-T-49-save-e-http-de-combate.md) | concluída |
 | 059 | FEAT-14 | [Acordo de contrato de nocaute, spawn e respawn](059-FEAT-14-contrato-nocaute.md) | concluída |
 | 060 | T-50 | [Configuração de nocaute e ponto de respawn](060-T-50-configuracao-e-ponto-de-respawn.md) | concluída |
-| 061 | T-51 | [Queda e continuidade do desfecho](061-T-51-queda-e-continuidade-do-desfecho.md) | aguardando revisão |
+| 061 | T-51 | [Queda e continuidade do desfecho](061-T-51-queda-e-continuidade-do-desfecho.md) | concluída |
+| 062 | T-52 | [Penalidades e passagem de vez](062-T-52-penalidades-e-passagem-de-vez.md) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

@@ -1,7 +1,7 @@
 # T-51 — Queda e continuidade do desfecho
 
 - Data — 2026-11-21
-- Status — aguardando revisão
+- Status — concluída
 - Spec — v0.65, REQ-126 e REQ-127
 - Contrato — v0.69, FEAT-14 acordada
 - Horas — a preencher pelo autor
@@ -27,7 +27,7 @@ Na primeira execução, a recusa por Vigor insuficiente passou. Cinco unitários
 
 ## Verificação após implementar
 
-- `npm run typecheck` e `git diff --check` passaram. Aguardando o autor executar os testes unitários afetados e o cenário HTTP.
+- `npm run typecheck` e `git diff --check` passaram. O autor confirmou que os testes unitários da campanha e a suíte HTTP de combate passaram sem erros. A implementação foi registrada no commit `859863e`.
 - Caso de borda — resolver a primeira recompensa do revés, aplicar a cura e abrir a segunda escolha com os mesmos membro e rodada, ainda com 0 PV e 0 PA. Resolver a segunda escolha deve concluir o desfecho, descartar a carta e devolver o jogador recuperado.
 - A proteção de Pico e a marca de espera em grupo seguem na T-52. O resumo persistido e a retomada de saves legados seguem na T-53.
 

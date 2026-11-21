@@ -61,7 +61,7 @@ import {
   matchesAbilityUse,
 } from '../../combat/abilities'
 import { describeAbilityPayment, payAbility } from '../../combat/payment'
-import { effectiveModifiers } from '../../effective-modifiers'
+import { effectiveModifiers, equipmentWorks } from '../../effective-modifiers'
 import { applyActivations } from '../../effect-activation'
 import type { TPartyEvent } from '../../events/party-events'
 import { addToInventory, type TInventorySlot } from '../../inventory'
@@ -3683,8 +3683,48 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 
     const config = this.config
     const solo = this.turnOrder.length === 1
+    const at = this.savedAt
+    const equipped = EQUIPMENT_SLOTS.flatMap((slot) => {
+      const id = player.equipment[slot]
+      const card = id ? this.eventCatalog.get(id) : undefined
+      return card?.type === 'equipment' ? [card] : []
+    })
+    const inactiveSources = new Set(
+      equipped
+        .filter(
+          (card) =>
+            !equipmentWorks(card, player.peak) ||
+            player.brokenEquipment?.includes(card.slot)
+        )
+        .map(({ id }) => id)
+    )
+    const protectsPeak = (effect: { activation: readonly { kind: string }[] }) =>
+      effect.activation.some(({ kind }) => kind === 'keepPeakOnKnockout')
+    const peakProtected =
+      player.statuses.some(
+        (status) =>
+          !inactiveSources.has(status.sourceCardId) && protectsPeak(status)
+      ) ||
+      equipped.some(
+        (card) =>
+          !inactiveSources.has(card.id) &&
+          card.effects.some(
+            (effect) =>
+              effect.trigger === null &&
+              effect.cost.length === 0 &&
+              effect.duration.kind === 'whileSourceActive' &&
+              protectsPeak(effect)
+          )
+      )
+    this.props.members[index] = this.updateStatuses(
+      this.props.members[index],
+      (status) => (status.duration.kind === 'untilKnockout' ? null : status),
+      at
+    )
+    player = this.props.members[index].player
+
     const peakLoss =
-      config.knockoutPeakLossPercent === 0
+      peakProtected || player.peak === 0 || config.knockoutPeakLossPercent === 0
         ? 0
         : Math.max(
             1,
@@ -3695,6 +3735,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     this.replaceActor(index, {
       ...player,
       down: false,
+      skipNextTurn: !solo,
       zoneId: player.respawnZoneId,
       peak,
       vigor: Math.min(
@@ -3710,7 +3751,6 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           Math.floor((player.gold * config.soloKnockoutGoldLossPercent) / 100)
         : player.gold,
     })
-    const at = this.savedAt
     this.endTurn(at)
     if (solo)
       for (let round = 0; round < config.soloKnockoutWaitRounds; round++)
@@ -3729,6 +3769,12 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       }
     }
 
+    let skipped = this.advanceTurn(at)
+    while (skipped) skipped = this.advanceTurn(at)
+    return right(undefined)
+  }
+
+  private advanceTurn(at: Date): boolean {
     const ended = this.props.turn
     const position = this.props.turnOrder.findIndex((id) =>
       id.equals(ended.memberId)
@@ -3740,6 +3786,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       member.id.equals(memberId)
     )
     const nextPlayer = this.props.members[nextIndex].player
+    const skip = this.turnOrder.length > 1 && nextPlayer.skipNextTurn === true
     if (nextPlayer.abilityUsage) {
       this.replaceActor(nextIndex, {
         ...nextPlayer,
@@ -3754,16 +3801,19 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       })
     }
     const debt = nextPlayer.nextTurnActionPointDebt ?? 0
-    if (debt > 0)
+    if (debt > 0 || skip)
       this.replaceActor(nextIndex, {
         ...this.props.members[nextIndex].player,
         nextTurnActionPointDebt: 0,
+        ...(skip && { skipNextTurn: false }),
       })
 
     this.props.turn = {
       round,
       memberId,
-      actionPoints: Math.max(0, this.props.config.actionPointsPerTurn - debt),
+      actionPoints: skip
+        ? 0
+        : Math.max(0, this.props.config.actionPointsPerTurn - debt),
     }
     this.props.savedAt = at
     const base = { occurredAt: at, aggregateId: this.id }
@@ -3786,7 +3836,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         at
       )
     })
-    return right(undefined)
+    return skip
   }
 
   /**

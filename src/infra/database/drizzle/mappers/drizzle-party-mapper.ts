@@ -274,6 +274,7 @@ const statusSchema = z.strictObject({
         'untilLeaveZone',
         'infinite',
         'untilPartyEnd',
+        'untilKnockout',
         'untilEventEnd',
         'untilOwnCombatTurnEnd',
         'untilDamageTaken',
@@ -731,6 +732,7 @@ const stateSchema = z
         currentConfigSchema,
         playerSchema.extend({
           down: z.boolean().optional(),
+          skipNextTurn: z.boolean().optional(),
           abilityUsage: z
             .record(id, z.strictObject({ uses: count, cooldown: count }))
             .optional(),
@@ -925,6 +927,9 @@ export class DrizzlePartyMapper {
               lastRewardDelivery: m.player.lastRewardDelivery,
             }),
             ...(m.player.down !== undefined && { down: m.player.down }),
+            ...(m.player.skipNextTurn !== undefined && {
+              skipNextTurn: m.player.skipNextTurn,
+            }),
             ...(m.player.abilityUsage && {
               abilityUsage: { ...m.player.abilityUsage },
             }),

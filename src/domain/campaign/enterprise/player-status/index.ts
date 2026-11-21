@@ -30,6 +30,7 @@ type TStatusDuration = Extract<
       | 'untilNextCombatEnd'
       | 'forCombats'
       | 'untilCombatWon'
+      | 'untilKnockout'
   }
 >
 
@@ -88,6 +89,7 @@ export function statusAfterTurn(
     case 'untilNextCombatEnd':
     case 'forCombats':
     case 'untilCombatWon':
+    case 'untilKnockout':
       return status
     default: {
       const _exhaustive: never = duration

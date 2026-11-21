@@ -54,6 +54,7 @@ export type TPlayerState = Readonly<{
   nextTurnActionPointDebt?: number
   lastRandomEvent?: TEventResult | null
   down?: boolean
+  skipNextTurn?: boolean
   automaticEventEscape?: boolean
   discard: readonly string[]
   gold: number

@@ -49,6 +49,7 @@ export interface TCardCopiesHttp {
 /** CONTRATO FEAT-06/FEAT-09, tipo `PlayerState`. A ordem do deck não trafega (D-42). */
 export interface TPlayerStateHttp {
   down: boolean
+  skipNextTurn: boolean
   usableAbilities: ReturnType<Party['adventureAbilityOptions']>
   playerClasses: { playerClass: TPlayerClass; deckLockMet: boolean }[]
   gold: number
@@ -196,6 +197,7 @@ function playerToHTTP(
     : []
   return {
     down: player.down ?? false,
+    skipNextTurn: player.skipNextTurn ?? false,
     usableAbilities,
     playerClasses: player.playerClasses.map(({ playerClass, deckLockMet }) => ({
       playerClass,

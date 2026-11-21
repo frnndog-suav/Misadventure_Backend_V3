@@ -32,6 +32,7 @@ const ACTIVATIONS = [
   'loseLife',
   'restoreVigor',
   'gainPeak',
+  'keepPeakOnKnockout',
   'modifierFlat',
   'modifierPercent',
   'drawCards',
@@ -61,6 +62,7 @@ const DURATIONS = [
   'untilPartyEnd',
   'untilEventEnd',
   'untilEventPhaseEnd',
+  'untilKnockout',
 ] as const satisfies readonly TPlayerStatus['duration']['kind'][]
 
 function hasKind<const T extends string>(
@@ -162,7 +164,10 @@ function resolveEffect(
   if (duration.kind === 'immediate') {
     if (
       activation.some(
-        ({ kind }) => kind === 'modifierFlat' || kind === 'modifierPercent'
+        ({ kind }) =>
+          kind === 'modifierFlat' ||
+          kind === 'modifierPercent' ||
+          kind === 'keepPeakOnKnockout'
       ) ||
       activation.some(isEventRuleActivation)
     ) {

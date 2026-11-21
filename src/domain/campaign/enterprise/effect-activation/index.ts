@@ -93,6 +93,7 @@ export function applyActivations(
       }
       case 'modifierFlat':
       case 'modifierPercent':
+      case 'keepPeakOnKnockout':
       case 'fleeTargetOverride':
       case 'fleeTargetModifier':
       case 'diceResultModifier':
