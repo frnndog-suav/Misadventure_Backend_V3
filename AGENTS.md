@@ -68,13 +68,15 @@ Use o mapa para selecionar as consultas da tarefa e mantenha o conteúdo técnic
 - O autor disponibiliza o backend real para a validação no frontend. Registre `validado` e feche a FEAT somente após receber a confirmação de que os cenários do contrato passaram.
 - Ao alterar `docs/README.md`, `docs/ROADMAP.md` ou `docs/CONTRATO.md`, incremente a versão e registre a mudança no histórico do arquivo. O autor copia o arquivo inteiro para o outro repositório.
 - Termine a resposta com um **Aviso de frontend** copiável quando houver proposta ou alteração de contrato, mudança em documento compartilhado, dependência do frontend, entrega pronta para validação integrada ou divergência de validação que exija revisão do frontend. Pause a parte que depende de acordo ou retorno e avance no trabalho independente da mesma tarefa.
+- Quando a resposta incluir um Aviso de frontend, coloque um rótulo em negrito e em linha própria imediatamente acima de cada comando ou prompt copiável. Para comandos de terminal, use **EXECUTE NO TERMINAL DO BACKEND** ou **EXECUTE NO TERMINAL DO FRONTEND** e informe o diretório de execução. Para prompts, use **COLE NO CHAT DO BACKEND** ou **COLE NO CHAT DO FRONTEND**. Indique o destino pela ação que o autor vai realizar, mesmo quando um teste do frontend usar a API do backend.
+- Coloque os comandos e prompts do backend antes do Aviso de frontend. Dentro do aviso, coloque os comandos e prompts do frontend junto ao cenário correspondente.
 - Quando não houver medição, deixe as horas a preencher no devlog e use `null` para a duração no registro de tempo da sessão, quando aplicável. O autor fecha o registro de tempo.
 
 > **Aviso de frontend — FEAT-nn**
 >
 > - **Motivo** — O que mudou ou precisa de decisão.
 > - **Levar** — Arquivos, versões e seções pertinentes e, quando aplicável, URL do backend e dados de teste.
-> - **Executar no frontend** — Revisão ou cenários contra o backend real, com os resultados esperados.
+> - **Executar no frontend** — Revisão ou cenários contra o backend real, com os resultados esperados. Se houver comando ou prompt copiável, use **EXECUTE NO TERMINAL DO FRONTEND** ou **COLE NO CHAT DO FRONTEND** imediatamente acima dele.
 > - **Trazer de volta** — Confirmação, resultados ou divergências com cenário, resultado esperado e resultado observado.
 > - **Situação no backend** — O que pode seguir e o que depende do retorno.
 
@@ -82,6 +84,8 @@ Use o mapa para selecionar as consultas da tarefa e mantenha o conteúdo técnic
 
 - Use um chat por etapa, incluindo implementação, testes e ajustes da mesma tarefa. Abra outro chat para uma etapa independente.
 - Quando o autor indicar que está começando o dia de trabalho, quando uma etapa for concluída ou quando ele pedir o ponto atual, inclua um prompt curto e copiável para retomada. Confirme a próxima tarefa no roadmap, na spec ou no devlog e aguarde autorização para iniciá-la. Quando houver um Aviso de frontend, deixe-o por último.
-- Use os IDs e o ponto de retomada confirmados. Omita decisões que não se aplicam e deixe campos a preencher quando a informação ainda não estiver definida.
+- Use os IDs e o ponto de retomada confirmados. Identifique o prompt com **COLE NO CHAT DO BACKEND**. Omita decisões que não se aplicam e deixe campos a preencher quando a informação ainda não estiver definida.
 
+> **COLE NO CHAT DO BACKEND — Prompt de retomada**
+>
 > Implemente a `T-xx`. Consulte os critérios de `REQ-xx` e a decisão `D-yy` aplicável. Retome de <entrada do devlog ou ponto atual>. Peça ao autor que execute os testes afetados, registre a etapa e entregue o roteiro de verificação.
