@@ -431,6 +431,9 @@ const playerSchema = v7PlayerSchema.extend({
         questCardId: id,
         originZoneId: id,
         stageIndex: count,
+        status: z.enum(['ready', 'inProgress', 'completed']).optional(),
+        randomEventSuccesses: count.optional(),
+        combatVictories: count.optional(),
       })
     )
     .optional(),
@@ -754,6 +757,14 @@ const stateSchema = z
     v8State.extend({
       schemaVersion: z.literal(SCHEMA_VERSION),
       questRewardDelivery: questRewardDelivery.optional(),
+      questAttempt: z
+        .strictObject({
+          encounterId: id,
+          questId: id,
+          stageIndex: count,
+          reservedCardId: id.optional(),
+        })
+        .optional(),
       ...stateFields(
         currentConfigSchema,
         playerSchema.extend({
@@ -874,6 +885,7 @@ export class DrizzlePartyMapper {
               combat: state.combat as TPartyProps['combat'],
               questRewardDelivery:
                 state.questRewardDelivery as TPartyProps['questRewardDelivery'],
+              questAttempt: state.questAttempt,
               combatZone: state.combatZone,
               lastCombatResult: state.lastCombatResult,
               combatOutcome:
@@ -1036,6 +1048,7 @@ export class DrizzlePartyMapper {
           rewardSequence: party.rewardSequence,
         }),
         ...(snapshot.combat && { combat: combat.parse(snapshot.combat) }),
+        ...(party.questAttempt && { questAttempt: { ...party.questAttempt } }),
         ...(snapshot.combatZone && { combatZone: snapshot.combatZone }),
         ...(snapshot.lastCombatResult && {
           lastCombatResult: snapshot.lastCombatResult,

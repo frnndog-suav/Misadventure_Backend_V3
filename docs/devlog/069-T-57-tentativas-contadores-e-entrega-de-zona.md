@@ -1,7 +1,7 @@
 # 069 — T-57 — Tentativas, contadores e entrega de zona
 
 - Data — 2026-11-22
-- Status — aguardando revisão
+- Status — concluída
 - Spec — v0.66, REQ-132 e D-111
 - Contrato — v0.76, FEAT-15 acordada após aceite da v0.75 pelo frontend
 - Horas — a preencher pelo autor
@@ -34,6 +34,33 @@ Sem serviços locais. A suíte deve passar. Nos três cenários de entrega pende
 
 ## Retomada
 
-Seguir na T-57 (REQ-132 e D-111) com o vínculo das tentativas de zona, o progresso dos contadores e o cenário de Reflexão fatal com recompensa pendente. A entrega final de zona está verificada.
+### Testes pendentes de tentativa e progresso
+
+`src/infra/database/drizzle/mappers/zone-quest.test.ts` cobre a carta reservada e o vínculo da tentativa após restaurar o save, êxito e revés, combate embutido com vitória, derrota e fuga, e progresso simultâneo dos contadores de zona até seus limites. A vitória por Reflexão fatal deve completar a etapa no POST que abre a entrega pendente, preservar o contador de vitórias e manter esse estado no GET, na reabertura e após a escolha que conclui o respawn.
+
+TypeScript, ESLint no arquivo alterado e `git diff --check` passaram. A execução dos sete cenários pelo autor está pendente. Esperam-se seis recusas com `questWrongStage` em `continueQuest` e um teste de progresso divergindo no primeiro POST de êxito, com os contadores em zero em vez de um. A implementação depende da confirmação desse resultado.
+
+Na primeira execução pelo autor, os sete cenários falharam e os treze demais foram filtrados. A divergência dos dois contadores foi confirmada. A mensagem genérica das outras seis falhas ocultou a ação e o motivo da recusa. O helper do teste passou a exibir esses detalhes. A segunda execução confirmou as seis recusas `questWrongStage` em `continueQuest`. O autor autorizou a implementação.
+
+Sem serviços locais, execute no terminal do backend:
+
+```bash
+cd /d/Github/Misadventure_Backend_V3
+npm test -- src/infra/database/drizzle/mappers/zone-quest.test.ts -t 'tentativas e progresso de missão de zona'
+```
+
+### Implementação das tentativas e dos contadores
+
+- O agregado em `src/domain/campaign/enterprise/entities/party/index.ts` reutiliza a antecipação e a entrada de combate. Liga a tentativa à missão e à etapa, reserva a carta referenciada ou usa o combate embutido e preserva o deck e o descarte de eventos. A etapa volta a `ready` em revés, derrota ou fuga e fica `completed` em êxito ou vitória.
+- `src/domain/campaign/enterprise/zone-quests/index.ts` projeta o estado da etapa e os contadores gravados. O agregado aplica o progresso às etapas elegíveis no primeiro desfecho, limitado pelas metas. A Reflexão fatal conclui a etapa de combate com o contador de vitórias intacto.
+- `src/domain/campaign/application/use-cases/take-party-action/index.ts` carrega as referências da tentativa, os passos do encontro e as missões abertas pelo catálogo. O mapper Drizzle e o repositório em memória preservam o vínculo, a etapa e os contadores durante a entrega e a reabertura. Saves antigos usam `ready` e contadores em zero quando os campos estiverem ausentes.
+- TypeScript, ESLint nos arquivos alterados e `git diff --check` passaram. O domínio continua usando o RNG semeado e recebe horário e IDs pelas portas.
+- A primeira execução após a implementação teve 1.302 testes aprovados e quatro falhas na mesma asserção de abertura do combate. A projeção trazia `combat.card.id` e omitia `combat.cardId`, previsto na FEAT-15. A projeção passou a incluir `cardId` no combate vinculado à missão. Após a correção, o autor confirmou que a suíte unitária passou.
+
+Para validar a implementação, execute `npm test -- --reporter=dot` na raiz do backend. Espera-se que a suíte passe, incluindo os sete cenários acima. No caso de borda da Reflexão fatal, a vitória completa a etapa imediatamente, com o jogador caído e a recompensa pendente. A escolha final conclui o respawn e preserva a etapa e o contador.
+
+Commit sugerido após a verificação — `feat/link zone quest attempts and progress (t-57)`.
 
 Commit da entrega final — `87db4b7` (`feat/persist zone quest completion rewards (t-57)`).
+
+A próxima tarefa é a T-58 (REQ-133 e REQ-132), provação e mentor. A validação integrada da FEAT-15 está planejada para a T-60.

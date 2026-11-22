@@ -4,7 +4,10 @@ import { AggregateRoot } from '@/core/pattern/aggregate-root'
 import type { IdGenerator } from '@/core/ports/id-generator'
 import { type RngState, SeededRng } from '@/core/rng/seeded-rng'
 import { isClassActive } from '@/domain/catalog/enterprise/class-lock'
-import { isExecutableCombatEvent } from '@/domain/catalog/enterprise/catalog-integrity'
+import {
+  combatExecutionFields,
+  isExecutableCombatEvent,
+} from '@/domain/catalog/enterprise/catalog-integrity'
 import { checkDimensionComposition } from '@/domain/catalog/enterprise/dimension-composition'
 import { questReferenceIds } from '@/domain/catalog/enterprise/catalog-integrity'
 import type {
@@ -75,7 +78,9 @@ import {
   questOffer,
   zoneQuest,
   type TQuestRefusal,
+  type TOpenZoneQuest,
   type TZoneQuestAction,
+  type TZoneQuestAttempt,
   type TZoneQuestChoice,
 } from '../../zone-quests'
 import type {
@@ -345,6 +350,7 @@ export interface TPartyProps {
   triggeredEffectSequence?: number
   pendingReward?: TPendingReward | null
   questRewardDelivery?: QuestRewardDelivery
+  questAttempt?: TZoneQuestAttempt
   rewardSequence?: number
   /** Ids de membro, do 1º ao último (REQ-33). */
   turnOrder: UniqueEntityID[]
@@ -496,6 +502,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return this.describeCombat(this.eventCatalog)
   }
 
+  get questAttempt() {
+    return this.props.questAttempt
+  }
+
   combatSnapshot() {
     const {
       combat,
@@ -524,6 +534,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return {
       id: state.id,
       card: state.card,
+      ...(this.questAttempt?.encounterId === state.id && {
+        cardId: state.card.id,
+      }),
       memberId: state.memberId,
       cycle: state.cycle,
       maxCycles: state.maxCycles,
@@ -883,13 +896,6 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.turn.memberId.equals(member.id) &&
       !this.eventActionBlock({ type: 'abandonQuest', questId: '' })
     ) {
-      for (const { questId } of player.openZoneQuests ?? [])
-        choices.push({
-          type: 'abandonQuest',
-          questId,
-          actionPoints: 0,
-          gold: 0,
-        })
       if (this.turn.actionPoints > 0) {
         if (
           (player.openZoneQuests?.length ?? 0) < this.props.config.maxOpenQuests
@@ -909,7 +915,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
               card &&
               !this.questStageRefusal(
                 type,
-                quest.stageIndex,
+                quest,
                 card,
                 cards.get(player.zoneId)
               )
@@ -923,6 +929,13 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           }
         }
       }
+      for (const { questId } of player.openZoneQuests ?? [])
+        choices.push({
+          type: 'abandonQuest',
+          questId,
+          actionPoints: 0,
+          gold: 0,
+        })
     }
     return { questBoard: board, openQuests, questChoices: choices }
   }
@@ -931,7 +944,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     action: TZoneQuestAction,
     cards: ReadonlyMap<string, TCard>,
     at: Date,
-    ids: IdGenerator
+    ids: IdGenerator,
+    dimension: TDimensionCard | null = null,
+    combatEnabled = true
   ): Either<TQuestRefusal, undefined> {
     const index = this.actorIndex()
     const { player } = this.props.members[index]
@@ -981,18 +996,68 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         const card = zoneQuest(cards, quest.questCardId)
         const zone = cards.get(player.zoneId)
         if (!card) return left({ reason: 'questWrongStage', questId })
-        const reason = this.questStageRefusal(
-          action.type,
-          quest.stageIndex,
-          card,
-          zone
-        )
+        const reason = this.questStageRefusal(action.type, quest, card, zone)
         if (reason) return left({ reason, questId })
         if (this.turn.actionPoints < 1)
           return left({ reason: 'noActionPoints' })
-        if (action.type === 'finishQuest') {
-          if (zone?.type !== 'zone')
-            return left({ reason: 'questWrongZone', questId })
+        if (zone?.type !== 'zone')
+          return left({ reason: 'questWrongZone', questId })
+        const stage = card.stages[quest.stageIndex]
+        if (
+          (stage.type === 'randomEvent' || stage.type === 'combatEvent') &&
+          quest.status !== 'completed'
+        ) {
+          const event =
+            stage.type === 'randomEvent'
+              ? cards.get(stage.eventCardId)
+              : undefined
+          if (
+            (stage.type === 'randomEvent' &&
+              (!isExecutableEvent(event) ||
+                event.collectionId !== card.collectionId)) ||
+            (stage.type === 'combatEvent' &&
+              (!combatEnabled ||
+                combatExecutionFields(stage.combat).length > 0))
+          )
+            return left({ reason: 'questWrongStage', questId })
+          const encounterId = ids.next().toValue()
+          this.props.questAttempt = {
+            questId,
+            stageIndex: quest.stageIndex,
+            encounterId,
+            ...(stage.type === 'randomEvent' && {
+              reservedCardId: stage.eventCardId,
+            }),
+          }
+          this.replaceActor(index, {
+            ...player,
+            openZoneQuests: open.map((entry) =>
+              entry === quest ? { ...quest, status: 'inProgress' } : entry
+            ),
+          })
+          if (stage.type === 'randomEvent') {
+            this.openEventAnticipation(index, encounterId, zone.zoneType)
+          } else {
+            this.props.savedAt = at
+            this.engageCombat(
+              index,
+              encounterId,
+              zone.zoneType,
+              {
+                ...stage.combat,
+                id: card.id,
+                type: 'combatEvent',
+                title: card.title,
+                collectionId: card.collectionId,
+                flavorText: null,
+              },
+              zone,
+              dimension,
+              cards,
+              this.props.rngState
+            )
+          }
+        } else if (action.type === 'finishQuest') {
           const explicitPeak = card.rewards.flatMap((step) =>
             step.type === 'effect'
               ? step.effect.activation.filter(
@@ -1034,7 +1099,12 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             ...player,
             openZoneQuests: open.map((entry) =>
               entry === quest
-                ? { ...quest, stageIndex: quest.stageIndex + 1 }
+                ? {
+                    questId,
+                    questCardId: quest.questCardId,
+                    originZoneId: quest.originZoneId,
+                    stageIndex: quest.stageIndex + 1,
+                  }
                 : entry
             ),
           })
@@ -1048,15 +1118,17 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 
   private questStageRefusal(
     type: 'continueQuest' | 'finishQuest',
-    index: number,
+    quest: TOpenZoneQuest,
     card: TZoneQuestCard,
     zone: TCard | undefined
   ): TQuestRefusal['reason'] | null {
-    const stage = card.stages[index]
-    if (
-      !stage ||
-      (type === 'finishQuest') !== (index === card.stages.length - 1)
-    )
+    const stage = card.stages[quest.stageIndex]
+    if (!stage || quest.status === 'inProgress') return 'questWrongStage'
+    const startsAttempt =
+      (stage.type === 'randomEvent' || stage.type === 'combatEvent') &&
+      quest.status !== 'completed'
+    const isFinalStage = quest.stageIndex === card.stages.length - 1
+    if ((type === 'finishQuest') !== (isFinalStage && !startsAttempt))
       return 'questWrongStage'
     const { location } = stage
     if (
@@ -1066,10 +1138,44 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         : zone.title !== location.title)
     )
       return 'questWrongZone'
-    if (stage.type === 'objectives') return 'questObjectivesIncomplete'
-    // A resolução de tentativas usa as transições de encontro e combate.
-    if (stage.type !== 'interaction') return 'questWrongStage'
+    if (
+      stage.type === 'objectives' &&
+      ((quest.randomEventSuccesses ?? 0) < stage.randomEventSuccesses ||
+        (quest.combatVictories ?? 0) < stage.combatVictories)
+    )
+      return 'questObjectivesIncomplete'
     return null
+  }
+
+  private recordQuestOutcome(
+    player: TPlayerState,
+    encounterId: string,
+    succeeded: boolean,
+    counter: 'randomEventSuccesses' | 'combatVictories' | null,
+    cards: ReadonlyMap<string, TCard>
+  ): TPlayerState {
+    if (!player.openZoneQuests?.length) return player
+    const attempt = this.questAttempt
+    return {
+      ...player,
+      openZoneQuests: player.openZoneQuests.map((quest) => {
+        if (
+          attempt?.encounterId === encounterId &&
+          quest.questId === attempt.questId &&
+          quest.stageIndex === attempt.stageIndex &&
+          quest.status === 'inProgress'
+        )
+          return { ...quest, status: succeeded ? 'completed' : 'ready' }
+        if (!counter) return quest
+        const stage = zoneQuest(cards, quest.questCardId)?.stages[
+          quest.stageIndex
+        ]
+        const current = quest[counter] ?? 0
+        return stage?.type === 'objectives' && current < stage[counter]
+          ? { ...quest, [counter]: current + 1 }
+          : quest
+      }),
+    }
   }
 
   private deliverQuestRewards(
@@ -1479,6 +1585,13 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       playerDown: down,
       peakDelta: peak - startingPeak,
     }
+    player = this.recordQuestOutcome(
+      player,
+      state.id,
+      won,
+      won && !down ? 'combatVictories' : null,
+      cards
+    )
     const zoneType = this.props.combatZone
     this.props.combatZone = undefined
     if (zoneType === undefined) {
@@ -1570,7 +1683,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       return
     }
     this.props.combatOutcome = null
-    this.discardEventCard(zoneType, card.id)
+    this.releaseEventCard(result.combatId, zoneType, card.id)
   }
 
   private useCombatAbility(
@@ -2683,23 +2796,12 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         !upgraded.includes(zone.zoneType)
       )
         this.props.upgradedCombatDecks = [...upgraded, zone.zoneType]
-      const copies = handCopiesOf(player)
-      this.replaceActor(index, {
-        ...player,
-        handCopies: copies,
-        handCopySequence: player.handCopySequence ?? copies.length,
-      })
-      this.props.eventEncounter = {
-        id:
-          ids?.next().toValue() ??
+      this.openEventAnticipation(
+        index,
+        ids?.next().toValue() ??
           `event-${actor.id.toValue()}-${at.toISOString()}-${this.turn.round}-${this.turn.actionPoints}`,
-        memberId: actor.id.toValue(),
-        zoneType: zone.zoneType,
-        phase: 'anticipation',
-        card: null,
-        payments: [],
-        decisionDeadlineAt: null,
-      }
+        zone.zoneType
+      )
       this.spendActionPoint()
       return complete()
     }
@@ -2707,38 +2809,18 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       return left('staleEncounter')
     if (action.type === 'revealEvent') {
       if (encounter.phase !== 'anticipation') return left('wrongEventPhase')
-      const deck = this.eventDecks.find(
-        (entry) => entry.zoneType === encounter.zoneType
-      )
-      if (!deck) return left('eventDeckEmpty')
-      const eligible = (id: string) => {
-        const card = cards.get(id)
-        return (
-          isExecutableEvent(card) ||
-          (combatEnabled &&
-            (!this.props.upgradedCombatDecks ||
-              this.props.upgradedCombatDecks.includes(encounter.zoneType)) &&
-            isExecutableCombatEvent(card))
-        )
-      }
-      const recycle = !deck.cards.some(eligible)
-      const ordered = recycle
-        ? [...shuffle(deck.discard.filter(eligible), rng), ...deck.cards]
-        : deck.cards
-      const position = ordered.findIndex(eligible)
-      const card = cards.get(ordered[position])
+      const reservedCardId =
+        this.questAttempt?.encounterId === encounter.id
+          ? this.questAttempt.reservedCardId
+          : undefined
+      const card = reservedCardId
+        ? cards.get(reservedCardId)
+        : this.drawEventCard(encounter.zoneType, cards, rng, combatEnabled)
       if (
         !isExecutableEvent(card) &&
-        !(combatEnabled && isExecutableCombatEvent(card))
+        !(!reservedCardId && combatEnabled && isExecutableCombatEvent(card))
       )
         return left('eventDeckEmpty')
-      this.updateEventDeck({
-        ...deck,
-        cards: ordered.filter((_, i) => i !== position),
-        discard: recycle
-          ? deck.discard.filter((id) => !eligible(id))
-          : deck.discard,
-      })
       this.props.members[index] = this.updateStatuses(
         actor,
         (status) =>
@@ -2751,46 +2833,17 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       if (isExecutableEvent(card)) {
         this.props.eventEncounter = { ...encounter, phase: 'encounter', card }
       } else {
-        const current = this.props.members[index].player
-        const started = this.resolveAbilityTriggers(
-          current,
-          cards,
-          rng.state(),
-          (trigger) => {
-            if (trigger?.kind === 'onEngageEnemyElement')
-              return card.enemies.some(
-                ({ element }) => element === trigger.element
-              )
-            if (trigger?.kind === 'onEngageEnemyType')
-              return card.enemies.some(({ enemyTypes }) =>
-                enemyTypes.some((type) => trigger.enemyTypes.includes(type))
-              )
-            return false
-          },
-          `${encounter.id}:combat-start`,
+        complete()
+        this.engageCombat(
+          index,
+          encounter.id,
+          encounter.zoneType,
+          card,
           zone,
           dimension,
-          undefined,
-          undefined,
-          { type: 'combatEntry', id: encounter.id, card }
+          cards,
+          rng.state()
         )
-        this.props.eventEncounter = null
-        this.props.combatZone = encounter.zoneType
-        this.props.lastCombatResult = null
-        complete()
-        if (this.triggeredEffectChoice) {
-          this.props.rngState = started.rngState
-          this.replaceActor(index, started.player)
-        } else {
-          this.startCombat(
-            encounter.id,
-            card,
-            index,
-            started.player,
-            cards,
-            started.rngState
-          )
-        }
         return right(undefined)
       }
       return complete()
@@ -2920,6 +2973,105 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           }
         )
       }
+    }
+  }
+
+  private openEventAnticipation(
+    index: number,
+    id: string,
+    zoneType: TEventDeck['zoneType']
+  ) {
+    const { id: memberId, player } = this.props.members[index]
+    const copies = handCopiesOf(player)
+    this.replaceActor(index, {
+      ...player,
+      handCopies: copies,
+      handCopySequence: player.handCopySequence ?? copies.length,
+    })
+    this.props.eventEncounter = {
+      id,
+      memberId: memberId.toValue(),
+      zoneType,
+      phase: 'anticipation',
+      card: null,
+      payments: [],
+      decisionDeadlineAt: null,
+    }
+  }
+
+  private drawEventCard(
+    zoneType: TEventDeck['zoneType'],
+    cards: ReadonlyMap<string, TCard>,
+    rng: SeededRng,
+    combatEnabled: boolean
+  ) {
+    const deck = this.eventDecks.find((entry) => entry.zoneType === zoneType)
+    if (!deck) return
+    const eligible = (id: string) => {
+      const card = cards.get(id)
+      return (
+        isExecutableEvent(card) ||
+        (combatEnabled &&
+          (!this.props.upgradedCombatDecks ||
+            this.props.upgradedCombatDecks.includes(zoneType)) &&
+          isExecutableCombatEvent(card))
+      )
+    }
+    const recycle = !deck.cards.some(eligible)
+    const ordered = recycle
+      ? [...shuffle(deck.discard.filter(eligible), rng), ...deck.cards]
+      : deck.cards
+    const position = ordered.findIndex(eligible)
+    if (position < 0) return
+    this.updateEventDeck({
+      ...deck,
+      cards: ordered.filter((_, i) => i !== position),
+      discard: recycle
+        ? deck.discard.filter((id) => !eligible(id))
+        : deck.discard,
+    })
+    return cards.get(ordered[position])
+  }
+
+  private engageCombat(
+    index: number,
+    id: string,
+    zoneType: TEventDeck['zoneType'],
+    card: TCombatEventCard,
+    zone: TZoneCard | null,
+    dimension: TDimensionCard | null,
+    cards: ReadonlyMap<string, TCard>,
+    rngState: RngState
+  ) {
+    const started = this.resolveAbilityTriggers(
+      this.props.members[index].player,
+      cards,
+      rngState,
+      (trigger) => {
+        if (trigger?.kind === 'onEngageEnemyElement')
+          return card.enemies.some(({ element }) => element === trigger.element)
+        if (trigger?.kind === 'onEngageEnemyType')
+          return card.enemies.some(({ enemyTypes }) =>
+            enemyTypes.some((type) => trigger.enemyTypes.includes(type))
+          )
+        return false
+      },
+      `${id}:combat-start`,
+      zone,
+      dimension,
+      undefined,
+      undefined,
+      { type: 'combatEntry', id, card }
+    )
+    this.eventCatalog = cards
+    this.props.eventEncounter = null
+    this.props.combatZone = zoneType
+    this.props.lastCombatResult = null
+    if (this.triggeredEffectChoice) {
+      this.props.rngState = started.rngState
+      this.replaceActor(index, started.player)
+    } else {
+      this.startCombat(id, card, index, started.player, cards, started.rngState)
     }
   }
 
@@ -3115,6 +3267,14 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         : resolution === 'setback'
           ? card.badOutcome
           : null
+    if (!encounter.outcome)
+      player = this.recordQuestOutcome(
+        player,
+        encounter.id,
+        resolution === 'success',
+        resolution === 'success' ? 'randomEventSuccesses' : null,
+        cards
+      )
     const resolved = this.resolveOutcomeSteps(
       player,
       outcome?.steps ?? [],
@@ -3174,12 +3334,20 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         escape,
       },
     })
-    this.discardEventCard(encounter.zoneType, card.id)
+    this.releaseEventCard(encounter.id, encounter.zoneType, card.id)
     this.props.eventEncounter = null
     this.replaceActor(index, next)
   }
 
-  private discardEventCard(zoneType: TEventDeck['zoneType'], cardId: string) {
+  private releaseEventCard(
+    encounterId: string,
+    zoneType: TEventDeck['zoneType'],
+    cardId: string
+  ) {
+    if (this.questAttempt?.encounterId === encounterId) {
+      this.props.questAttempt = undefined
+      return
+    }
     const deck = this.eventDecks.find((entry) => entry.zoneType === zoneType)
     if (deck)
       this.updateEventDeck({ ...deck, discard: [...deck.discard, cardId] })
@@ -4038,6 +4206,17 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       if (this.pendingRewards.length) return
       player = this.props.members[index].player
     } else if (encounter?.phase === 'anticipation') {
+      if (this.questAttempt?.encounterId === encounter.id) {
+        player = this.recordQuestOutcome(
+          player,
+          encounter.id,
+          false,
+          null,
+          this.eventCatalog
+        )
+        this.replaceActor(index, player)
+        this.props.questAttempt = undefined
+      }
       this.props.eventEncounter = null
     }
 

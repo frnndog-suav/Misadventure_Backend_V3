@@ -18,6 +18,16 @@ export type TOpenZoneQuest = Readonly<{
   questCardId: string
   originZoneId: string
   stageIndex: number
+  status?: 'ready' | 'inProgress' | 'completed'
+  randomEventSuccesses?: number
+  combatVictories?: number
+}>
+
+export type TZoneQuestAttempt = Readonly<{
+  encounterId: string
+  questId: string
+  stageIndex: number
+  reservedCardId?: string
 }>
 
 export type TQuestRefusal = {
@@ -62,15 +72,18 @@ export function describeZoneQuest(quest: TOpenZoneQuest, card: TZoneQuestCard) {
       index: quest.stageIndex,
       text: stage.text,
       location: stage.location,
-      status: 'ready' as const,
+      status: quest.status ?? 'ready',
       objectives:
         stage.type === 'objectives'
           ? {
               randomEventSuccesses: {
-                current: 0,
+                current: quest.randomEventSuccesses ?? 0,
                 target: stage.randomEventSuccesses,
               },
-              combatVictories: { current: 0, target: stage.combatVictories },
+              combatVictories: {
+                current: quest.combatVictories ?? 0,
+                target: stage.combatVictories,
+              },
             }
           : null,
     },

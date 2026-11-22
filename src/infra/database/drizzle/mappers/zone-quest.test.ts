@@ -6,14 +6,21 @@ import { GetPartyUseCase } from '@/domain/campaign/application/use-cases/get-par
 import { ResumeLegacyKnockout } from '@/domain/campaign/application/use-cases/resume-legacy-knockout'
 import { StartSessionUseCase } from '@/domain/campaign/application/use-cases/start-session'
 import { TakePartyActionUseCase } from '@/domain/campaign/application/use-cases/take-party-action'
-import type { TZoneQuestCard } from '@/domain/catalog/enterprise/value-objects/card'
+import type {
+  TCard,
+  TZoneQuestCard,
+} from '@/domain/catalog/enterprise/value-objects/card'
 import {
   findPartyCards,
   PartyPresenter,
 } from '@/infra/http/presenters/party-presenter'
 import {
+  makeAttributeCard,
+  makeCombatEventCard,
   makeDimensionCard,
+  makeEnemy,
   makeItemCard,
+  makeRandomEventCard,
   makeUrbanZoneCard,
 } from '../../../../../test/factories/make-card'
 import { makeParty } from '../../../../../test/factories/make-party'
@@ -55,16 +62,20 @@ function offer({ id, title, summary }: TZoneQuestCard) {
 async function setup(
   deck?: TZoneQuestCard[],
   maxOpenQuests = 3,
-  fullInventory = false
+  fullInventory = false,
+  encounter?: { cards: TCard[]; deckCardId: string; health: number }
 ) {
   const repository = new InMemoryPartiesRepository()
   const catalog = new InMemoryCardCatalog()
   catalog.cards = [
-    harbor,
+    encounter ? { ...harbor, zoneActions: ['startEvent'] } : harbor,
     mine,
-    makeDimensionCard(),
+    encounter
+      ? makeDimensionCard({ id: 'fixture.test-dimension' })
+      : makeDimensionCard(),
     carried,
     prize,
+    ...(encounter?.cards ?? []),
     ...(deck ?? [a, b, c, d, e]),
   ]
   const ids = sequentialIds('quest')
@@ -85,6 +96,10 @@ async function setup(
               player: {
                 ...host.player,
                 vigor: 4,
+                health: encounter?.health ?? host.player.health,
+                modifiers: encounter
+                  ? { ...host.player.modifiers, evasion: 0 }
+                  : host.player.modifiers,
                 inventory: [{ cardId: carried.id, quantity: 1 }],
               },
             },
@@ -97,6 +112,9 @@ async function setup(
       maxOpenQuests,
       inventoryCapacity: fullInventory ? 1 : initial.config.inventoryCapacity,
     },
+    eventDecks: encounter
+      ? [{ zoneType: 'urban', cards: [encounter.deckCardId], discard: [] }]
+      : initial.eventDecks,
     dimension: {
       ...dimension,
       map: {
@@ -122,7 +140,10 @@ async function setup(
   const execute = (body: unknown) => actions.execute({ partyId, body })
   const act = async (body: unknown) => {
     const result = await execute(body)
-    if (result.isLeft()) throw result.value
+    if (result.isLeft())
+      throw new Error(
+        `Ação recusada: ${JSON.stringify(body)} → ${JSON.stringify(result.value)}`
+      )
     return result.value.party
   }
   return {
@@ -347,6 +368,326 @@ describe('T-56 — ciclo de missões de zona', () => {
       questChoices: [],
     })
   })
+})
+
+describe('T-57 — tentativas e progresso de missão de zona', () => {
+  const emptyOutcome = { text: 'Sem efeito.', steps: [] }
+  const prizeOutcome = {
+    text: 'Receba uma recompensa.',
+    steps: [{ type: 'grantReward', cardId: prize.id, copies: 1 }],
+  } as const
+  const event = makeRandomEventCard({
+    requirements: [
+      {
+        id: 'vigor',
+        kind: 'minimum',
+        stat: 'vigor',
+        value: 1,
+        text: 'Vigor mínimo 1.',
+      },
+    ],
+    goodOutcome: prizeOutcome,
+    badOutcome: emptyOutcome,
+  })
+  const deckCombat = makeCombatEventCard()
+  const urban = stages[0].location
+  const attempt = { type: 'continueQuest', questId: 'quest-1' }
+
+  async function reload(game: Awaited<ReturnType<typeof setup>>) {
+    const row = DrizzlePartyMapper.toDrizzle(await game.stored())
+    const restored = DrizzlePartyMapper.toDomain(row)
+    await game.repository.save(restored)
+    return restored
+  }
+
+  it.each([
+    { action: 'resolveEvent', status: 'completed' },
+    { action: 'giveUpEvent', status: 'ready' },
+  ])(
+    'REQ-132 e D-111: $action deixa a tentativa vinculada em $status e preserva o deck',
+    async ({ action, status }) => {
+      const quest: TZoneQuestCard = {
+        ...a,
+        stages: [
+          {
+            type: 'randomEvent',
+            text: 'Ajude o viajante',
+            location: urban,
+            eventCardId: event.id,
+          },
+          stages[1],
+        ],
+      }
+      const game = await setup([quest], 3, true, {
+        cards: [event, deckCombat],
+        deckCardId: deckCombat.id,
+        health: 22,
+      })
+      const accepted = await game.act({
+        type: 'takeQuest',
+        questCardId: quest.id,
+      })
+      const started = await game.act(attempt)
+      expect(started.turn.actionPoints).toBe(accepted.turn.actionPoints - 1)
+      expect(await game.project(started)).toMatchObject({
+        openQuests: [
+          { questId: 'quest-1', stage: { index: 0, status: 'inProgress' } },
+        ],
+        questChoices: [],
+      })
+      const restored = await reload(game)
+      const encounter = restored.randomEventEncounter
+      expect(encounter).toMatchObject({ phase: 'anticipation', card: null })
+      const encounterId = encounter!.id
+      const revealed = await game.act({ type: 'revealEvent', encounterId })
+      expect(revealed.randomEventEncounter?.card?.id).toBe(event.id)
+      const resolved = await game.act({ type: action, encounterId })
+      expect(await game.project(resolved)).toMatchObject({
+        openQuests: [{ questId: 'quest-1', stage: { index: 0, status } }],
+      })
+      expect(resolved.eventDecks).toEqual(accepted.eventDecks)
+      if (status === 'ready') {
+        const retry = await game.act(attempt)
+        expect(retry.randomEventEncounter?.id).not.toBe(encounterId)
+        expect(retry.eventDecks).toEqual(accepted.eventDecks)
+      }
+    }
+  )
+
+  it('REQ-132 e D-111: limita o progresso simultâneo no POST de êxito com recompensa pendente', async () => {
+    const [first, second] = [1, 2].map((target): TZoneQuestCard => ({
+      ...(target === 1 ? a : b),
+      stages: [
+        {
+          type: 'objectives',
+          text: 'Conclua encontros',
+          location: urban,
+          randomEventSuccesses: target,
+          combatVictories: 1,
+        },
+      ],
+    }))
+    const game = await setup([first, second], 3, true, {
+      cards: [event],
+      deckCardId: event.id,
+      health: 22,
+    })
+    for (const quest of [first, second]) {
+      await game.act({ type: 'takeQuest', questCardId: quest.id })
+    }
+    for (const count of [1, 2]) {
+      const started = await game.act({ type: 'startEvent' })
+      const encounterId = started.randomEventEncounter!.id
+      await game.act({ type: 'revealEvent', encounterId })
+      const success = await game.act({ type: 'resolveEvent', encounterId })
+      const expected = {
+        openQuests: [1, 2].map((target) => ({
+          questId: `quest-${target}`,
+          stage: {
+            objectives: {
+              randomEventSuccesses: {
+                current: Math.min(count, target),
+                target,
+              },
+              combatVictories: { current: 0, target: 1 },
+            },
+          },
+        })),
+      }
+      expect(await game.project(success)).toMatchObject(expected)
+      expect(await game.project(await reload(game))).toMatchObject(expected)
+      expect(success.pendingRewards).toMatchObject([{ cardId: prize.id }])
+      const delivered = await game.act({
+        type: 'resolveReward',
+        rewardId: success.pendingRewards[0].id,
+        choice: 'leave',
+      })
+      expect(await game.project(delivered)).toMatchObject(expected)
+      await game.act({ type: 'endTurn' })
+    }
+  })
+
+  it.each([
+    { action: 'combatAttack', health: 22, playerDown: false, victories: 1 },
+    { action: 'combatAttack', health: 1, playerDown: true, victories: 0 },
+    { action: 'escapeCombat', health: 22, playerDown: false, victories: 0 },
+    { action: 'endCombatTurn', health: 1, playerDown: true, victories: 0 },
+  ])(
+    'REQ-132 e D-111: aplica o desfecho de $action com playerDown=$playerDown à tentativa vinculada',
+    async ({ action, health, playerDown, victories }) => {
+      const enemy = makeEnemy({ count: 1, health: 1 })
+      const quest: TZoneQuestCard = {
+        ...a,
+        stages: [
+          {
+            type: 'combatEvent',
+            text: 'Derrote o inimigo',
+            location: urban,
+            combat: {
+              enemies: [
+                {
+                  ...enemy,
+                  modifiers: {
+                    ...enemy.modifiers,
+                    attack: 20,
+                    accuracy: 100,
+                    defense: 0,
+                    evasion: 0,
+                    celerity: 0,
+                    reflection: 1,
+                  },
+                },
+              ],
+              goodOutcome: prizeOutcome,
+              badOutcome: emptyOutcome,
+              noEscape: false,
+              escapeThreshold: 0,
+            },
+          },
+        ],
+      }
+      const objectives: TZoneQuestCard = {
+        ...b,
+        stages: [
+          {
+            type: 'objectives',
+            text: 'Vença combates',
+            location: urban,
+            randomEventSuccesses: 1,
+            combatVictories: 2,
+          },
+        ],
+      }
+      const game = await setup([quest, objectives], 3, true, {
+        cards: [
+          deckCombat,
+          makeAttributeCard(),
+          makeAttributeCard({
+            id: 'fixture.endurance-basic',
+            attributes: ['endurance'],
+          }),
+        ],
+        deckCardId: deckCombat.id,
+        health,
+      })
+      const accepted = await game.act({
+        type: 'takeQuest',
+        questCardId: quest.id,
+      })
+      await game.act({ type: 'takeQuest', questCardId: objectives.id })
+      const started = await game.act(attempt)
+      expect(started.combat).toMatchObject({
+        cardId: quest.id,
+        enemies: [{ health: 1 }],
+      })
+      const combat = (await reload(game)).combat!
+      if (action !== 'combatAttack') {
+        const failed = await game.act({
+          type: action,
+          combatId: combat.id,
+          turnId: combat.turn.id,
+        })
+        expect(failed.lastCombatResult?.resolution).toBe(
+          action === 'escapeCombat' ? 'escaped' : 'defeat'
+        )
+        expect(failed.eventDecks).toEqual(accepted.eventDecks)
+        expect(await game.project(failed)).toMatchObject({
+          openQuests: [
+            { questId: 'quest-1', stage: { status: 'ready' } },
+            {
+              questId: 'quest-2',
+              stage: {
+                objectives: {
+                  combatVictories: { current: 0, target: 2 },
+                },
+              },
+            },
+          ],
+        })
+        return
+      }
+      const victory = await game.act({
+        type: 'combatAttack',
+        combatId: combat.id,
+        turnId: combat.turn.id,
+        targetId: combat.enemies[0].id,
+      })
+      const expected = {
+        openQuests: [
+          { questId: 'quest-1', stage: { index: 0, status: 'completed' } },
+          {
+            questId: 'quest-2',
+            stage: {
+              objectives: {
+                combatVictories: { current: victories, target: 2 },
+              },
+            },
+          },
+        ],
+      }
+      const result = {
+        cardId: quest.id,
+        resolution: 'victory',
+        cause: 'enemiesDefeated',
+        playerDown,
+      }
+      expect(victory.combat).toBeNull()
+      expect(victory.lastCombatResult).toMatchObject(result)
+      expect(victory.eventDecks).toEqual(accepted.eventDecks)
+      expect(await game.project(victory)).toMatchObject(expected)
+      const pending = victory.pendingRewards[0]
+      expect(pending).toMatchObject({
+        cardId: prize.id,
+        source: { type: 'combatEvent', combatId: combat.id },
+      })
+      if (playerDown) {
+        expect(await game.project(victory)).toMatchObject({
+          down: true,
+          health: 0,
+          availableActions: ['resolveReward'],
+        })
+      }
+
+      await reload(game)
+      const request = { partyId: game.party.id.toString() }
+      const { repository, clock, catalog, ids } = game
+      const resume = new ResumeLegacyKnockout(catalog, ids)
+      const getParty = new GetPartyUseCase(repository, clock, resume)
+      const read = await getParty.execute(request)
+      if (read.isLeft()) throw read.value
+      expect(await game.project(read.value.party)).toMatchObject(expected)
+      expect(read.value.party.pendingRewards).toEqual([pending])
+      const closed = await new EndSessionUseCase(repository, clock).execute(
+        request
+      )
+      if (closed.isLeft()) throw closed.value
+      const reopened = await new StartSessionUseCase(
+        repository,
+        clock,
+        resume
+      ).execute(request)
+      if (reopened.isLeft()) throw reopened.value
+      expect(await game.project(reopened.value.party)).toMatchObject(expected)
+      expect(reopened.value.party.pendingRewards).toEqual([pending])
+
+      const delivered = await game.act({
+        type: 'resolveReward',
+        rewardId: pending.id,
+        choice: 'leave',
+      })
+      expect(delivered.pendingRewards).toEqual([])
+      expect(delivered.lastCombatResult).toMatchObject(result)
+      expect(delivered.eventDecks).toEqual(accepted.eventDecks)
+      expect(await game.project(delivered)).toMatchObject(expected)
+      if (playerDown) {
+        expect(delivered.members[0].player.health).toBeGreaterThan(0)
+        expect(delivered.members[0].player.down).toBe(false)
+        expect(delivered.members[0].player.lastKnockout).toMatchObject({
+          combatId: combat.id,
+        })
+      }
+    }
+  )
 })
 
 describe('T-57 — Pico na conclusão de missão de zona', () => {

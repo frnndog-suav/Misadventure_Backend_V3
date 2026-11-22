@@ -106,26 +106,25 @@ export class TakePartyActionUseCase {
             : player.openZoneQuests?.find(
                 ({ questId }) => questId === action.questId
               )?.questCardId
-        const cards = new Map<string, TCard>()
         const quest = questCardId
           ? await this.cardCatalog.findCard(questCardId)
           : null
-        if (action.type === 'finishQuest' && quest?.type === 'zoneQuest') {
-          const catalog = await this.findEventCatalog(party, false, quest)
-          for (const [id, card] of catalog.cards) cards.set(id, card)
-        } else {
-          const zone = await this.cardCatalog.findCard(player.zoneId)
-          if (zone) cards.set(zone.id, zone)
-          if (quest) cards.set(quest.id, quest)
-        }
+        const { cards, dimension } = await this.findEventCatalog(
+          party,
+          false,
+          quest
+        )
         const result = party.takeZoneQuestAction(
           action,
           cards,
           this.clock.now(),
-          this.ids
+          this.ids,
+          dimension,
+          this.combatEnabled
         )
         if (result.isLeft())
           return left(new ActionNotAllowedError(result.value))
+        party.completeKnockout(this.ids)
         break
       }
       case 'resolveTriggeredEffect': {
@@ -463,7 +462,19 @@ export class TakePartyActionUseCase {
     const savedDeck = party.eventDecks.find(
       (entry) => entry.zoneType === zoneType
     )
+    const reservedCardId = party.questAttempt?.reservedCardId
+    const questStage =
+      quest?.type === 'zoneQuest'
+        ? quest.stages[
+            player?.openZoneQuests?.find(
+              ({ questCardId }) => questCardId === quest.id
+            )?.stageIndex ?? 0
+          ]
+        : undefined
     const ids = new Set([
+      ...(player?.openZoneQuests?.map(({ questCardId }) => questCardId) ?? []),
+      ...(reservedCardId ? [reservedCardId] : []),
+      ...(questStage?.type === 'randomEvent' ? [questStage.eventCardId] : []),
       ...(deck?.cards.map(({ cardId }) => cardId) ?? []),
       ...(savedDeck?.cards ?? []),
       ...(savedDeck?.discard ?? []),
@@ -486,6 +497,12 @@ export class TakePartyActionUseCase {
         party.eventEncounter?.card?.badOutcome,
         party.combatOutcomeCard?.goodOutcome,
         party.combatOutcomeCard?.badOutcome,
+        questStage?.type === 'combatEvent'
+          ? questStage.combat.goodOutcome
+          : undefined,
+        questStage?.type === 'combatEvent'
+          ? questStage.combat.badOutcome
+          : undefined,
       ].flatMap(
         (outcome) =>
           outcome?.steps?.flatMap((step) =>
