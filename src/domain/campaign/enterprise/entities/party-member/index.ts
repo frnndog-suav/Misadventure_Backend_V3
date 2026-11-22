@@ -32,6 +32,10 @@ export type TKnockoutResult = Readonly<{
 /** Estado do jogador na partida (D-42). `maxHealth` é derivado (README 7.4). */
 export type TPlayerState = Readonly<{
   openZoneQuests?: readonly TOpenZoneQuest[]
+  completedZoneQuests?: readonly {
+    dimensionCardId: string
+    questCardId: string
+  }[]
   /** Na ordem em que foram obtidas (README 8.2). */
   playerClasses: readonly Readonly<{
     playerClass: TPlayerClass

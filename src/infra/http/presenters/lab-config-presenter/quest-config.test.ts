@@ -7,6 +7,8 @@ import { InMemoryGameConfigRepository } from '../../../../../test/repositories/i
 import { LabConfigPresenter } from '.'
 
 const settings = {
+  zoneQuestPeakGain: { standard: 3, min: 0, max: 1000 },
+  genericQuestPeakGain: { standard: 5, min: 0, max: 1000 },
   questBoardSize: { standard: 3, min: 1, max: 50 },
   maxOpenQuests: { standard: 3, min: 1, max: 50 },
   trialMinPeak: { standard: 30, min: 0, max: 1000 },
@@ -19,7 +21,7 @@ const settings = {
   lockSpecializationReinforcement: { standard: 4, min: 0, max: 200 },
 }
 
-it('REQ-135 — consulta, altera em lote e restaura os dez ajustes', async () => {
+it('REQ-135 — consulta, altera em lote e restaura os ajustes de missão', async () => {
   const repository = new InMemoryGameConfigRepository()
   const get = new GetGameConfigUseCase(repository)
   const update = new UpdateGameConfigUseCase(

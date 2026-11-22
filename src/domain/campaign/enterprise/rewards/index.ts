@@ -17,6 +17,7 @@ export type TPendingReward = {
   source:
     | { type: 'randomEvent'; encounterId: string }
     | { type: 'combatEvent'; combatId: string }
+    | { type: 'quest'; questId: string; questCardId: string }
     | { type: 'scavenge' }
   destination: 'inventory' | 'tcgFolder'
   discardOptions: { cardId: string; maxCopies: number }[]

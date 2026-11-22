@@ -69,6 +69,7 @@ function snapshot(party: Party): Party {
       eventDecks: structuredClone(party.eventDecks),
       eventEncounter: structuredClone(party.eventEncounter),
       pendingReward: structuredClone(party.pendingRewards[0]),
+      questRewardDelivery: structuredClone(party.questRewardDelivery),
       rewardSequence: party.rewardSequence,
       turnOrder: [...party.turnOrder],
       turn: party.turn,

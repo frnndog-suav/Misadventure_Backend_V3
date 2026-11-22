@@ -1,7 +1,7 @@
 # 068 — T-56 — Quadro, ações de zona e save
 
 - Data — 2026-11-22
-- Status — em validação
+- Status — concluída
 - Spec — v0.66, REQ-131 e D-111
 - Contrato — v0.74, FEAT-15 acordada
 - Horas — a preencher pelo autor
@@ -29,8 +29,12 @@ Resultado esperado após a implementação é a suíte unitária sem falhas. No 
 ## Verificações e pendências
 
 - Antes da implementação, o autor executou os 10 testes da T-56. Houve 9 falhas esperadas e passou o teste de save legado. O autor autorizou prosseguir.
-- TypeScript, ESLint nos arquivos alterados e `git diff --check` passaram. A suíte unitária pós-implementação aguarda o autor.
+- TypeScript, ESLint nos arquivos alterados e `git diff --check` passaram. O autor confirmou que toda a suíte unitária passou após a implementação.
 - A finalização de uma interação sem recompensa retira a carta da partida. A T-57 habilita tentativas, contadores e entrega final. A finalização de carta com recompensa fica indisponível até a entrega para preservar a missão.
 - A validação integrada da FEAT-15 está planejada para a T-60.
 
-Commit sugerido — `feat/add zone quest board and actions (t-56)`
+## Retomada
+
+A próxima etapa é a T-57, tentativas, contadores e entrega de zona, conforme REQ-132 e D-111. A lacuna de Pico está registrada no devlog 066 e deve ser resolvida antes dos testes de conclusão que dependem dela.
+
+Commit da implementação — `83e6e71` (`feat/add zone quest board and actions (t-56)`).

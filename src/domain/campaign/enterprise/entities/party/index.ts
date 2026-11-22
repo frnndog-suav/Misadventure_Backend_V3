@@ -309,6 +309,11 @@ export type TCombatResult = {
 }
 
 type OutcomeCursor = { nextStep: number; nextCopy?: number }
+type QuestRewardDelivery = {
+  steps: readonly TRandomEventOutcomeStep[]
+  zoneType: TEventDeck['zoneType']
+  cursor: OutcomeCursor
+}
 
 type CombatOutcome = {
   card: TCombatEventCard
@@ -339,6 +344,7 @@ export interface TPartyProps {
   pendingTriggeredEffects?: PendingTriggeredEffects | null
   triggeredEffectSequence?: number
   pendingReward?: TPendingReward | null
+  questRewardDelivery?: QuestRewardDelivery
   rewardSequence?: number
   /** Ids de membro, do 1º ao último (REQ-33). */
   turnOrder: UniqueEntityID[]
@@ -420,6 +426,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 
   get pendingRewards(): readonly TPendingReward[] {
     return this.props.pendingReward ? [this.props.pendingReward] : []
+  }
+
+  get questRewardDelivery(): QuestRewardDelivery | undefined {
+    return this.props.questRewardDelivery
   }
 
   get rewardSequence(): number {
@@ -969,28 +979,66 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         })
       } else {
         const card = zoneQuest(cards, quest.questCardId)
-        const reason = card
-          ? this.questStageRefusal(
-              action.type,
-              quest.stageIndex,
-              card,
-              cards.get(player.zoneId)
-            )
-          : 'questWrongStage'
+        const zone = cards.get(player.zoneId)
+        if (!card) return left({ reason: 'questWrongStage', questId })
+        const reason = this.questStageRefusal(
+          action.type,
+          quest.stageIndex,
+          card,
+          zone
+        )
         if (reason) return left({ reason, questId })
         if (this.turn.actionPoints < 1)
           return left({ reason: 'noActionPoints' })
-        this.replaceActor(index, {
-          ...player,
-          openZoneQuests:
-            action.type === 'finishQuest'
-              ? open.filter((entry) => entry !== quest)
-              : open.map((entry) =>
-                  entry === quest
-                    ? { ...quest, stageIndex: quest.stageIndex + 1 }
-                    : entry
-                ),
-        })
+        if (action.type === 'finishQuest') {
+          if (zone?.type !== 'zone')
+            return left({ reason: 'questWrongZone', questId })
+          const explicitPeak = card.rewards.flatMap((step) =>
+            step.type === 'effect'
+              ? step.effect.activation.filter(
+                  (activation) => activation.kind === 'gainPeak'
+                )
+              : []
+          )
+          const gain = explicitPeak.length
+            ? explicitPeak.reduce(
+                (total, activation) => total + activation.amount,
+                0
+              )
+            : this.config.zoneQuestPeakGain
+          this.deliverQuestRewards(
+            index,
+            {
+              ...player,
+              peak: player.peak + gain,
+              openZoneQuests: open.filter((entry) => entry !== quest),
+              completedZoneQuests: [
+                ...(player.completedZoneQuests ?? []),
+                {
+                  dimensionCardId: this.dimension.dimensionCardId,
+                  questCardId: card.id,
+                },
+              ],
+            },
+            {
+              steps: card.rewards,
+              zoneType: zone.zoneType,
+              cursor: { nextStep: 0 },
+            },
+            { type: 'quest', questId, questCardId: card.id },
+            cards,
+            ids
+          )
+        } else {
+          this.replaceActor(index, {
+            ...player,
+            openZoneQuests: open.map((entry) =>
+              entry === quest
+                ? { ...quest, stageIndex: quest.stageIndex + 1 }
+                : entry
+            ),
+          })
+        }
       }
     }
     if (action.type !== 'abandonQuest') this.spendActionPoint()
@@ -1019,13 +1067,35 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     )
       return 'questWrongZone'
     if (stage.type === 'objectives') return 'questObjectivesIncomplete'
-    // A T-57 habilita tentativas e a conclusão com entrega de recompensa.
-    if (
-      stage.type !== 'interaction' ||
-      (type === 'finishQuest' && card.rewards.length)
-    )
-      return 'questWrongStage'
+    // A resolução de tentativas usa as transições de encontro e combate.
+    if (stage.type !== 'interaction') return 'questWrongStage'
     return null
+  }
+
+  private deliverQuestRewards(
+    index: number,
+    player: TPlayerState,
+    delivery: QuestRewardDelivery,
+    source: Extract<TPendingReward['source'], { type: 'quest' }>,
+    cards: ReadonlyMap<string, TCard>,
+    ids?: IdGenerator
+  ): void {
+    const result = this.resolveOutcomeSteps(
+      player,
+      delivery.steps,
+      delivery.cursor,
+      delivery.zoneType,
+      source.questCardId,
+      source.questId,
+      'success',
+      source,
+      cards,
+      ids
+    )
+    this.props.questRewardDelivery = result.cursor
+      ? { ...delivery, cursor: result.cursor }
+      : undefined
+    this.replaceActor(index, result.player)
   }
 
   private updateQuestBoard(
@@ -3131,9 +3201,14 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     for (let nextStep = firstStep; nextStep < steps.length; nextStep++) {
       const step = steps[nextStep]
       if (step.type === 'effect') {
+        const activation =
+          source.type === 'quest'
+            ? step.effect.activation.filter(({ kind }) => kind !== 'gainPeak')
+            : step.effect.activation
+        if (source.type === 'quest' && activation.length === 0) continue
         player = this.applyEventOutcomeEffect(
           player,
-          step.effect,
+          { ...step.effect, activation },
           cardId,
           nextStep,
           outcomeId,
@@ -3349,6 +3424,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const actor = this.props.members[index]
     let { player } = actor
     const { cardId, origin, source, destination } = reward
+    const delivery = this.props.questRewardDelivery
+    if (source.type === 'quest' && !delivery) return left('staleReward')
     const discarded: TRewardDiscard[] = []
     let disposition: TRewardDelivery['disposition']
     if (action.choice === 'keep') {
@@ -3454,6 +3531,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       })
     } else if (source.type === 'combatEvent') {
       this.finishCombatOutcome(index, player, cards, ids)
+    } else if (source.type === 'quest' && delivery) {
+      this.deliverQuestRewards(index, player, delivery, source, cards, ids)
     } else {
       const encounter = this.eventEncounter
       if (encounter?.card && encounter.outcome) {
@@ -3561,6 +3640,14 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         ...discard,
       ]),
       ...this.pendingRewards.map(({ cardId }) => cardId),
+      ...this.pendingRewards.flatMap(({ source }) =>
+        source.type === 'quest' ? [source.questCardId] : []
+      ),
+      ...(this.questRewardDelivery?.steps.flatMap((step) =>
+        step.type === 'grantReward' || step.type === 'searchReward'
+          ? [step.cardId]
+          : []
+      ) ?? []),
       ...this.props.config.reserveDeck.flatMap((entry) =>
         entry.type === 'card' ? [entry.cardId] : []
       ),

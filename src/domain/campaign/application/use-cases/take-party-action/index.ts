@@ -83,9 +83,8 @@ export class TakePartyActionUseCase {
 
     const action = parsed.value
     if (party.status === 'idle') return left(new PartySessionNotActiveError())
-    const blocked = action.type === 'saveRespawnPoint'
-      ? null
-      : party.eventActionBlock(action)
+    const blocked =
+      action.type === 'saveRespawnPoint' ? null : party.eventActionBlock(action)
     if (typeof blocked === 'string')
       return left(new ActionNotAllowedError(blocked))
     party.clearCombatUpdates()
@@ -108,10 +107,16 @@ export class TakePartyActionUseCase {
                 ({ questId }) => questId === action.questId
               )?.questCardId
         const cards = new Map<string, TCard>()
-        for (const id of new Set([player.zoneId, questCardId])) {
-          if (id === undefined) continue
-          const card = await this.cardCatalog.findCard(id)
-          if (card) cards.set(id, card)
+        const quest = questCardId
+          ? await this.cardCatalog.findCard(questCardId)
+          : null
+        if (action.type === 'finishQuest' && quest?.type === 'zoneQuest') {
+          const catalog = await this.findEventCatalog(party, false, quest)
+          for (const [id, card] of catalog.cards) cards.set(id, card)
+        } else {
+          const zone = await this.cardCatalog.findCard(player.zoneId)
+          if (zone) cards.set(zone.id, zone)
+          if (quest) cards.set(quest.id, quest)
         }
         const result = party.takeZoneQuestAction(
           action,
@@ -432,7 +437,11 @@ export class TakePartyActionUseCase {
     return right({ party })
   }
 
-  private async findEventCatalog(party: Party, revealingCombat = false) {
+  private async findEventCatalog(
+    party: Party,
+    revealingCombat = false,
+    quest: TCard | null = null
+  ) {
     const player = party.members.find(({ id }) =>
       id.equals(party.turn.memberId)
     )?.player
@@ -446,6 +455,7 @@ export class TakePartyActionUseCase {
     const zoneType =
       party.eventEncounter?.zoneType ??
       party.combatOutcomeZone ??
+      party.questRewardDelivery?.zoneType ??
       zone?.zoneType
     const deck = dimension?.eventDecks?.find(
       (entry) => entry.zoneType === zoneType
@@ -463,6 +473,14 @@ export class TakePartyActionUseCase {
         entry.type === 'card' ? [entry.cardId] : []
       ),
       ...party.pendingRewards.map(({ cardId }) => cardId),
+      ...(
+        party.questRewardDelivery?.steps ??
+        (quest?.type === 'zoneQuest' ? quest.rewards : [])
+      ).flatMap((step) =>
+        step.type === 'grantReward' || step.type === 'searchReward'
+          ? [step.cardId]
+          : []
+      ),
       ...[
         party.eventEncounter?.card?.goodOutcome,
         party.eventEncounter?.card?.badOutcome,
@@ -516,6 +534,7 @@ export class TakePartyActionUseCase {
     }
     if (zone) cards.set(zone.id, zone)
     if (dimension) cards.set(dimension.id, dimension)
+    if (quest) cards.set(quest.id, quest)
     return { zone, dimension, cards }
   }
 

@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
+import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
+import { EndSessionUseCase } from '@/domain/campaign/application/use-cases/end-session'
+import { GetPartyUseCase } from '@/domain/campaign/application/use-cases/get-party'
+import { ResumeLegacyKnockout } from '@/domain/campaign/application/use-cases/resume-legacy-knockout'
+import { StartSessionUseCase } from '@/domain/campaign/application/use-cases/start-session'
 import { TakePartyActionUseCase } from '@/domain/campaign/application/use-cases/take-party-action'
 import type { TZoneQuestCard } from '@/domain/catalog/enterprise/value-objects/card'
 import {
@@ -8,6 +13,7 @@ import {
 } from '@/infra/http/presenters/party-presenter'
 import {
   makeDimensionCard,
+  makeItemCard,
   makeUrbanZoneCard,
 } from '../../../../../test/factories/make-card'
 import { makeParty } from '../../../../../test/factories/make-party'
@@ -20,6 +26,8 @@ import { DrizzlePartyMapper } from './drizzle-party-mapper'
 const harbor = makeUrbanZoneCard()
 const mine = makeUrbanZoneCard({ id: 'fixture.old-mine', title: 'Mina' })
 const location = { type: 'zoneTitle', title: mine.title } as const
+const carried = makeItemCard({ id: 'fixture.carried' })
+const prize = makeItemCard({ id: 'fixture.quest-prize' })
 const stages = [
   {
     type: 'interaction',
@@ -44,19 +52,51 @@ function offer({ id, title, summary }: TZoneQuestCard) {
   return { questCardId: id, title, summary }
 }
 
-async function setup(deck?: TZoneQuestCard[], maxOpenQuests = 3) {
+async function setup(
+  deck?: TZoneQuestCard[],
+  maxOpenQuests = 3,
+  fullInventory = false
+) {
   const repository = new InMemoryPartiesRepository()
   const catalog = new InMemoryCardCatalog()
-  catalog.cards = [harbor, mine, makeDimensionCard(), a, b, c, d, e]
+  catalog.cards = [
+    harbor,
+    mine,
+    makeDimensionCard(),
+    carried,
+    prize,
+    ...(deck ?? [a, b, c, d, e]),
+  ]
   const ids = sequentialIds('quest')
   const clock = fixedClock('2026-11-22T12:00:00.000Z')
   const actions = new TakePartyActionUseCase(repository, clock, catalog, ids)
   const initial = makeParty()
+  const [host] = initial.members
   const { dimension, turn } = initial
   const party = makeParty({
     status: 'inSession',
     turn,
-    config: { ...initial.config, maxOpenQuests },
+    members: fullInventory
+      ? [
+          PartyMember.create(
+            {
+              characterName: host.characterName,
+              kind: host.kind,
+              player: {
+                ...host.player,
+                vigor: 4,
+                inventory: [{ cardId: carried.id, quantity: 1 }],
+              },
+            },
+            host.id
+          ),
+        ]
+      : [...initial.members],
+    config: {
+      ...initial.config,
+      maxOpenQuests,
+      inventoryCapacity: fullInventory ? 1 : initial.config.inventoryCapacity,
+    },
     dimension: {
       ...dimension,
       map: {
@@ -85,7 +125,17 @@ async function setup(deck?: TZoneQuestCard[], maxOpenQuests = 3) {
     if (result.isLeft()) throw result.value
     return result.value.party
   }
-  return { party, repository, ids, stored, project, execute, act }
+  return {
+    party,
+    repository,
+    catalog,
+    clock,
+    ids,
+    stored,
+    project,
+    execute,
+    act,
+  }
 }
 
 describe('T-56 — ciclo de missões de zona', () => {
@@ -297,4 +347,132 @@ describe('T-56 — ciclo de missões de zona', () => {
       questChoices: [],
     })
   })
+})
+
+describe('T-57 — Pico na conclusão de missão de zona', () => {
+  it.each([
+    { zonePeak: undefined, explicitPeak: [], expectedPeak: 13 },
+    { zonePeak: 9, explicitPeak: [7], expectedPeak: 17 },
+    { zonePeak: 0, explicitPeak: [], expectedPeak: 10 },
+  ])(
+    'REQ-132 e D-111: conserva Pico $expectedPeak durante a entrega pendente',
+    async ({ zonePeak, explicitPeak, expectedPeak }) => {
+      const quest: TZoneQuestCard = {
+        ...a,
+        stages: [stages[0]],
+        rewards: [
+          { type: 'grantReward', cardId: prize.id, copies: 1 },
+          ...explicitPeak.map(
+            (amount) =>
+              ({
+                type: 'effect',
+                effect: {
+                  text: 'Ganhe Pico.',
+                  activation: [{ kind: 'gainPeak', amount }],
+                  duration: { kind: 'immediate' },
+                  mark: null,
+                },
+              }) as const
+          ),
+          {
+            type: 'effect',
+            effect: {
+              text: 'Ganhe 2 de ouro.',
+              activation: [{ kind: 'gainGold', amount: 2 }],
+              duration: { kind: 'immediate' },
+              mark: null,
+            },
+          },
+        ],
+      }
+      const {
+        party,
+        repository,
+        catalog,
+        clock,
+        ids,
+        act,
+        execute,
+        project,
+        stored,
+      } = await setup([quest], 3, true)
+      const partyId = party.id.toString()
+      const request = { partyId }
+      const resume = new ResumeLegacyKnockout(catalog, ids)
+      const getParty = new GetPartyUseCase(repository, clock, resume)
+      const endSession = new EndSessionUseCase(repository, clock)
+      const startSession = new StartSessionUseCase(repository, clock, resume)
+      const expectedPlayer = { peak: expectedPeak, vigor: 4, openQuests: [] }
+      const completion = {
+        dimensionCardId: party.dimension.dimensionCardId,
+        questCardId: quest.id,
+      }
+      const original = DrizzlePartyMapper.toDrizzle(party)
+      const config = { ...original.state.config }
+      if (zonePeak === undefined) delete config.zoneQuestPeakGain
+      else config.zoneQuestPeakGain = zonePeak
+      await repository.save(
+        DrizzlePartyMapper.toDomain({
+          ...original,
+          state: { ...original.state, config },
+        })
+      )
+
+      await act({ type: 'takeQuest', questCardId: quest.id })
+      expect(await project(await stored())).toMatchObject({
+        peak: 10,
+        vigor: 4,
+      })
+      const finish = { type: 'finishQuest', questId: 'quest-1' }
+      const finished = await act(finish)
+      expect(await project(finished)).toMatchObject({
+        ...expectedPlayer,
+        gold: 10,
+      })
+      expect(finished.members[0].player.completedZoneQuests).toEqual([
+        completion,
+      ])
+      expect(finished.pendingRewards).toMatchObject([
+        {
+          cardId: prize.id,
+          source: { type: 'quest', questId: 'quest-1', questCardId: quest.id },
+        },
+      ])
+      const [pending] = finished.pendingRewards
+
+      const row = DrizzlePartyMapper.toDrizzle(await stored())
+      await repository.save(DrizzlePartyMapper.toDomain(row))
+      const read = await getParty.execute(request)
+      if (read.isLeft()) throw read.value
+      expect(await project(read.value.party)).toMatchObject(expectedPlayer)
+      expect(read.value.party.pendingRewards).toEqual([pending])
+
+      const closed = await endSession.execute(request)
+      if (closed.isLeft()) throw closed.value
+      const reopened = await startSession.execute(request)
+      if (reopened.isLeft()) throw reopened.value
+      expect(await project(reopened.value.party)).toMatchObject(expectedPlayer)
+      expect(
+        reopened.value.party.members[0].player.completedZoneQuests
+      ).toEqual([completion])
+      expect(reopened.value.party.pendingRewards).toEqual([pending])
+
+      const resolved = await act({
+        type: 'resolveReward',
+        rewardId: pending.id,
+        choice: 'leave',
+      })
+      expect(resolved.pendingRewards).toEqual([])
+      expect(await project(resolved)).toMatchObject({
+        ...expectedPlayer,
+        gold: 12,
+      })
+      expect(resolved.members[0].player.completedZoneQuests).toEqual([
+        completion,
+      ])
+      const retry = await execute(finish)
+      expect(retry.value).toMatchObject({ details: { reason: 'questNotOpen' } })
+      expect(await project(await stored())).toMatchObject(expectedPlayer)
+    }
+  )
 })

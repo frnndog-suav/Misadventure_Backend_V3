@@ -409,12 +409,21 @@ const pendingReward = z.strictObject({
     z.strictObject({ type: z.literal('scavenge') }),
     z.strictObject({ type: z.literal('randomEvent'), encounterId: id }),
     z.strictObject({ type: z.literal('combatEvent'), combatId: id }),
+    z.strictObject({ type: z.literal('quest'), questId: id, questCardId: id }),
   ]),
   destination: z.enum(['inventory', 'tcgFolder']),
   discardOptions: z.array(z.strictObject({ cardId: id, maxCopies: copies })),
   decisionDeadlineAt: z.null(),
 })
+const questRewardDelivery = z.strictObject({
+  zoneType,
+  steps: cardFileSchemas.zoneQuest.shape.rewards,
+  cursor: z.strictObject({ nextStep: count, nextCopy: count.optional() }),
+})
 const playerSchema = v7PlayerSchema.extend({
+  completedZoneQuests: z
+    .array(z.strictObject({ dimensionCardId: id, questCardId: id }))
+    .optional(),
   openZoneQuests: z
     .array(
       z.strictObject({
@@ -744,6 +753,7 @@ const stateSchema = z
     v8State,
     v8State.extend({
       schemaVersion: z.literal(SCHEMA_VERSION),
+      questRewardDelivery: questRewardDelivery.optional(),
       ...stateFields(
         currentConfigSchema,
         playerSchema.extend({
@@ -862,6 +872,8 @@ export class DrizzlePartyMapper {
         ...(state.schemaVersion === SCHEMA_VERSION
           ? {
               combat: state.combat as TPartyProps['combat'],
+              questRewardDelivery:
+                state.questRewardDelivery as TPartyProps['questRewardDelivery'],
               combatZone: state.combatZone,
               lastCombatResult: state.lastCombatResult,
               combatOutcome:
@@ -942,6 +954,13 @@ export class DrizzlePartyMapper {
                 ...quest,
               })),
             }),
+            ...(m.player.completedZoneQuests !== undefined && {
+              completedZoneQuests: m.player.completedZoneQuests.map(
+                (quest) => ({
+                  ...quest,
+                })
+              ),
+            }),
             ...(m.player.handCopies !== undefined && {
               handCopies: m.player.handCopies.map((copy) => ({ ...copy })),
             }),
@@ -1007,6 +1026,11 @@ export class DrizzlePartyMapper {
         }),
         ...(party.pendingRewards[0] && {
           pendingReward: pendingReward.parse(party.pendingRewards[0]),
+        }),
+        ...(party.questRewardDelivery && {
+          questRewardDelivery: questRewardDelivery.parse(
+            party.questRewardDelivery
+          ),
         }),
         ...(party.rewardSequence > 0 && {
           rewardSequence: party.rewardSequence,

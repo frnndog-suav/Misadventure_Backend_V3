@@ -41,6 +41,8 @@ export type TEnemyAbilityPriorities = Readonly<
 >
 
 const QUEST_DEFAULTS = {
+  zoneQuestPeakGain: 3,
+  genericQuestPeakGain: 5,
   questBoardSize: 3,
   maxOpenQuests: 3,
   trialMinPeak: 30,
@@ -54,6 +56,8 @@ const QUEST_DEFAULTS = {
 }
 
 export const QUEST_LIMITS = {
+  zoneQuestPeakGain: { min: 0, max: 1000 },
+  genericQuestPeakGain: { min: 0, max: 1000 },
   questBoardSize: { min: 1, max: 50 },
   maxOpenQuests: { min: 1, max: 50 },
   trialMinPeak: { min: 0, max: 1000 },
