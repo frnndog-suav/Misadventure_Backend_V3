@@ -157,6 +157,41 @@ const enemy = z.strictObject({
     .optional(),
 })
 
+const combatFields = {
+  enemies: z.array(enemy),
+  escapeThreshold: z.number().int().min(0).max(20).nullable().optional(),
+  noEscape: z.boolean(),
+}
+
+const questLocation = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('zoneType'), zoneType: z.enum(ZONE_TYPES) }),
+  z.strictObject({ type: z.literal('zoneTitle'), title: text }),
+])
+const questStageFields = { location: questLocation, text }
+const questStage = z.discriminatedUnion('type', [
+  z.strictObject({ ...questStageFields, type: z.literal('interaction') }),
+  z.strictObject({
+    ...questStageFields,
+    type: z.literal('objectives'),
+    randomEventSuccesses: z.number().int().nonnegative(),
+    combatVictories: z.number().int().nonnegative(),
+  }),
+  z.strictObject({
+    ...questStageFields,
+    type: z.literal('randomEvent'),
+    eventCardId: text,
+  }),
+  z.strictObject({
+    ...questStageFields,
+    type: z.literal('combatEvent'),
+    combat: z.strictObject({
+      ...combatFields,
+      goodOutcome: eventOutcome,
+      badOutcome: eventOutcome,
+    }),
+  }),
+])
+
 const id = text
 
 const cardSchemas = {
@@ -168,6 +203,7 @@ const cardSchemas = {
     connectionArrows: z.number(),
     arrowLayout: z.enum(ARROW_LAYOUTS).nullable(),
     zoneActions: z.array(z.enum(ZONE_ACTIONS)),
+    questDeck: z.array(text).default([]),
     effects: z.array(zoneEffectSchema),
   }),
   attribute: z.strictObject({
@@ -227,11 +263,16 @@ const cardSchemas = {
     id,
     title: text,
     flavorText,
-    enemies: z.array(enemy),
+    ...combatFields,
     goodOutcome: z.union([ruleText, eventOutcome]),
     badOutcome: z.union([ruleText, eventOutcome]),
-    escapeThreshold: z.number().int().min(0).max(20).nullable().optional(),
-    noEscape: z.boolean(),
+  }),
+  zoneQuest: z.strictObject({
+    id,
+    title: text,
+    summary: text,
+    stages: z.array(questStage).min(1),
+    rewards: eventOutcome.shape.steps,
   }),
   dimension: z.strictObject({
     id,
@@ -255,6 +296,7 @@ export const cardFileSchemas = {
   item: cardSchemas.item.extend({ status }),
   randomEvent: cardSchemas.randomEvent.extend({ status }),
   combatEvent: cardSchemas.combatEvent.extend({ status }),
+  zoneQuest: cardSchemas.zoneQuest.extend({ status }),
   dimension: cardSchemas.dimension.extend({ status }),
 } satisfies Record<TCardType, z.ZodType>
 
@@ -274,6 +316,7 @@ export const cardInputSchema = z.discriminatedUnion('type', [
   cardSchemas.item.omit({ id: true }).extend(inputKeys('item')),
   cardSchemas.randomEvent.omit({ id: true }).extend(inputKeys('randomEvent')),
   cardSchemas.combatEvent.omit({ id: true }).extend(inputKeys('combatEvent')),
+  cardSchemas.zoneQuest.omit({ id: true }).extend(inputKeys('zoneQuest')),
   cardSchemas.dimension.omit({ id: true }).extend(inputKeys('dimension')),
 ])
 
@@ -289,6 +332,17 @@ export const classInputSchema = z.strictObject({
   essentialAttributes: z.array(z.enum(ATTRIBUTES)),
   baseModifiers: enemyModifiers,
   starterDeck: z.array(z.strictObject({ cardId: text, copies: z.number() })),
+  specializations: z
+    .array(
+      z.strictObject({
+        id: text,
+        name: text,
+        additionalAttributes: z.array(z.enum(ATTRIBUTES)).max(2),
+        reinforcedAttributes: z.array(z.enum(ATTRIBUTES)),
+        effects: z.array(effectSchema),
+      })
+    )
+    .default([]),
 })
 
 export const classFileSchema = classInputSchema.extend({ status })

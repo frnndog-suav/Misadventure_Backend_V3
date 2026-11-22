@@ -32,6 +32,7 @@ describe('GET /lab/content/collections/:collectionId (e2e)', () => {
         item: 7,
         randomEvent: 1,
         combatEvent: 1,
+        zoneQuest: 0,
         dimension: 1,
       },
       rarityCounts: { common: 11, uncommon: 4, rare: 2, epic: 0, legendary: 0 },

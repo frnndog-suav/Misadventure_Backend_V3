@@ -54,6 +54,10 @@ export interface TPlayerStateHttp {
   lastKnockout: TKnockoutResult | null
   usableAbilities: ReturnType<Party['adventureAbilityOptions']>
   playerClasses: { playerClass: TPlayerClass; deckLockMet: boolean }[]
+  questBoard: []
+  openQuests: []
+  questChoices: []
+  specializations: []
   gold: number
   baseHealth: number
   maxHealth: number
@@ -202,6 +206,10 @@ function playerToHTTP(
     skipNextTurn: player.skipNextTurn ?? false,
     lastKnockout: player.lastKnockout ?? null,
     usableAbilities,
+    questBoard: [],
+    openQuests: [],
+    questChoices: [],
+    specializations: [],
     playerClasses: player.playerClasses.map(({ playerClass, deckLockMet }) => ({
       playerClass,
       deckLockMet,

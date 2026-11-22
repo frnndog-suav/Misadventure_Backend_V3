@@ -1,11 +1,15 @@
 import { ContentStore } from '@/domain/catalog/application/repositories/content-store'
-import { validateClassCandidate } from '@/domain/catalog/enterprise/class-validation'
+import {
+  specializationCitationIssues,
+  validateClassCandidate,
+} from '@/domain/catalog/enterprise/class-validation'
 import type { TClassDefinition } from '@/domain/catalog/enterprise/value-objects/card'
 import type {
   TContentIssue,
   TContentStatus,
   TEditorCard,
 } from '@/domain/catalog/enterprise/value-objects/content'
+import { loadAllCards } from './all-cards'
 
 /**
  * Problemas da classe candidata (REQ-38) contra o conteúdo do `store`.
@@ -31,7 +35,17 @@ export async function checkClassCandidate(
     if (entry) cards.push(entry)
   }
 
-  return validateClassCandidate({ candidate, status, others, cards })
+  const issues = validateClassCandidate({ candidate, status, others, cards })
+  if (candidate.specializations?.some((option) => option.effects.length > 0)) {
+    issues.push(
+      ...specializationCitationIssues(
+        candidate,
+        status,
+        await loadAllCards(contentStore)
+      )
+    )
+  }
+  return issues
 }
 
 /** `playerClass` já usado por outra classe do conteúdo todo (rascunho ou publicada). */

@@ -61,6 +61,7 @@ describe('GetEditorCollectionUseCase', () => {
         item: 1,
         randomEvent: 0,
         combatEvent: 1,
+        zoneQuest: 0,
       },
       rarityCounts: {
         common: 2,

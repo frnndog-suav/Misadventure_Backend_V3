@@ -31,6 +31,7 @@ describe('GET /catalog/collections (e2e)', () => {
           item: 7,
           randomEvent: 1,
           combatEvent: 1,
+          zoneQuest: 0,
           dimension: 1,
         },
       },

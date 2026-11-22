@@ -3,6 +3,7 @@ import { ContentStore } from '@/domain/catalog/application/repositories/content-
 import { CollectionNotFoundError } from '@/domain/catalog/application/use-cases/_errors/collection-not-found-error'
 import { checkDimensionComposition } from '@/domain/catalog/enterprise/dimension-composition'
 import type {
+  TCard,
   TDimensionCard,
   TZoneCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
@@ -26,16 +27,18 @@ export class ValidateDimensionUseCase {
     }
 
     const zones: TZoneCard[] = []
+    const cards: TCard[] = []
     let dimension: TDimensionCard | null = null
     for (const { status, card } of await this.contentStore.listEditorCards(
       collectionId
     )) {
       if (status !== 'published') continue
+      cards.push(card)
       if (card.type === 'zone') zones.push(card)
       if (card.type === 'dimension') dimension = card
     }
 
-    const problems = checkDimensionComposition({ dimension, zones })
+    const problems = checkDimensionComposition({ dimension, zones, cards })
 
     return right({ valid: problems.length === 0, problems })
   }

@@ -26,6 +26,7 @@ describe('GET /catalog/classes (e2e)', () => {
       collectionId: 'fixture',
       name: 'Guerreiro',
       essentialAttributes: ['strength', 'endurance'],
+      specializations: [],
       baseModifiers: {
         attack: 6,
         defense: 5,

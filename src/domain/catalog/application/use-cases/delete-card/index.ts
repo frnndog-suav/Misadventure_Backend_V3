@@ -5,7 +5,11 @@ import { CardNotFoundError } from '@/domain/catalog/application/use-cases/_error
 import { ContentInUseError } from '@/domain/catalog/application/use-cases/_errors/content-in-use-error'
 import { ContentReferencedError } from '@/domain/catalog/application/use-cases/_errors/content-referenced-error'
 import { loadAllCards } from '@/domain/catalog/application/use-cases/_shared/all-cards'
-import { isCitedInRewardDeck } from '@/domain/catalog/enterprise/card-validation'
+import {
+  breaksQuestReferences,
+  isCitedInRewardDeck,
+} from '@/domain/catalog/enterprise/card-validation'
+import { breaksSpecializationReferences } from '@/domain/catalog/enterprise/class-validation'
 
 export type TDeleteCardUseCaseRequest = { cardId: string }
 
@@ -28,7 +32,8 @@ export class DeleteCardUseCase {
   async execute({
     cardId,
   }: TDeleteCardUseCaseRequest): Promise<TDeleteCardUseCaseResponse> {
-    if (!(await this.contentStore.findEditorCard(cardId))) {
+    const current = await this.contentStore.findEditorCard(cardId)
+    if (!current) {
       return left(new CardNotFoundError())
     }
 
@@ -46,11 +51,26 @@ export class DeleteCardUseCase {
     }
 
     // REQ-82: citada em `rewardDecks` de alguma Carta de Dimensão.
-    const allCards = (await loadAllCards(this.contentStore)).map(
-      (entry) => entry.card
-    )
-    if (isCitedInRewardDeck(allCards, new Set([cardId]))) {
+    const allCards = await loadAllCards(this.contentStore)
+    if (
+      isCitedInRewardDeck(
+        allCards.map(({ card }) => card),
+        new Set([cardId])
+      )
+    ) {
       return left(new ContentReferencedError('rewardDeck'))
+    }
+    if (breaksQuestReferences(allCards, current)) {
+      return left(new ContentReferencedError('quest'))
+    }
+    if (
+      breaksSpecializationReferences(
+        classes,
+        allCards,
+        allCards.filter(({ card }) => card.id !== cardId)
+      )
+    ) {
+      return left(new ContentReferencedError('specialization'))
     }
 
     await this.contentStore.deleteCard(cardId)

@@ -3,6 +3,7 @@ import type {
   TClassDefinition,
   TModifier,
   TPlayerClass,
+  TSpecializationDefinition,
 } from '@/domain/catalog/enterprise/value-objects/card'
 
 /** CONTRATO FEAT-06, tipo `ClassDefinition`. */
@@ -13,6 +14,7 @@ export interface TClassDefinitionHttp {
   essentialAttributes: TAttribute[]
   baseModifiers: Record<TModifier, number>
   starterDeck: { cardId: string; copies: number }[]
+  specializations: readonly TSpecializationDefinition[]
 }
 
 export class ClassPresenter {
@@ -23,6 +25,7 @@ export class ClassPresenter {
       name: classDefinition.name,
       essentialAttributes: [...classDefinition.essentialAttributes],
       baseModifiers: { ...classDefinition.baseModifiers },
+      specializations: classDefinition.specializations ?? [],
       starterDeck: classDefinition.starterDeck.map(({ cardId, copies }) => ({
         cardId,
         copies,

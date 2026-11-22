@@ -59,7 +59,7 @@ export class CreatePartyUseCase {
       typeof body.playerClass === 'string'
         ? await this.cardCatalog.findClass(body.playerClass)
         : null
-    const { dimension, zones } = await this.findFirstDimension()
+    const { dimension, zones, cards } = await this.findFirstDimension()
 
     const result = Party.create(
       {
@@ -70,6 +70,7 @@ export class CreatePartyUseCase {
         attributeCards: await this.findStarterCards(classDefinition),
         dimension,
         zones,
+        dimensionCards: cards,
         config: config.values,
         rngState: SeededRng.fromSeed(this.seeds.next()).state(),
         now: this.clock.now(),
@@ -101,6 +102,7 @@ export class CreatePartyUseCase {
   private async findFirstDimension(): Promise<{
     dimension: TDimensionCard | null
     zones: TZoneCard[]
+    cards: TCard[]
   }> {
     let first: { dimension: TDimensionCard; cards: TCard[] } | null = null
     for (const collection of await this.cardCatalog.listCollections()) {
@@ -112,10 +114,11 @@ export class CreatePartyUseCase {
         }
       }
     }
-    if (!first) return { dimension: null, zones: [] }
+    if (!first) return { dimension: null, zones: [], cards: [] }
 
     return {
       dimension: first.dimension,
+      cards: first.cards,
       zones: first.cards.filter(
         (card): card is TZoneCard => card.type === 'zone'
       ),

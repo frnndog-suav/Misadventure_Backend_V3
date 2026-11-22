@@ -63,6 +63,7 @@ export function describeCollection(
       case 'zone':
       case 'randomEvent':
       case 'combatEvent':
+      case 'zoneQuest':
       case 'dimension':
         break
       default: {

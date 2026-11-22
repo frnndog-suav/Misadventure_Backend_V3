@@ -9,6 +9,7 @@ import {
   loadAllCards,
 } from '@/domain/catalog/application/use-cases/_shared/all-cards'
 import { isCitedInRewardDeck } from '@/domain/catalog/enterprise/card-validation'
+import { breaksSpecializationReferences } from '@/domain/catalog/enterprise/class-validation'
 
 export type TDeleteCollectionUseCaseRequest = { collectionId: string }
 
@@ -41,9 +42,8 @@ export class DeleteCollectionUseCase {
         ({ card }) => card.id
       )
     )
-    const classes = (await this.contentStore.listEditorClasses()).map(
-      ({ classDefinition }) => classDefinition
-    )
+    const classEntries = await this.contentStore.listEditorClasses()
+    const classes = classEntries.map(({ classDefinition }) => classDefinition)
     const inUse = await this.partiesRepository.findContentInUse()
 
     if (
@@ -68,13 +68,20 @@ export class DeleteCollectionUseCase {
     }
 
     // REQ-82: carta dela citada por Carta de Dimensão de outra coleção.
+    const allCards = await loadAllCards(this.contentStore)
+    if (isCitedInRewardDeck(cardsOutside(allCards, collectionId), cardIds)) {
+      return left(new ContentReferencedError('rewardDeck'))
+    }
     if (
-      isCitedInRewardDeck(
-        cardsOutside(await loadAllCards(this.contentStore), collectionId),
-        cardIds
+      breaksSpecializationReferences(
+        classEntries.filter(
+          ({ classDefinition }) => classDefinition.collectionId !== collectionId
+        ),
+        allCards,
+        allCards.filter(({ card }) => card.collectionId !== collectionId)
       )
     ) {
-      return left(new ContentReferencedError('rewardDeck'))
+      return left(new ContentReferencedError('specialization'))
     }
 
     await this.contentStore.deleteCollection(collectionId)

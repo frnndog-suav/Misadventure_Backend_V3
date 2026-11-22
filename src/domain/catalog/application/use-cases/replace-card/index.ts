@@ -15,12 +15,15 @@ import { ContentLockedError } from '@/domain/catalog/application/use-cases/_erro
 import { ContentReferencedError } from '@/domain/catalog/application/use-cases/_errors/content-referenced-error'
 import {
   buildCard,
+  breaksQuestReferences,
   isCitedInRewardDeck,
   effectCitationPublicationIssues,
   combatDeckPublicationIssues,
   rewardDeckPublicationIssues,
+  questPublicationIssues,
   validateCandidate,
 } from '@/domain/catalog/enterprise/card-validation'
+import { breaksSpecializationReferences } from '@/domain/catalog/enterprise/class-validation'
 import {
   isExecutableCombatEvent,
   isRewardCard,
@@ -67,7 +70,8 @@ export class ReplaceCardUseCase {
     if (parsed.isLeft()) return left(new ContentInvalidError(parsed.value))
 
     const card = buildCard(parsed.value, collectionId)
-    const others = (await this.contentStore.listEditorCards(collectionId))
+    const localEntries = await this.contentStore.listEditorCards(collectionId)
+    const others = localEntries
       .map((entry) => entry.card)
       .filter((other) => other.id !== cardId)
 
@@ -112,6 +116,7 @@ export class ReplaceCardUseCase {
       ...(current.status === 'published'
         ? [
             ...rewardDeckPublicationIssues(card, statusById(allCards)),
+            ...questPublicationIssues(card, allCards),
             ...combatDeckPublicationIssues(
               card,
               allCards.map((entry) => entry.card)
@@ -126,6 +131,13 @@ export class ReplaceCardUseCase {
         : []),
     ]
     if (issues.length > 0) return left(new ContentInvalidError(issues))
+
+    if (
+      (!renamed || current.status === 'draft') &&
+      breaksQuestReferences(localEntries, current, card)
+    ) {
+      return left(new ContentReferencedError('quest'))
+    }
 
     if (!renamed && (leavesRewardTypes || leavesEventTypes) && cited()) {
       return left(new ContentReferencedError('rewardDeck'))
@@ -159,6 +171,26 @@ export class ReplaceCardUseCase {
         return left(
           new ContentIdTakenError([{ path: 'slug', reason: 'idTaken' }])
         )
+      }
+    }
+
+    if (
+      renamed ||
+      (current.card.type === 'zone' &&
+        (card.type !== 'zone' || current.card.title !== card.title))
+    ) {
+      const references =
+        allCards.length > 0 ? allCards : await loadAllCards(this.contentStore)
+      const updated = references.filter((entry) => entry.card.id !== cardId)
+      updated.push({ card, status: current.status })
+      if (
+        breaksSpecializationReferences(
+          await this.contentStore.listEditorClasses(),
+          references,
+          updated
+        )
+      ) {
+        return left(new ContentReferencedError('specialization'))
       }
     }
 

@@ -84,6 +84,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 064 | T-54 | [Campanhas determinísticas de nocaute](064-T-54-campanhas-de-nocaute.md) | concluída |
 | 065 | FEAT-15 | [Revisão e acordo do contrato](065-FEAT-15-revisao-contrato.md) | concluída |
 | 066 | FEAT-15 | [Planejamento solo no backend](066-FEAT-15-planejamento-solo.md) | concluída |
+| 067 | T-55 | [Conteúdo e laboratório](067-T-55-conteudo-e-laboratorio.md) | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

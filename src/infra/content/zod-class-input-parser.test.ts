@@ -24,7 +24,7 @@ describe('ZodClassInputParser', () => {
   it('REQ-38: aceita um ClassInput no formato', () => {
     const result = parser.parse(MAGE)
     expect(result.isRight()).toBe(true)
-    expect(result.value).toEqual(MAGE)
+    expect(result.value).toEqual({ ...MAGE, specializations: [] })
   })
 
   it('REQ-38: corpo não objeto → path ""', () => {

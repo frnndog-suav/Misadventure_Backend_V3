@@ -112,7 +112,11 @@ describe('POST /lab/content/import (e2e)', () => {
     expect(classes).toEqual([
       {
         status: 'draft',
-        classDefinition: { ...MAGE_INPUT, collectionId: 'bosque' },
+        classDefinition: {
+          ...MAGE_INPUT,
+          collectionId: 'bosque',
+          specializations: [],
+        },
       },
     ])
     expect(

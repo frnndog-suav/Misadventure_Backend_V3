@@ -39,6 +39,7 @@ import {
   COMBAT_NUMERIC_LIMITS,
   GAME_CONFIG_DEFAULTS,
   KNOCKOUT_NUMERIC_LIMITS,
+  QUEST_LIMITS,
   type TGameConfigKey,
   type TGameConfigValues,
   type TNumericGameConfigKey,
@@ -88,6 +89,7 @@ const isV6ConfigKey = (key: TGameConfigKey): key is TV6ConfigKey =>
 const optionalNumericConfigLimits = {
   ...COMBAT_NUMERIC_LIMITS,
   ...KNOCKOUT_NUMERIC_LIMITS,
+  ...QUEST_LIMITS,
 }
 type TOptionalNumericConfigKey = keyof typeof optionalNumericConfigLimits
 type TLegacyConfigKey = Exclude<
@@ -639,6 +641,8 @@ const dimensionSchema = z.strictObject({
         x: z.number().int(),
         y: z.number().int(),
         arrows: z.array(z.enum(DIRECTIONS)),
+        questDeck: z.array(id).readonly().optional(),
+        questReferenceIds: z.array(id).readonly().optional(),
       })
     ),
     crossings: z.array(z.strictObject({ zoneIds: z.tuple([id, id]) })),

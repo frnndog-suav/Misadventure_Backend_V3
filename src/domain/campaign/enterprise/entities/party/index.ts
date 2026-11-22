@@ -6,6 +6,7 @@ import { type RngState, SeededRng } from '@/core/rng/seeded-rng'
 import { isClassActive } from '@/domain/catalog/enterprise/class-lock'
 import { isExecutableCombatEvent } from '@/domain/catalog/enterprise/catalog-integrity'
 import { checkDimensionComposition } from '@/domain/catalog/enterprise/dimension-composition'
+import { questReferenceIds } from '@/domain/catalog/enterprise/catalog-integrity'
 import type {
   TAttributeCard,
   TCard,
@@ -349,6 +350,7 @@ export interface TCreatePartyInput {
   dimension: TDimensionCard | null
   /** Zonas publicadas da coleção da dimensão. */
   zones: readonly TZoneCard[]
+  dimensionCards?: readonly TCard[]
   config: TGameConfigValues
   rngState: RngState
   now: Date
@@ -3340,7 +3342,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   contentInUse(): { cardIds: string[]; playerClasses: string[] } {
     const cardIds = new Set<string>([
       this.props.dimension.dimensionCardId,
-      ...this.props.dimension.map.zones.map((zone) => zone.zoneId),
+      ...this.props.dimension.map.zones.flatMap((zone) => [
+        zone.zoneId,
+        ...(zone.questDeck ?? []),
+        ...(zone.questReferenceIds ?? []),
+      ]),
       ...this.props.rewardDecks.flatMap((deck) => deck.cards),
       ...this.eventDecks.flatMap(({ cards, discard }) => [
         ...cards,
@@ -3426,7 +3432,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     }
 
     const { dimension, zones } = input
-    const problems = checkDimensionComposition({ dimension, zones })
+    const problems = checkDimensionComposition({
+      dimension,
+      zones,
+      cards: input.dimensionCards,
+    })
     if (dimension === null || problems.length > 0) {
       return left({
         type: 'dimensionInvalid',
@@ -3450,6 +3460,30 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       })
     }
     const { startingCityZoneId, map } = assembled.value
+    const questDecks = new Map(
+      zones.map(({ id, questDeck }) => [id, questDeck])
+    )
+    const questCards = new Map(
+      (input.dimensionCards ?? []).flatMap((card) =>
+        card.type === 'zoneQuest' ? [[card.id, card] as const] : []
+      )
+    )
+    const mapWithQuestDecks = {
+      ...map,
+      zones: map.zones.map((zone) => {
+        const deck = questDecks.get(zone.zoneId)
+        if (!deck?.length) return zone
+        const references = deck.flatMap((id) => {
+          const card = questCards.get(id)
+          return card ? questReferenceIds(card) : []
+        })
+        return {
+          ...zone,
+          questDeck: [...deck],
+          questReferenceIds: [...new Set(references)],
+        }
+      }),
+    }
 
     const partyId = ids.next()
     const host = PartyMember.create(
@@ -3481,7 +3515,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         status: 'idle',
         config: structuredClone(input.config),
         rngState: rng.state(),
-        dimension: { dimensionCardId: dimension.id, startingCityZoneId, map },
+        dimension: {
+          dimensionCardId: dimension.id,
+          startingCityZoneId,
+          map: mapWithQuestDecks,
+        },
         rewardDecks,
         turnOrder,
         turn: {
@@ -4199,7 +4237,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   > {
     if (this.status === 'idle') return left('sessionNotActive')
     if (this.props.combat) return left('combatInProgress')
-    if (this.triggeredEffectChoice || this.props.pendingReward || this.eventEncounter)
+    if (
+      this.triggeredEffectChoice ||
+      this.props.pendingReward ||
+      this.eventEncounter
+    )
       return left('choicePending')
     const index = this.actorIndex()
     const player = this.props.members[index].player

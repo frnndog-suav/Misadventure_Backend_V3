@@ -75,7 +75,7 @@ describe('loadContent', () => {
           { id: 'fixture', name: 'Coleção de Teste', description: '' },
         ],
         cards: [
-          makeZoneCard(),
+          { ...makeZoneCard(), questDeck: [] },
           makeAttributeCard(),
           makeEquipmentCard(),
           makeItemCard(),
@@ -423,7 +423,7 @@ describe('loadContent', () => {
           cardId: null,
           field: null,
           message:
-            'Arquivo desconhecido (esperados collection.json, class.json e zone, attribute, equipment, item, randomEvent, combatEvent, dimension .json).',
+            'Arquivo desconhecido (esperados collection.json, class.json e zone, attribute, equipment, item, randomEvent, combatEvent, zoneQuest, dimension .json).',
         },
         {
           file: rel('fixture/collection.json'),
@@ -491,10 +491,14 @@ describe('loadContent — classes (class.json)', () => {
     const result = await loadContent(root)
 
     expect(result.ok && result.content.classes).toEqual([
-      { status: 'published', classDefinition: makeClassDefinition() },
+      {
+        status: 'published',
+        classDefinition: makeClassDefinition({ specializations: [] }),
+      },
       {
         status: 'draft',
         classDefinition: makeClassDefinition({
+          specializations: [],
           playerClass: 'rogue',
           name: 'Ladino',
           essentialAttributes: ['dexterity'],

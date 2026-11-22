@@ -59,6 +59,18 @@ const CATALOG_MESSAGES: Record<TCatalogIssueReason, string> = {
     'Informe regras executáveis para o evento aleatório.',
   combatEventNotExecutable:
     'Informe regras executáveis para o evento de combate.',
+  questZoneTitleMissing: 'Não há uma zona com esse título na coleção.',
+  questZoneTypeMissing: 'Não há uma zona desse tipo na coleção.',
+  questEventInvalid:
+    'A carta referenciada deve ser um evento aleatório executável da mesma coleção.',
+  questCardInvalid:
+    'A carta referenciada deve ser uma missão da mesma coleção.',
+  questRewardEffectInvalid:
+    'A missão só concede ouro ou Pico por efeito imediato.',
+  specializationCount:
+    'A classe deve ter quatro opções de especialização ou nenhuma.',
+  specializationReinforcementInvalid:
+    'Só é possível reforçar atributos essenciais da classe.',
   invalidAbility: 'O campo é incompatível com a habilidade.',
   unknownAbility: 'A habilidade informada não existe neste bloco.',
   unknownEffectKind: 'Variação de efeito desconhecida.',
@@ -171,6 +183,13 @@ export function contentIssueMessage(issue: TContentIssue): string {
     case 'notAnEventCard':
     case 'randomEventNotExecutable':
     case 'combatEventNotExecutable':
+    case 'questZoneTitleMissing':
+    case 'questZoneTypeMissing':
+    case 'questEventInvalid':
+    case 'questCardInvalid':
+    case 'questRewardEffectInvalid':
+    case 'specializationCount':
+    case 'specializationReinforcementInvalid':
     case 'invalidAbility':
     case 'unknownAbility':
     case 'unknownEffectKind':

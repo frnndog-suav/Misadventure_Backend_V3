@@ -5,6 +5,7 @@ import {
   type TDimensionCard,
   type TEquipmentCard,
   type TItemCard,
+  type TSpecializationDefinition,
   type TZoneCard,
   EQUIPMENT_SLOTS,
 } from '@/domain/catalog/enterprise/value-objects/card'
@@ -42,6 +43,10 @@ export type TEffectReport = (field: string, reason: TEffectIssueReason) => void
 
 export type TEffectCard =
   TZoneCard | TAttributeCard | TEquipmentCard | TItemCard | TDimensionCard
+
+type TEffectSource =
+  | TEffectCard
+  | ({ type: 'specialization' } & Pick<TSpecializationDefinition, 'effects'>)
 
 /** Inteiro de `min` a `max` (sem `max` = sem teto). */
 type Range = readonly [min: number, max?: number]
@@ -551,7 +556,7 @@ function checkNode(
  * Regras de REQ-99 sobre cada efeito da carta. `field` no formato do
  * integrador (`effects[0].activation[1].amount`).
  */
-export function checkEffects(card: TEffectCard, report: TEffectReport): void {
+export function checkEffects(card: TEffectSource, report: TEffectReport): void {
   const zoneLike = card.type === 'zone' || card.type === 'dimension'
 
   card.effects.forEach((effect, index) => {
@@ -810,7 +815,9 @@ export type TEffectCitation = Readonly<{
 }>
 
 /** Cartas e títulos de zona citados pelos efeitos (conferidos ao publicar, D-91). */
-export function effectCitations(card: TEffectCard): TEffectCitation[] {
+export function effectCitations(
+  card: Pick<TEffectSource, 'effects'>
+): TEffectCitation[] {
   const citations: TEffectCitation[] = []
   const sections: [string, Readonly<Record<string, Rule>>][] = [
     ['trigger', TRIGGERS],

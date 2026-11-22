@@ -34,9 +34,16 @@ describe('CreateCollectionUseCase', () => {
       draftCount: 0,
       tags: [],
     })
-    expect(Object.values(result.value.collection.cardCounts)).toEqual(
-      Array(7).fill(0) // CardType com `dimension` (CONTRATO FEAT-06)
-    )
+    expect(result.value.collection.cardCounts).toEqual({
+      zone: 0,
+      attribute: 0,
+      equipment: 0,
+      item: 0,
+      randomEvent: 0,
+      combatEvent: 0,
+      zoneQuest: 0,
+      dimension: 0,
+    })
     expect(Object.values(result.value.collection.rarityCounts)).toEqual(
       Array(5).fill(0)
     )

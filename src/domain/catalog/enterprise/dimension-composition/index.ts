@@ -1,4 +1,6 @@
+import { checkQuestReferences } from '@/domain/catalog/enterprise/catalog-integrity'
 import type {
+  TCard,
   TDimensionCard,
   TZoneCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
@@ -8,6 +10,7 @@ export type TDimensionCompositionInput = Readonly<{
   dimension: TDimensionCard | null
   /** Só as zonas publicadas da coleção. */
   zones: readonly TZoneCard[]
+  cards?: readonly TCard[]
 }>
 
 /**
@@ -20,6 +23,7 @@ export type TDimensionCompositionInput = Readonly<{
 export function checkDimensionComposition({
   dimension,
   zones,
+  cards = [],
 }: TDimensionCompositionInput): string[] {
   const problems: string[] = []
 
@@ -55,5 +59,40 @@ export function checkDimensionComposition({
     )
   }
 
+  const cardsById = new Map([...cards, ...zones].map((card) => [card.id, card]))
+  const questIds = new Set<string>()
+  for (const zone of zones) {
+    checkQuestReferences(zone, cardsById, (field) => {
+      const index = Number(field.split('.')[1])
+      problems.push(
+        `A zona ${zone.id} referencia uma missão inválida: ${zone.questDeck?.[index]}.`
+      )
+    })
+    for (const id of zone.questDeck ?? []) {
+      if (questIds.has(id))
+        problems.push(
+          `A missão ${id} está repetida nos decks de zona da dimensão.`
+        )
+      questIds.add(id)
+    }
+  }
+  for (const card of cards) {
+    if (card.type !== 'zoneQuest') continue
+    checkQuestReferences(card, cardsById, (field) => {
+      problems.push(
+        `A missão ${card.id} tem uma referência inválida em ${field}.`
+      )
+    })
+    card.stages.forEach(({ location }, index) => {
+      if (
+        location.type === 'zoneTitle' &&
+        zones.filter(({ title }) => title === location.title).length > 1
+      ) {
+        problems.push(
+          `A etapa ${index + 1} da missão ${card.id} exige um título de zona único: ${location.title}.`
+        )
+      }
+    })
+  }
   return problems
 }

@@ -40,8 +40,34 @@ export type TEnemyAbilityPriorities = Readonly<
   Record<TEnemyBehavior, readonly TEnemyAbilityPriority[]>
 >
 
+const QUEST_DEFAULTS = {
+  questBoardSize: 3,
+  maxOpenQuests: 3,
+  trialMinPeak: 30,
+  mentorBaseGoldCost: 150,
+  trialRandomEventTarget: 3,
+  trialCombatTarget: 3,
+  mentorRandomEventTarget: 5,
+  mentorCombatTarget: 5,
+  lockSpecializationAdditional: 6,
+  lockSpecializationReinforcement: 4,
+}
+
+export const QUEST_LIMITS = {
+  questBoardSize: { min: 1, max: 50 },
+  maxOpenQuests: { min: 1, max: 50 },
+  trialMinPeak: { min: 0, max: 1000 },
+  mentorBaseGoldCost: { min: 0, max: 1000000 },
+  trialRandomEventTarget: { min: 0, max: 1000 },
+  trialCombatTarget: { min: 0, max: 1000 },
+  mentorRandomEventTarget: { min: 0, max: 1000 },
+  mentorCombatTarget: { min: 0, max: 1000 },
+  lockSpecializationAdditional: { min: 0, max: 200 },
+  lockSpecializationReinforcement: { min: 0, max: 200 },
+} satisfies Record<keyof typeof QUEST_DEFAULTS, { min: number; max: number }>
+
 export interface TGameConfigValues extends Record<
-  keyof typeof COMBAT_NUMERIC_DEFAULTS,
+  keyof typeof COMBAT_NUMERIC_DEFAULTS | keyof typeof QUEST_DEFAULTS,
   number
 > {
   enemyAbilityPriorities: TEnemyAbilityPriorities
@@ -96,6 +122,7 @@ export interface TGameConfigLimit {
 }
 
 export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
+  ...QUEST_DEFAULTS,
   ...COMBAT_NUMERIC_DEFAULTS,
   enemyAbilityPriorities: {
     aggressive: ['highestPower'],
@@ -185,6 +212,7 @@ export const GAME_CONFIG_LIMITS: Readonly<
   tcgFolderCapacity: { min: 0, max: 1000 },
   recoverHealthPercent: { min: 0, max: 100 },
   ...KNOCKOUT_NUMERIC_LIMITS,
+  ...QUEST_LIMITS,
   recoverVigorPercent: { min: 0, max: 100 },
   recoverHandSize: { min: 0, max: 200 },
   inventoryCapacity: { min: 0, max: 100 },

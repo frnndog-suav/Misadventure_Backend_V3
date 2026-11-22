@@ -50,7 +50,11 @@ describe('Classes no editor /lab/content (e2e)', () => {
     expect(response.status).toBe(201)
     expect(response.body).toEqual({
       status: 'draft',
-      classDefinition: { ...MAGE_INPUT, collectionId: 'bosque' },
+      classDefinition: {
+        ...MAGE_INPUT,
+        collectionId: 'bosque',
+        specializations: [],
+      },
     })
   })
 

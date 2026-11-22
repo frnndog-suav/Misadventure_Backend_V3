@@ -2,41 +2,8 @@ import type { INestApplication } from '@nestjs/common'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { GameConfigRepository } from '@/domain/lab/application/repositories/game-config-repository'
+import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import { createApp } from '../../../../../test/lab-app'
-
-const DEFAULTS = {
-  minPlayers: 1,
-  maxPlayers: 6,
-  actionPointsPerTurn: 3,
-  initialPeak: 10,
-  initialVigor: 10,
-  baseHealth: 20,
-  initialGold: 10,
-  initialHandSize: 7,
-  minDeckSize: 60,
-  lockOneEssential: 18,
-  lockTwoEssentials: 10,
-  mapMaxAttempts: 1000,
-  defaultAttack: 5,
-  defaultDefense: 3,
-  defaultAccuracy: 50,
-  defaultEvasion: 20,
-  defaultCelerity: 10,
-  defaultPiercing: 0,
-  defaultReflection: 0,
-  maxCopiesPerCard: 4,
-  tcgFolderCapacity: 30,
-  recoverHealthPercent: 15,
-  recoverVigorPercent: 5,
-  recoverHandSize: 7,
-  inventoryCapacity: 10,
-  purseCapacity: 300,
-  vaultCapacity: 30,
-  vaultDeckSlots: 10,
-  vaultGoldCapacity: 2000,
-  escapeVigorPercent: 20,
-  reserveDeck: [{ type: 'gold', amount: 1, weight: 1 }],
-}
 
 function invalid(fields: { field: string | null; reason: string }[]) {
   return {
@@ -66,14 +33,15 @@ describe('PATCH /lab/config (e2e)', () => {
   it('REQ-05: ajuste parcial responde 200, persiste e sobrevive a um reinício', async () => {
     const response = await request(app.getHttpServer())
       .patch('/lab/config')
-      .send({ actionPointsPerTurn: 4 })
+      .send({ actionPointsPerTurn: 4, questBoardSize: 4 })
 
     expect(response.status).toBe(200)
     expect(response.body.values).toEqual({
-      ...DEFAULTS,
+      ...GAME_CONFIG_DEFAULTS,
       actionPointsPerTurn: 4,
+      questBoardSize: 4,
     })
-    expect(response.body.defaults).toEqual(DEFAULTS)
+    expect(response.body.defaults).toEqual(GAME_CONFIG_DEFAULTS)
 
     const read = await request(app.getHttpServer()).get('/lab/config')
     expect(read.body.values).toEqual(response.body.values)
@@ -112,13 +80,13 @@ describe('PATCH /lab/config (e2e)', () => {
       .send({})
 
     expect(response.status).toBe(200)
-    expect(response.body.values).toEqual(DEFAULTS)
+    expect(response.body.values).toEqual(GAME_CONFIG_DEFAULTS)
   })
 
   it('REQ-06: chave fora dos limites e chave desconhecida → 400 e nada é salvo', async () => {
     const response = await request(app.getHttpServer())
       .patch('/lab/config')
-      .send({ actionPointsPerTurn: 0, foo: 1 })
+      .send({ actionPointsPerTurn: 0, foo: 1, questBoardSize: 4 })
 
     expect(response.status).toBe(400)
     expect(response.body).toEqual(
@@ -128,7 +96,7 @@ describe('PATCH /lab/config (e2e)', () => {
       ])
     )
     const read = await request(app.getHttpServer()).get('/lab/config')
-    expect(read.body.values).toEqual(DEFAULTS)
+    expect(read.body.values).toEqual(GAME_CONFIG_DEFAULTS)
   })
 
   it('REQ-06: minPlayers > maxPlayers → 400 minAboveMax nas duas chaves', async () => {

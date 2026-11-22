@@ -322,6 +322,7 @@ describe('FileContentStore', () => {
             reflection: 0,
           },
           starterDeck: [{ cardId: card.id, copies: 60 }],
+          specializations: [],
         },
       },
     ]

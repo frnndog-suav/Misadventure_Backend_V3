@@ -18,6 +18,7 @@ export const CARD_TYPES = [
   'item',
   'randomEvent',
   'combatEvent',
+  'zoneQuest',
   'dimension',
 ] as const
 export type TCardType = (typeof CARD_TYPES)[number]
@@ -262,6 +263,7 @@ export type TZoneCard = Readonly<{
   /** Só com 2 setas (D-37); `null` com 1, 3 ou 4. */
   arrowLayout: TArrowLayout | null
   zoneActions: readonly TZoneAction[]
+  questDeck?: readonly string[]
   effects: readonly TZoneEffect[]
 }>
 
@@ -393,6 +395,43 @@ export type TCombatEventCard = Readonly<{
   escapeThreshold?: number | null
 }>
 
+export type TQuestLocation =
+  | { type: 'zoneType'; zoneType: TZoneType }
+  | { type: 'zoneTitle'; title: string }
+
+export type TQuestCombat = Readonly<{
+  enemies: readonly TEnemy[]
+  goodOutcome: TRandomEventOutcome
+  badOutcome: TRandomEventOutcome
+  noEscape: boolean
+  escapeThreshold?: number | null
+}>
+
+export type TZoneQuestStage = Readonly<{
+  location: TQuestLocation
+  text: string
+}> &
+  (
+    | { type: 'interaction' }
+    | {
+        type: 'objectives'
+        randomEventSuccesses: number
+        combatVictories: number
+      }
+    | { type: 'randomEvent'; eventCardId: string }
+    | { type: 'combatEvent'; combat: TQuestCombat }
+  )
+
+export type TZoneQuestCard = Readonly<{
+  type: 'zoneQuest'
+  id: string
+  collectionId: string
+  title: string
+  summary: string
+  stages: readonly TZoneQuestStage[]
+  rewards: readonly TRandomEventOutcomeStep[]
+}>
+
 /** README 3.4, D-74: composição do deck de recompensas de um tipo de zona. */
 export type TRewardDeck = Readonly<{
   zoneType: TZoneType
@@ -420,12 +459,21 @@ export type TCard =
   | TItemCard
   | TRandomEventCard
   | TCombatEventCard
+  | TZoneQuestCard
   | TDimensionCard
 
 export type TCollection = Readonly<{ id: string; name: string }>
 
 /** Classe com deck pré-pronto (README 8.5 a 8.7, 4.4; D-40). Não é carta. */
 export type TStarterDeckEntry = Readonly<{ cardId: string; copies: number }>
+
+export type TSpecializationDefinition = Readonly<{
+  id: string
+  name: string
+  additionalAttributes: readonly TAttribute[]
+  reinforcedAttributes: readonly TAttribute[]
+  effects: readonly TEffect[]
+}>
 
 export type TClassDefinition = Readonly<{
   playerClass: TPlayerClass
@@ -434,6 +482,7 @@ export type TClassDefinition = Readonly<{
   essentialAttributes: readonly TAttribute[]
   baseModifiers: Readonly<Record<TModifier, number>>
   starterDeck: readonly TStarterDeckEntry[]
+  specializations?: readonly TSpecializationDefinition[]
 }>
 
 export function isCardType(value: unknown): value is TCardType {

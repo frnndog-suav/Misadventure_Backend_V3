@@ -13,6 +13,7 @@ import {
   effectCitationPublicationIssues,
   combatDeckPublicationIssues,
   rewardDeckPublicationIssues,
+  questPublicationIssues,
   validateCandidate,
 } from '@/domain/catalog/enterprise/card-validation'
 import type { TEditorCard } from '@/domain/catalog/enterprise/value-objects/content'
@@ -56,6 +57,7 @@ export class PublishCardUseCase {
           : []
       ),
       ...rewardDeckPublicationIssues(card, statusById(allCards)),
+      ...questPublicationIssues(card, allCards),
       ...combatDeckPublicationIssues(
         card,
         allCards.map((entry) => entry.card)

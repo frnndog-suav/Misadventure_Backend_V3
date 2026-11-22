@@ -22,10 +22,15 @@ import {
   effectCitationPublicationIssues,
   combatDeckPublicationIssues,
   rewardDeckPublicationIssues,
+  questPublicationIssues,
   sortByCardId,
   toContentPath,
 } from '@/domain/catalog/enterprise/card-validation'
-import { validateClassCandidate } from '@/domain/catalog/enterprise/class-validation'
+import {
+  breaksSpecializationReferences,
+  specializationCitationIssues,
+  validateClassCandidate,
+} from '@/domain/catalog/enterprise/class-validation'
 import { parseCollectionInput } from '@/domain/catalog/enterprise/collection-input'
 import type {
   TCard,
@@ -118,12 +123,13 @@ export class ImportCollectionUseCase {
         issues,
         outside.map(({ card }) => card)
       )
-      const statuses = statusById([
+      const editorCards = [
         ...outside,
         ...parsedCards.flatMap(({ card, status }) =>
           status ? [{ status, card }] : []
         ),
-      ])
+      ]
+      const statuses = statusById(editorCards)
       const knownCards = [
         ...outside.map(({ card }) => card),
         ...parsedCards.map(({ card }) => card),
@@ -132,6 +138,7 @@ export class ImportCollectionUseCase {
         if (status !== 'published') continue
         for (const issue of [
           ...rewardDeckPublicationIssues(card, statuses),
+          ...questPublicationIssues(card, editorCards),
           ...combatDeckPublicationIssues(card, knownCards),
           ...effectCitationPublicationIssues(card, knownCards),
         ]) {
@@ -204,9 +211,11 @@ export class ImportCollectionUseCase {
     ) {
       const blocked = await this.checkReplacement(
         collection.id,
-        parsedCards.map(({ card }) => card),
+        parsedCards.flatMap(({ card, status }) =>
+          status ? [{ card, status }] : []
+        ),
         otherClasses,
-        outside.map(({ card }) => card)
+        outside
       )
       if (blocked) return left(blocked)
     }
@@ -243,13 +252,14 @@ export class ImportCollectionUseCase {
    */
   private async checkReplacement(
     collectionId: string,
-    keptCards: readonly TCard[],
+    replacement: readonly TEditorCard[],
     otherClasses: readonly TEditorClass[],
-    outsideCards: readonly TCard[]
+    outside: readonly TEditorCard[]
   ): Promise<ContentInUseError | ContentReferencedError | null> {
-    const oldCardIds = (
-      await this.contentStore.listEditorCards(collectionId)
-    ).map(({ card }) => card.id)
+    const oldCards = await this.contentStore.listEditorCards(collectionId)
+    const oldCardIds = oldCards.map(({ card }) => card.id)
+    const keptCards = replacement.map(({ card }) => card)
+    const outsideCards = outside.map(({ card }) => card)
     const oldClasses = (await this.contentStore.listEditorClasses()).filter(
       ({ classDefinition }) => classDefinition.collectionId === collectionId
     )
@@ -289,6 +299,15 @@ export class ImportCollectionUseCase {
       isCitedInRewardDeck(outsideCards, leavingEvents, 'event')
     ) {
       return new ContentReferencedError('rewardDeck')
+    }
+    if (
+      breaksSpecializationReferences(
+        otherClasses,
+        [...outside, ...oldCards],
+        [...outside, ...replacement]
+      )
+    ) {
+      return new ContentReferencedError('specialization')
     }
     return null
   }
@@ -396,6 +415,16 @@ export class ImportCollectionUseCase {
     )
     const outside = await this.classesOutside(collection.id)
     const prefix = `${collection.id}.`
+    const specializationCards = parsedClasses.some(({ definition }) =>
+      definition.specializations?.some(({ effects }) => effects.length > 0)
+    )
+      ? [
+          ...(await loadAllCards(this.contentStore)).filter(
+            ({ card }) => card.collectionId !== collection.id
+          ),
+          ...fileCards.values(),
+        ]
+      : []
 
     for (const [
       position,
@@ -421,12 +450,19 @@ export class ImportCollectionUseCase {
           classDefinition.playerClass !== definition.playerClass
       )
 
-      for (const issue of validateClassCandidate({
-        candidate: definition,
-        status,
-        others,
-        cards,
-      })) {
+      for (const issue of [
+        ...validateClassCandidate({
+          candidate: definition,
+          status,
+          others,
+          cards,
+        }),
+        ...specializationCitationIssues(
+          definition,
+          status,
+          specializationCards
+        ),
+      ]) {
         issues.push({
           ...issue,
           path: `classes.${index}.classDefinition.${issue.path}`,

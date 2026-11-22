@@ -19,6 +19,7 @@ describe('POST /lab/config/reset (e2e)', () => {
       .patch('/lab/config')
       .send({
         actionPointsPerTurn: 4,
+        questBoardSize: 4,
         escapeVigorPercent: 100,
         reserveDeck: [{ type: 'gold', amount: 5, weight: 3 }],
       })
@@ -31,6 +32,7 @@ describe('POST /lab/config/reset (e2e)', () => {
     expect(response.status).toBe(200)
     expect(response.body.values).toEqual(response.body.defaults)
     expect(response.body.values.actionPointsPerTurn).toBe(3)
+    expect(response.body.values.questBoardSize).toBe(3)
     expect(response.body.defaults.escapeVigorPercent).toBe(20)
     expect(response.body.limits.escapeVigorPercent).toEqual({
       min: 0,

@@ -8,6 +8,8 @@ export type TCardHttp = TCard
 
 export class CardPresenter {
   static toHTTP(card: TCard): TCardHttp {
+    if (card.type === 'zone')
+      return { ...card, questDeck: card.questDeck ?? [] }
     return card
   }
 }

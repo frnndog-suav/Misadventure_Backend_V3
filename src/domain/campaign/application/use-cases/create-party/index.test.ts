@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { UpdateGameConfigUseCase } from '@/domain/lab/application/use-cases/update-game-config'
+import { ResetGameConfigUseCase } from '@/domain/lab/application/use-cases/reset-game-config'
 
 import { SeededRng } from '@/core/rng/seeded-rng'
+import { DeleteCardUseCase } from '@/domain/catalog/application/use-cases/delete-card'
+import type { TZoneQuestCard } from '@/domain/catalog/enterprise/value-objects/card'
 import { GetGameConfigUseCase } from '@/domain/lab/application/use-cases/get-game-config'
 import { GameConfig } from '@/domain/lab/enterprise/value-objects/game-config'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
@@ -13,6 +17,7 @@ import {
 import { fixedClock } from '../../../../../../test/fakes/fixed-clock'
 import { fixedSeed } from '../../../../../../test/fakes/fixed-seed'
 import { InMemoryCardCatalog } from '../../../../../../test/fakes/in-memory-card-catalog'
+import { InMemoryContentStore } from '../../../../../../test/fakes/in-memory-content-store'
 import { sequentialIds } from '../../../../../../test/fakes/sequential-ids'
 import { InMemoryGameConfigRepository } from '../../../../../../test/repositories/in-memory-game-config-repository'
 import { InMemoryPartiesRepository } from '../../../../../../test/repositories/in-memory-parties-repository'
@@ -67,6 +72,84 @@ describe('CreatePartyUseCase', () => {
     expect(stored?.name).toBe('Os Teimosos')
     expect(stored?.rngState).toEqual(party.rngState)
     expect(stored?.config).toEqual(party.config)
+  })
+
+  it('REQ-135: recusa criar grupo com deck de missões inconsistente e preserva o repositório', async () => {
+    const city = catalog.cards.find((card) => card.id === 'fixture.gray-harbor')
+    expect(city).toBeDefined()
+    catalog.cards = catalog.cards.map((card) =>
+      card === city ? { ...card, questDeck: ['fixture.missing-quest'] } : card
+    )
+
+    const result = await sut.execute({ body: BODY })
+
+    expect(result.value).toMatchObject({
+      code: 'DIMENSION_INVALID',
+      details: {
+        problems: expect.arrayContaining([
+          expect.stringContaining('fixture.missing-quest'),
+        ]),
+      },
+    })
+    expect(await parties.findById('p-1')).toBeNull()
+  })
+
+  it('REQ-135: preserva o ajuste do grupo existente após editar e restaurar o laboratório', async () => {
+    const update = new UpdateGameConfigUseCase(configs, catalog)
+    expect(
+      (await update.execute({ patch: { questBoardSize: 4 } })).isRight()
+    ).toBe(true)
+    const created = await sut.execute({ body: BODY })
+    if (created.isLeft()) throw created.value
+
+    expect(
+      (await update.execute({ patch: { questBoardSize: 5 } })).isRight()
+    ).toBe(true)
+    await new ResetGameConfigUseCase(configs).execute()
+
+    const stored = await parties.findById(created.value.party.id.toString())
+    expect(stored?.config).toMatchObject({ questBoardSize: 4 })
+    const next = await sut.execute({ body: BODY })
+    if (next.isLeft()) throw next.value
+    expect(next.value.party.config).toMatchObject({ questBoardSize: 3 })
+  })
+
+  it('REQ-135: protege uma missão usada por um grupo mesmo sem a referência editorial', async () => {
+    const quest: TZoneQuestCard = {
+      type: 'zoneQuest',
+      id: 'fixture.port-message',
+      collectionId: 'fixture',
+      title: 'Mensagem',
+      summary: 'Entregue a mensagem no porto',
+      stages: [
+        {
+          type: 'interaction',
+          text: 'Entregue a mensagem',
+          location: { type: 'zoneType', zoneType: 'urban' },
+        },
+      ],
+      rewards: [],
+    }
+    catalog.cards = catalog.cards.map((card) =>
+      card.id === 'fixture.gray-harbor'
+        ? { ...card, questDeck: [quest.id] }
+        : card
+    )
+    catalog.cards.push(quest)
+    const created = await sut.execute({ body: BODY })
+    if (created.isLeft()) throw created.value
+
+    const store = new InMemoryContentStore()
+    store.collections = [
+      { ...makeCollection({ id: 'fixture' }), description: '' },
+    ]
+    store.cards = [{ status: 'published', card: quest }]
+    const result = await new DeleteCardUseCase(store, parties).execute({
+      cardId: quest.id,
+    })
+
+    expect(result.value).toMatchObject({ code: 'CONTENT_IN_USE' })
+    expect(await store.findEditorCard(quest.id)).toBeTruthy()
   })
 
   it('REQ-31: preparado na dimensão da fixture com o warrior; RNG gravado depois dos sorteios', async () => {

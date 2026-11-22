@@ -21,7 +21,10 @@ import {
   type TEquipmentCard,
   type TItemCard,
   type TRandomEventCard,
+  type TRandomEventOutcomeStep,
+  type TQuestCombat,
   type TZoneCard,
+  type TZoneQuestCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
@@ -69,6 +72,13 @@ export type TCatalogIssueReason =
   | 'notAnEventCard'
   | 'randomEventNotExecutable'
   | 'combatEventNotExecutable'
+  | 'questZoneTitleMissing'
+  | 'questZoneTypeMissing'
+  | 'questEventInvalid'
+  | 'questCardInvalid'
+  | 'questRewardEffectInvalid'
+  | 'specializationCount'
+  | 'specializationReinforcementInvalid'
   | 'invalidAbility'
   | 'unknownAbility'
   // REQ-99
@@ -180,6 +190,7 @@ export function checkCatalogIntegrity({
         if (zoneTitles.has(titleKey)) report('title', 'duplicateTitle')
         zoneTitles.add(titleKey)
         checkZone(card, report)
+        checkQuestDeck(card, cardsById, report)
         checkEffects(card, report)
         break
       }
@@ -202,6 +213,9 @@ export function checkCatalogIntegrity({
         break
       case 'combatEvent':
         checkCombatEvent(card, report)
+        break
+      case 'zoneQuest':
+        checkZoneQuest(card, cardsById, report)
         break
       case 'dimension':
         // REQ-26: a composição é conferida fora daqui (REQ-36).
@@ -286,7 +300,53 @@ function checkClasses(
     }
 
     checkStarterDeck(definition, cardsById, essentialsValid, published, report)
+    checkSpecializations(definition, report)
   }
+}
+
+function checkSpecializations(
+  definition: TClassDefinition,
+  report: TReport
+): void {
+  const options = definition.specializations ?? []
+  if (options.length !== 0 && options.length !== 4) {
+    report('specializations', 'specializationCount')
+  }
+  const ids = new Set<string>()
+  options.forEach((option, index) => {
+    const path = `specializations.${index}`
+    if (!option.id.trim()) report(`${path}.id`, 'empty')
+    if (ids.has(option.id)) report(`${path}.id`, 'duplicateValue')
+    ids.add(option.id)
+    if (!option.name.trim()) report(`${path}.name`, 'empty')
+    if (option.additionalAttributes.length > 2) {
+      report(`${path}.additionalAttributes`, 'outOfRange')
+    }
+    checkNoDuplicates(
+      option.additionalAttributes,
+      `${path}.additionalAttributes`,
+      report
+    )
+    checkNoDuplicates(
+      option.reinforcedAttributes,
+      `${path}.reinforcedAttributes`,
+      report
+    )
+    if (
+      option.reinforcedAttributes.some(
+        (attribute) => !definition.essentialAttributes.includes(attribute)
+      )
+    ) {
+      report(
+        `${path}.reinforcedAttributes`,
+        'specializationReinforcementInvalid'
+      )
+    }
+    checkEffects(
+      { type: 'specialization', effects: option.effects },
+      (field, reason) => report(`${path}.${field}`, reason)
+    )
+  })
 }
 
 function checkStarterDeck(
@@ -519,7 +579,9 @@ export function isExecutableCombatEvent(
   )
 }
 
-export function combatExecutionFields(card: TCombatEventCard): string[] {
+export function combatExecutionFields(
+  card: TCombatEventCard | TQuestCombat
+): string[] {
   const fields = new Set<string>()
   checkCombatEvent(card, (field) =>
     fields.add(field.replace(/\[(\d+)\]/g, '.$1'))
@@ -611,6 +673,173 @@ function checkRandomEvent(
   }
 }
 
+export function checkQuestReferences(
+  card: TZoneCard | TZoneQuestCard,
+  cardsById: ReadonlyMap<string, TCard>,
+  report: TReport
+): void {
+  if (card.type === 'zone') {
+    const deck = card.questDeck ?? []
+    deck.forEach((id, index) => {
+      const quest = cardsById.get(id)
+      if (
+        quest?.type !== 'zoneQuest' ||
+        quest.collectionId !== card.collectionId
+      ) {
+        report(`questDeck.${index}`, 'questCardInvalid')
+      }
+    })
+    return
+  }
+
+  const zones = [...cardsById.values()].filter(
+    (entry): entry is TZoneCard =>
+      entry.type === 'zone' && entry.collectionId === card.collectionId
+  )
+  card.stages.forEach((stage, index) => {
+    const path = `stages.${index}`
+    const location = stage.location
+    if (
+      location.type === 'zoneTitle' &&
+      !zones.some((zone) => zone.title === location.title)
+    ) {
+      report(`${path}.location.title`, 'questZoneTitleMissing')
+    }
+    if (
+      location.type === 'zoneType' &&
+      !zones.some((zone) => zone.zoneType === location.zoneType)
+    ) {
+      report(`${path}.location.zoneType`, 'questZoneTypeMissing')
+    }
+    if (stage.type === 'randomEvent') {
+      const event = cardsById.get(stage.eventCardId)
+      if (!isQuestRandomEvent(event, card.collectionId, cardsById)) {
+        report(`${path}.eventCardId`, 'questEventInvalid')
+      }
+    }
+    if (stage.type === 'combatEvent') {
+      checkQuestRewardReferences(
+        stage.combat.goodOutcome.steps,
+        `${path}.combat.goodOutcome.steps`,
+        card.collectionId,
+        cardsById,
+        report
+      )
+      checkQuestRewardReferences(
+        stage.combat.badOutcome.steps,
+        `${path}.combat.badOutcome.steps`,
+        card.collectionId,
+        cardsById,
+        report
+      )
+    }
+  })
+  checkQuestRewardReferences(
+    card.rewards,
+    'rewards',
+    card.collectionId,
+    cardsById,
+    report
+  )
+}
+
+function isQuestRandomEvent(
+  card: TCard | undefined,
+  collectionId: string,
+  cardsById: ReadonlyMap<string, TCard>
+): boolean {
+  if (
+    card?.type !== 'randomEvent' ||
+    card.collectionId !== collectionId ||
+    card.escapeThreshold === undefined
+  ) {
+    return false
+  }
+  let valid = true
+  checkRandomEvent(card, cardsById, () => {
+    valid = false
+  })
+  return valid
+}
+
+function checkQuestRewardReferences(
+  steps: readonly TRandomEventOutcomeStep[],
+  path: string,
+  collectionId: string,
+  cardsById: ReadonlyMap<string, TCard>,
+  report: TReport
+): void {
+  steps.forEach((step, index) => {
+    if (step.type !== 'searchReward' && step.type !== 'grantReward') return
+    const reward = cardsById.get(step.cardId)
+    if (!reward || reward.collectionId !== collectionId)
+      report(`${path}.${index}.cardId`, 'unknownCard')
+    else if (!isRewardCard(reward))
+      report(`${path}.${index}.cardId`, 'notARewardCard')
+  })
+}
+
+export function questReferenceIds(card: TZoneQuestCard): string[] {
+  const rewards = [...card.rewards]
+  const references = new Set<string>()
+  for (const stage of card.stages) {
+    if (stage.type === 'randomEvent') references.add(stage.eventCardId)
+    if (stage.type === 'combatEvent') {
+      rewards.push(
+        ...stage.combat.goodOutcome.steps,
+        ...stage.combat.badOutcome.steps
+      )
+    }
+  }
+  for (const step of rewards) {
+    if (step.type === 'searchReward' || step.type === 'grantReward')
+      references.add(step.cardId)
+  }
+  return [...references]
+}
+
+function checkQuestDeck(
+  card: TZoneCard,
+  cardsById: ReadonlyMap<string, TCard>,
+  report: TReport
+): void {
+  const seen = new Set<string>()
+  const deck = card.questDeck ?? []
+  deck.forEach((id, index) => {
+    if (seen.has(id)) report(`questDeck.${index}`, 'duplicateValue')
+    seen.add(id)
+  })
+  checkQuestReferences(card, cardsById, report)
+}
+
+function checkZoneQuest(
+  card: TZoneQuestCard,
+  cardsById: ReadonlyMap<string, TCard>,
+  report: TReport
+): void {
+  checkQuestReferences(card, cardsById, report)
+  if (!card.stages.length) report('stages', 'empty')
+  card.stages.forEach((stage, index) => {
+    if (stage.type !== 'combatEvent') return
+    for (const field of combatExecutionFields(stage.combat)) {
+      report(`stages.${index}.combat.${field}`, 'combatEventNotExecutable')
+    }
+  })
+  card.rewards.forEach((step, index) => {
+    if (step.type !== 'effect') return
+    const path = `rewards.${index}.effect`
+    checkEventOutcomeEffect(step.effect, path, report)
+    if (
+      step.effect.duration.kind !== 'immediate' ||
+      step.effect.activation.some(
+        ({ kind }) => kind !== 'gainGold' && kind !== 'gainPeak'
+      )
+    ) {
+      report(path, 'questRewardEffectInvalid')
+    }
+  })
+}
+
 /** Tipos que entram em deck de recompensas (REQ-82). */
 export function isRewardCard(card: TCard): boolean {
   return (
@@ -621,7 +850,10 @@ export function isRewardCard(card: TCard): boolean {
 }
 
 /** README 14.1, 18.1 */
-function checkCombatEvent(card: TCombatEventCard, report: TReport): void {
+function checkCombatEvent(
+  card: TCombatEventCard | TQuestCombat,
+  report: TReport
+): void {
   if (card.enemies.length === 0) report('enemies', 'empty')
 
   card.enemies.forEach((enemy, index) => {

@@ -3,6 +3,7 @@ import {
   type TClassEntry,
 } from '@/domain/catalog/enterprise/catalog-integrity'
 import { toContentPath } from '@/domain/catalog/enterprise/card-validation'
+import { effectCitations } from '@/domain/catalog/enterprise/effect-rules'
 import type { TClassDefinition } from '@/domain/catalog/enterprise/value-objects/card'
 import type {
   TContentIssue,
@@ -74,4 +75,54 @@ export function validateClassCandidate({
   }
 
   return issues
+}
+
+export function specializationCitationIssues(
+  definition: TClassDefinition,
+  status: TContentStatus,
+  cards: readonly TEditorCard[]
+): TContentIssue[] {
+  const citations = (definition.specializations ?? []).flatMap(
+    (option, index) =>
+      effectCitations(option).map((citation) => ({
+        ...citation,
+        path: `specializations.${index}.${citation.path}`,
+      }))
+  )
+  if (!citations.length) return []
+  const available = cards.filter(
+    (entry) => status === 'draft' || entry.status === 'published'
+  )
+  return citations.flatMap(({ type, value, path }): TContentIssue[] => {
+    const found = available.some(({ card }) =>
+      type === 'card'
+        ? card.id === value
+        : card.type === 'zone' && card.title === value
+    )
+    return found
+      ? []
+      : [
+          {
+            path,
+            reason: type === 'card' ? 'citedCardNotFound' : 'citedZoneNotFound',
+          },
+        ]
+  })
+}
+
+export function breaksSpecializationReferences(
+  classes: readonly TEditorClass[],
+  before: readonly TEditorCard[],
+  after: readonly TEditorCard[]
+): boolean {
+  return classes.some(({ classDefinition, status }) => {
+    const existing = new Set(
+      specializationCitationIssues(classDefinition, status, before).map(
+        ({ path }) => path
+      )
+    )
+    return specializationCitationIssues(classDefinition, status, after).some(
+      ({ path }) => !existing.has(path)
+    )
+  })
 }

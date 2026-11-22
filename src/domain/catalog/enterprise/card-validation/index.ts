@@ -1,5 +1,6 @@
 import {
   checkCatalogIntegrity,
+  checkQuestReferences,
   combatExecutionFields,
 } from '@/domain/catalog/enterprise/catalog-integrity'
 import { effectCitations } from '@/domain/catalog/enterprise/effect-rules'
@@ -12,6 +13,7 @@ import {
   type TCardInput,
   type TContentCollection,
   type TContentIssue,
+  type TEditorCard,
   type TContentStatus,
 } from '@/domain/catalog/enterprise/value-objects/content'
 
@@ -177,7 +179,7 @@ export function effectCitationPublicationIssues(
   candidate: TCard,
   cards: readonly TCard[]
 ): TContentIssue[] {
-  if (candidate.type === 'randomEvent' || candidate.type === 'combatEvent') {
+  if (!('effects' in candidate)) {
     return []
   }
   const cardIds = new Set(cards.map((card) => card.id))
@@ -193,6 +195,100 @@ export function effectCitationPublicationIssues(
     }
   }
   return issues
+}
+
+export function questPublicationIssues(
+  candidate: TCard,
+  entries: readonly TEditorCard[]
+): TContentIssue[] {
+  if (candidate.type !== 'zone' && candidate.type !== 'zoneQuest') return []
+  if (candidate.type === 'zone' && !candidate.questDeck?.length) return []
+  const relevant = entries.filter(
+    ({ card }) =>
+      card.collectionId === candidate.collectionId && card.id !== candidate.id
+  )
+  const all = new Map(relevant.map(({ card }) => [card.id, card]))
+  const published = new Map(
+    relevant
+      .filter(({ status }) => status === 'published')
+      .map(({ card }) => [card.id, card])
+  )
+  all.set(candidate.id, candidate)
+  published.set(candidate.id, candidate)
+
+  const existing = new Set<string>()
+  checkQuestReferences(candidate, all, (path) => existing.add(path))
+  const issues: TContentIssue[] = []
+  checkQuestReferences(candidate, published, (path, reason) => {
+    if (!existing.has(path)) issues.push({ path, reason })
+  })
+  if (candidate.type === 'zone') {
+    const assigned = new Set(
+      [...published.values()].flatMap((card) =>
+        card.type === 'zone' && card.id !== candidate.id
+          ? (card.questDeck ?? [])
+          : []
+      )
+    )
+    const seen = new Set<string>()
+    candidate.questDeck?.forEach((id, index) => {
+      if (assigned.has(id) && !seen.has(id)) {
+        issues.push({ path: `questDeck.${index}`, reason: 'duplicateValue' })
+      }
+      seen.add(id)
+    })
+  }
+  return issues
+}
+
+export function breaksQuestReferences(
+  entries: readonly TEditorCard[],
+  current: TEditorCard,
+  replacement?: TCard
+): boolean {
+  const local = entries.filter(
+    ({ card }) => card.collectionId === current.card.collectionId
+  )
+  const all = new Map(local.map(({ card }) => [card.id, card]))
+  const published = new Map(
+    local
+      .filter(({ status }) => status === 'published')
+      .map(({ card }) => [card.id, card])
+  )
+  const nextAll = new Map(all)
+  const nextPublished = new Map(published)
+  nextAll.delete(current.card.id)
+  nextPublished.delete(current.card.id)
+  if (replacement) {
+    nextAll.set(replacement.id, replacement)
+    if (current.status === 'published')
+      nextPublished.set(replacement.id, replacement)
+  }
+
+  for (const { card, status } of local) {
+    if (
+      card.id === current.card.id ||
+      (card.type !== 'zoneQuest' && card.type !== 'zone')
+    )
+      continue
+    if (card.type === 'zone' && !card.questDeck?.length) continue
+    const before = new Set<string>()
+    checkQuestReferences(
+      card,
+      status === 'published' ? published : all,
+      (path) => before.add(path)
+    )
+    let broken = false
+    checkQuestReferences(
+      card,
+      status === 'published' ? nextPublished : nextAll,
+      (path) => {
+        if (!before.has(path)) broken = true
+      }
+    )
+    if (broken) return true
+  }
+  return false
 }
 
 export function combatDeckPublicationIssues(

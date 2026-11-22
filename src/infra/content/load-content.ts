@@ -3,6 +3,8 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { z } from 'zod'
 
 import { checkCatalogIntegrity } from '@/domain/catalog/enterprise/catalog-integrity'
+import { questPublicationIssues } from '@/domain/catalog/enterprise/card-validation'
+import { specializationCitationIssues } from '@/domain/catalog/enterprise/class-validation'
 import {
   CARD_TYPES,
   type TCard,
@@ -19,7 +21,7 @@ import {
   classFileSchema,
   collectionFileSchema,
 } from './card-schemas'
-import { catalogIssueMessage } from './content-messages'
+import { catalogIssueMessage, contentIssueMessage } from './content-messages'
 
 /**
  * Um item do relatório de REQ-11. `file` usa barras normais. `playerClass`
@@ -160,6 +162,37 @@ export async function loadContent(
       field: issue.field,
       message: catalogIssueMessage(issue.reason),
     })
+  }
+
+  for (const { card, status } of cards) {
+    if (status !== 'published') continue
+    for (const issue of questPublicationIssues(card, cards)) {
+      problems.push({
+        file: normalize(
+          join(dirOf(collectionDirs, card.collectionId), `${card.type}.json`)
+        ),
+        cardId: card.id,
+        field: issue.path,
+        message: contentIssueMessage(issue),
+      })
+    }
+  }
+  for (const { classDefinition, status } of classes) {
+    for (const issue of specializationCitationIssues(
+      classDefinition,
+      status,
+      cards
+    )) {
+      problems.push({
+        file: normalize(
+          join(dirOf(collectionDirs, classDefinition.collectionId), CLASS_FILE)
+        ),
+        cardId: null,
+        playerClass: classDefinition.playerClass,
+        field: issue.path,
+        message: contentIssueMessage(issue),
+      })
+    }
   }
 
   return problems.length > 0

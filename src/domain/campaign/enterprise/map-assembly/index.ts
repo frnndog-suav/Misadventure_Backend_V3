@@ -13,6 +13,8 @@ export type TMapZone = Readonly<{
   x: number
   y: number
   arrows: readonly TDirection[]
+  questDeck?: readonly string[]
+  questReferenceIds?: readonly string[]
 }>
 
 export type TCrossing = Readonly<{ zoneIds: readonly [string, string] }>

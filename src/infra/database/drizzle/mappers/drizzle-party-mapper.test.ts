@@ -3,6 +3,7 @@ import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { SeededRng } from '@/core/rng/seeded-rng'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
+import { PartyPresenter } from '@/infra/http/presenters/party-presenter'
 import { removePostV6Config } from '../../../../../test/factories/remove-post-v6-config'
 import { makeCombatEventCard } from '../../../../../test/factories/make-card'
 import {
@@ -23,6 +24,52 @@ function usedRngParty() {
 }
 
 describe('DrizzlePartyMapper', () => {
+  it('REQ-135: lê um save v9 com padrões de missão e projeções vazias', () => {
+    const party = usedRngParty()
+    const row = DrizzlePartyMapper.toDrizzle(party)
+    const defaults = {
+      questBoardSize: 3,
+      maxOpenQuests: 3,
+      trialMinPeak: 30,
+      mentorBaseGoldCost: 150,
+      trialRandomEventTarget: 3,
+      trialCombatTarget: 3,
+      mentorRandomEventTarget: 5,
+      mentorCombatTarget: 5,
+      lockSpecializationAdditional: 6,
+      lockSpecializationReinforcement: 4,
+    }
+    const state = { ...row.state, schemaVersion: 9 }
+    state.config = { ...state.config }
+    const legacyConfig: Record<string, unknown> = state.config
+    for (const key of Object.keys(defaults)) delete legacyConfig[key]
+    state.members = state.members.map((member) => {
+      const player = { ...member.player }
+      const legacyPlayer: Record<string, unknown> = player
+      for (const key of [
+        'questBoard',
+        'openQuests',
+        'questChoices',
+        'specializations',
+      ]) {
+        delete legacyPlayer[key]
+      }
+      return { ...member, player }
+    })
+
+    const restored = DrizzlePartyMapper.toDomain({ ...row, state })
+
+    expect(restored.config).toMatchObject({ ...defaults, initialGold: 40 })
+    expect(
+      PartyPresenter.toHTTP(restored, new Map()).members[0].player
+    ).toMatchObject({
+      questBoard: [],
+      openQuests: [],
+      questChoices: [],
+      specializations: [],
+    })
+  })
+
   it('REQ-123: preserva combate ativo, janela, avanço de habilidades e RNG no save', () => {
     const card = makeCombatEventCard({
       goodOutcome: { text: 'Vitória.', steps: [] },
