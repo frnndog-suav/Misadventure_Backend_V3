@@ -90,6 +90,39 @@ export class TakePartyActionUseCase {
       return left(new ActionNotAllowedError(blocked))
     party.clearCombatUpdates()
     switch (action.type) {
+      case 'takeQuest':
+      case 'continueQuest':
+      case 'finishQuest':
+      case 'abandonQuest': {
+        if (!this.ids)
+          return left(
+            new ActionInvalidError([{ field: 'type', reason: 'unknownAction' }])
+          )
+        const player = party.members.find(({ id }) =>
+          party.turn.memberId.equals(id)
+        )!.player
+        const questCardId =
+          action.type === 'takeQuest'
+            ? action.questCardId
+            : player.openZoneQuests?.find(
+                ({ questId }) => questId === action.questId
+              )?.questCardId
+        const cards = new Map<string, TCard>()
+        for (const id of new Set([player.zoneId, questCardId])) {
+          if (id === undefined) continue
+          const card = await this.cardCatalog.findCard(id)
+          if (card) cards.set(id, card)
+        }
+        const result = party.takeZoneQuestAction(
+          action,
+          cards,
+          this.clock.now(),
+          this.ids
+        )
+        if (result.isLeft())
+          return left(new ActionNotAllowedError(result.value))
+        break
+      }
       case 'resolveTriggeredEffect': {
         const { cards } = await this.findEventCatalog(party)
         const result = party.resolveTriggeredEffect(

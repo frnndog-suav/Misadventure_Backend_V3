@@ -415,6 +415,16 @@ const pendingReward = z.strictObject({
   decisionDeadlineAt: z.null(),
 })
 const playerSchema = v7PlayerSchema.extend({
+  openZoneQuests: z
+    .array(
+      z.strictObject({
+        questId: id,
+        questCardId: id,
+        originZoneId: id,
+        stageIndex: count,
+      })
+    )
+    .optional(),
   lastScavenge: z
     .strictObject({
       cardId: id,
@@ -642,6 +652,8 @@ const dimensionSchema = z.strictObject({
         y: z.number().int(),
         arrows: z.array(z.enum(DIRECTIONS)),
         questDeck: z.array(id).readonly().optional(),
+        questBoard: z.array(id.nullable()).readonly().optional(),
+        questDrawPile: z.array(id).readonly().optional(),
         questReferenceIds: z.array(id).readonly().optional(),
       })
     ),
@@ -925,6 +937,11 @@ export class DrizzlePartyMapper {
             hand: [...m.player.hand],
             discard: [...m.player.discard],
             modifiers: { ...m.player.modifiers },
+            ...(m.player.openZoneQuests !== undefined && {
+              openZoneQuests: m.player.openZoneQuests.map((quest) => ({
+                ...quest,
+              })),
+            }),
             ...(m.player.handCopies !== undefined && {
               handCopies: m.player.handCopies.map((copy) => ({ ...copy })),
             }),

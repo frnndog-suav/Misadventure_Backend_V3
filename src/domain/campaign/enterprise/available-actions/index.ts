@@ -5,6 +5,7 @@ import type { TActivatableEffect } from '../activatable-effects'
 import { connectedZones } from '../connected-zones'
 import type { Party } from '../entities/party'
 import type { TPartyActionType } from '../party-action'
+import type { TZoneQuestChoice } from '../zone-quests'
 
 /**
  * Ações que o membro pode mandar agora (README 12.1, 11.4; REQ-58; D-65).
@@ -28,7 +29,8 @@ export function availableActions(
   encounter = party.randomEventEncounter,
   canUseAbility = party.adventureAbilityOptions().length > 0,
   combat = party.combat,
-  inUrbanZone = false
+  inUrbanZone = false,
+  questChoices: readonly TZoneQuestChoice[] = []
 ): TPartyActionType[] {
   const { turn } = party
   const choice = party.triggeredEffectChoice
@@ -85,15 +87,26 @@ export function availableActions(
     actions.push('prepare')
   }
   if (turn.actionPoints >= 1) actions.push('adjustDeck')
+  const questActionTypes = new Set(questChoices.map(({ type }) => type))
+  if (questActionTypes.has('abandonQuest')) actions.push('abandonQuest')
+  const startEvent = turn.actionPoints >= 1 && canStartEvent
+  if (startEvent && questChoices.length) actions.push('startEvent')
   if (turn.actionPoints >= 1 && scavengeTargets.length > 0) {
     actions.push('scavenge')
   }
   if (turn.actionPoints >= 1 && zoneActions.includes('useVault')) {
     actions.push('useVault')
   }
-  if (member && party.status === 'inSession' && turn.actionPoints >= 1 && inUrbanZone)
+  for (const type of ['takeQuest', 'continueQuest', 'finishQuest'] as const)
+    if (questActionTypes.has(type)) actions.push(type)
+  if (
+    member &&
+    party.status === 'inSession' &&
+    turn.actionPoints >= 1 &&
+    inUrbanZone
+  )
     actions.push('saveRespawnPoint')
-  if (turn.actionPoints >= 1 && canStartEvent) actions.push('startEvent')
+  if (startEvent && !questChoices.length) actions.push('startEvent')
   actions.push('endTurn')
   return actions
 }

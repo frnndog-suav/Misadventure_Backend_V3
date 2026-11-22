@@ -21,6 +21,7 @@ import type {
   TStarterDeckEntry,
   TZoneAction,
   TZoneCard,
+  TZoneQuestCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import { EQUIPMENT_SLOTS } from '@/domain/catalog/enterprise/value-objects/card'
 import type {
@@ -66,7 +67,17 @@ import { effectiveModifiers, equipmentWorks } from '../../effective-modifiers'
 import { applyActivations } from '../../effect-activation'
 import type { TPartyEvent } from '../../events/party-events'
 import { addToInventory, type TInventorySlot } from '../../inventory'
-import { assembleMap, type TPartyMap } from '../../map-assembly'
+import { assembleMap, type TMapZone, type TPartyMap } from '../../map-assembly'
+import {
+  describeZoneQuest,
+  questBoard,
+  questDrawPile,
+  questOffer,
+  zoneQuest,
+  type TQuestRefusal,
+  type TZoneQuestAction,
+  type TZoneQuestChoice,
+} from '../../zone-quests'
 import type {
   TPrepareOperation,
   TRecoverOption,
@@ -836,6 +847,203 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           : 'choicePending'
       default:
         return 'choicePending'
+    }
+  }
+
+  questState(member: PartyMember, cards: ReadonlyMap<string, TCard>) {
+    const { player } = member
+    const zone = this.props.dimension.map.zones.find(
+      ({ zoneId }) => zoneId === player.zoneId
+    )
+    const board = questBoard(zone, this.props.config.questBoardSize).flatMap(
+      (id) => {
+        const card = id === null ? undefined : zoneQuest(cards, id)
+        return card ? [questOffer(card)] : []
+      }
+    )
+    const openQuests = (player.openZoneQuests ?? []).flatMap((quest) => {
+      const card = zoneQuest(cards, quest.questCardId)
+      return card?.stages[quest.stageIndex]
+        ? [describeZoneQuest(quest, card)]
+        : []
+    })
+    const choices: TZoneQuestChoice[] = []
+    if (
+      this.status === 'inSession' &&
+      this.turn.memberId.equals(member.id) &&
+      !this.eventActionBlock({ type: 'abandonQuest', questId: '' })
+    ) {
+      for (const { questId } of player.openZoneQuests ?? [])
+        choices.push({
+          type: 'abandonQuest',
+          questId,
+          actionPoints: 0,
+          gold: 0,
+        })
+      if (this.turn.actionPoints > 0) {
+        if (
+          (player.openZoneQuests?.length ?? 0) < this.props.config.maxOpenQuests
+        ) {
+          for (const { questCardId } of board)
+            choices.push({
+              type: 'takeQuest',
+              questCardId,
+              actionPoints: 1,
+              gold: 0,
+            })
+        }
+        for (const type of ['continueQuest', 'finishQuest'] as const) {
+          for (const quest of player.openZoneQuests ?? []) {
+            const card = zoneQuest(cards, quest.questCardId)
+            if (
+              card &&
+              !this.questStageRefusal(
+                type,
+                quest.stageIndex,
+                card,
+                cards.get(player.zoneId)
+              )
+            )
+              choices.push({
+                type,
+                questId: quest.questId,
+                actionPoints: 1,
+                gold: 0,
+              })
+          }
+        }
+      }
+    }
+    return { questBoard: board, openQuests, questChoices: choices }
+  }
+
+  takeZoneQuestAction(
+    action: TZoneQuestAction,
+    cards: ReadonlyMap<string, TCard>,
+    at: Date,
+    ids: IdGenerator
+  ): Either<TQuestRefusal, undefined> {
+    const index = this.actorIndex()
+    const { player } = this.props.members[index]
+    const open = player.openZoneQuests ?? []
+    const size = this.props.config.questBoardSize
+    const zones = this.props.dimension.map.zones
+    if (action.type === 'takeQuest') {
+      const { questCardId } = action
+      const zone = zones.find(({ zoneId }) => zoneId === player.zoneId)
+      const board = [...questBoard(zone, size)]
+      const slot = board.indexOf(questCardId)
+      if (!zone || slot < 0 || !zoneQuest(cards, questCardId)?.stages.length)
+        return left({ reason: 'questOfferUnavailable', questCardId })
+      if (open.length >= this.props.config.maxOpenQuests)
+        return left({ reason: 'questLimitReached', questCardId })
+      if (this.turn.actionPoints < 1) return left({ reason: 'noActionPoints' })
+      const [next, ...rest] = questDrawPile(zone, size)
+      board[slot] = next ?? null
+      this.updateQuestBoard(zone, board, rest)
+      const quest = {
+        questId: ids.next().toString(),
+        questCardId,
+        originZoneId: zone.zoneId,
+        stageIndex: 0,
+      }
+      this.replaceActor(index, { ...player, openZoneQuests: [...open, quest] })
+    } else {
+      const { questId } = action
+      const quest = open.find((entry) => entry.questId === questId)
+      if (!quest) return left({ reason: 'questNotOpen', questId })
+      if (action.type === 'abandonQuest') {
+        const origin = zones.find(({ zoneId }) => zoneId === quest.originZoneId)
+        if (!origin) return left({ reason: 'questWrongZone', questId })
+        const board = [...questBoard(origin, size)]
+        const pile = [...questDrawPile(origin, size)]
+        const vacant = board.indexOf(null)
+        if (pile.length === 0 && vacant >= 0) board[vacant] = quest.questCardId
+        else if (pile.length === 0 && board.length < size)
+          board.push(quest.questCardId)
+        else pile.push(quest.questCardId)
+        this.updateQuestBoard(origin, board, pile)
+        this.replaceActor(index, {
+          ...player,
+          openZoneQuests: open.filter((entry) => entry !== quest),
+        })
+      } else {
+        const card = zoneQuest(cards, quest.questCardId)
+        const reason = card
+          ? this.questStageRefusal(
+              action.type,
+              quest.stageIndex,
+              card,
+              cards.get(player.zoneId)
+            )
+          : 'questWrongStage'
+        if (reason) return left({ reason, questId })
+        if (this.turn.actionPoints < 1)
+          return left({ reason: 'noActionPoints' })
+        this.replaceActor(index, {
+          ...player,
+          openZoneQuests:
+            action.type === 'finishQuest'
+              ? open.filter((entry) => entry !== quest)
+              : open.map((entry) =>
+                  entry === quest
+                    ? { ...quest, stageIndex: quest.stageIndex + 1 }
+                    : entry
+                ),
+        })
+      }
+    }
+    if (action.type !== 'abandonQuest') this.spendActionPoint()
+    this.props.savedAt = at
+    return right(undefined)
+  }
+
+  private questStageRefusal(
+    type: 'continueQuest' | 'finishQuest',
+    index: number,
+    card: TZoneQuestCard,
+    zone: TCard | undefined
+  ): TQuestRefusal['reason'] | null {
+    const stage = card.stages[index]
+    if (
+      !stage ||
+      (type === 'finishQuest') !== (index === card.stages.length - 1)
+    )
+      return 'questWrongStage'
+    const { location } = stage
+    if (
+      zone?.type !== 'zone' ||
+      (location.type === 'zoneType'
+        ? zone.zoneType !== location.zoneType
+        : zone.title !== location.title)
+    )
+      return 'questWrongZone'
+    if (stage.type === 'objectives') return 'questObjectivesIncomplete'
+    // A T-57 habilita tentativas e a conclusão com entrega de recompensa.
+    if (
+      stage.type !== 'interaction' ||
+      (type === 'finishQuest' && card.rewards.length)
+    )
+      return 'questWrongStage'
+    return null
+  }
+
+  private updateQuestBoard(
+    zone: TMapZone,
+    board: readonly (string | null)[],
+    pile: readonly string[]
+  ): void {
+    const { dimension } = this.props
+    this.props.dimension = {
+      ...dimension,
+      map: {
+        ...dimension.map,
+        zones: dimension.map.zones.map((entry) =>
+          entry === zone
+            ? { ...entry, questBoard: board, questDrawPile: pile }
+            : entry
+        ),
+      },
     }
   }
 

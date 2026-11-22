@@ -29,6 +29,7 @@ import { effectiveModifiers } from '@/domain/campaign/enterprise/effective-modif
 import { scavengeTargets } from '@/domain/campaign/enterprise/scavenge'
 import type { TPartyActionType } from '@/domain/campaign/enterprise/party-action'
 import type { TDirection } from '@/domain/campaign/enterprise/map-assembly'
+import { questBoard } from '@/domain/campaign/enterprise/zone-quests'
 import type { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import type {
   TCard,
@@ -54,9 +55,9 @@ export interface TPlayerStateHttp {
   lastKnockout: TKnockoutResult | null
   usableAbilities: ReturnType<Party['adventureAbilityOptions']>
   playerClasses: { playerClass: TPlayerClass; deckLockMet: boolean }[]
-  questBoard: []
-  openQuests: []
-  questChoices: []
+  questBoard: ReturnType<Party['questState']>['questBoard']
+  openQuests: ReturnType<Party['questState']>['openQuests']
+  questChoices: ReturnType<Party['questState']>['questChoices']
   specializations: []
   gold: number
   baseHealth: number
@@ -201,14 +202,13 @@ function playerToHTTP(
   const usableAbilities = party.turn.memberId.equals(member.id)
     ? party.adventureAbilityOptions(cards)
     : []
+  const quests = party.questState(member, cards)
   return {
     down: player.down ?? false,
     skipNextTurn: player.skipNextTurn ?? false,
     lastKnockout: player.lastKnockout ?? null,
     usableAbilities,
-    questBoard: [],
-    openQuests: [],
-    questChoices: [],
+    ...quests,
     specializations: [],
     playerClasses: player.playerClasses.map(({ playerClass, deckLockMet }) => ({
       playerClass,
@@ -243,7 +243,8 @@ function playerToHTTP(
       encounter,
       usableAbilities.length > 0,
       party.describeCombat(cards),
-      zone?.zoneType === 'urban'
+      zone?.zoneType === 'urban',
+      quests.questChoices
     ),
     build: copiesToHTTP(player.build),
     buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),
@@ -321,6 +322,14 @@ export async function findPartyCards(
       if (cardId !== null) cardIds.add(cardId)
     }
     cardIds.add(player.zoneId)
+    const zone = party.dimension.map.zones.find(
+      ({ zoneId }) => zoneId === player.zoneId
+    )
+    for (const id of questBoard(zone, party.config.questBoardSize)) {
+      if (id !== null) cardIds.add(id)
+    }
+    for (const { questCardId } of player.openZoneQuests ?? [])
+      cardIds.add(questCardId)
   }
   const cards = new Map<string, TCard>()
   const dimension = await catalog.findCard(party.dimension.dimensionCardId)

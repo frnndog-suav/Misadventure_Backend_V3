@@ -6,10 +6,12 @@ import type {
   TMinimumCheck,
 } from '../../../enterprise/random-event'
 import type { TRewardRefusal } from '../../../enterprise/rewards'
+import type { TQuestRefusal } from '../../../enterprise/zone-quests'
 
 /** CONTRATO §4 `ACTION_NOT_ALLOWED`; `details` = `ActionNotAllowedDetails` (FEATs seguintes acrescentam motivos). */
 export type TActionNotAllowedReason =
   | TCombatRefusal
+  | TQuestRefusal['reason']
   | TTriggeredEffectRefusal
   | Extract<TEventRefusal, string>
   | TRewardRefusal
@@ -58,6 +60,8 @@ export class ActionNotAllowedError extends DomainError {
     cardId?: string
     operationIndex?: number
     checks?: TMinimumCheck[]
+    questId?: string
+    questCardId?: string
   }
 
   /**
@@ -65,17 +69,20 @@ export class ActionNotAllowedError extends DomainError {
    * `operationIndex` só no `useVault` (CONTRATO FEAT-32).
    */
   constructor(
-    reason: TActionNotAllowedReason,
+    reason: TActionNotAllowedReason | TQuestRefusal,
     cardId?: string,
     operationIndex?: number,
     checks?: TMinimumCheck[]
   ) {
     super()
-    this.details = {
-      reason,
-      ...(cardId === undefined ? {} : { cardId }),
-      ...(operationIndex === undefined ? {} : { operationIndex }),
-      ...(checks === undefined ? {} : { checks }),
-    }
+    this.details =
+      typeof reason === 'object'
+        ? reason
+        : {
+            reason,
+            ...(cardId === undefined ? {} : { cardId }),
+            ...(operationIndex === undefined ? {} : { operationIndex }),
+            ...(checks === undefined ? {} : { checks }),
+          }
   }
 }

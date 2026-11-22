@@ -4,6 +4,7 @@ import {
   type TEquipmentSlot,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import type { TResolveRewardAction, TRewardDiscard } from '../rewards'
+import type { TZoneQuestAction } from '../zone-quests'
 
 /** Os três modos do Recuperar (README 12.5; REQ-63). */
 export const RECOVER_OPTIONS = [
@@ -88,6 +89,7 @@ export type TVaultOperation =
 /** Intenção de jogo (CONTRATO §1.6). União por `type`; as FEATs 10+ acrescentam variantes. */
 export type TPartyAction =
   | TRandomEventAction
+  | TZoneQuestAction
   | TResolveTriggeredEffectAction
   | TCombatAction
   | TResolveRewardAction
@@ -187,6 +189,11 @@ export function parsePartyAction(
       return parsePrepare(body, effectActivationEnabled, combatEnabled)
     case 'useVault':
       return parseUseVault(body)
+    case 'takeQuest':
+    case 'continueQuest':
+    case 'finishQuest':
+    case 'abandonQuest':
+      return parseZoneQuestAction(body.type, body)
     case 'scavenge':
       return parseScavenge(body)
     case 'resolveReward':
@@ -499,6 +506,25 @@ function parseScavenge(
   issues.push(...extraKeys(body, ['type', 'cardId']))
   if (issues.length > 0 || typeof cardId !== 'string') return left(issues)
   return right({ type: 'scavenge', cardId })
+}
+
+function parseZoneQuestAction(
+  type: TZoneQuestAction['type'],
+  body: Record<string, unknown>
+): Either<TActionIssue[], TZoneQuestAction> {
+  const field = type === 'takeQuest' ? 'questCardId' : 'questId'
+  const target = body[field]
+  const issues: TActionIssue[] = []
+  if (target === undefined) issues.push({ field, reason: 'required' })
+  else if (typeof target !== 'string')
+    issues.push({ field, reason: 'notString' })
+  issues.push(...extraKeys(body, ['type', field]))
+  if (issues.length || typeof target !== 'string') return left(issues)
+  return right(
+    type === 'takeQuest'
+      ? { type, questCardId: target }
+      : { type, questId: target }
+  )
 }
 
 function isRecoverOption(value: string): value is TRecoverOption {

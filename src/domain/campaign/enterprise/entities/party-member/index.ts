@@ -12,6 +12,7 @@ import type { TInventorySlot } from '../../inventory'
 import type { TPlayerStatus } from '../../player-status'
 import type { TEventResult, THandCopy } from '../../random-event'
 import type { TVault } from '../../vault'
+import type { TOpenZoneQuest } from '../../zone-quests'
 
 /** Na FEAT-20 entra o ajudante de IA. */
 export type TPartyMemberKind = 'human'
@@ -30,6 +31,7 @@ export type TKnockoutResult = Readonly<{
 
 /** Estado do jogador na partida (D-42). `maxHealth` é derivado (README 7.4). */
 export type TPlayerState = Readonly<{
+  openZoneQuests?: readonly TOpenZoneQuest[]
   /** Na ordem em que foram obtidas (README 8.2). */
   playerClasses: readonly Readonly<{
     playerClass: TPlayerClass

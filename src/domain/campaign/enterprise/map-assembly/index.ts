@@ -14,6 +14,8 @@ export type TMapZone = Readonly<{
   y: number
   arrows: readonly TDirection[]
   questDeck?: readonly string[]
+  questBoard?: readonly (string | null)[]
+  questDrawPile?: readonly string[]
   questReferenceIds?: readonly string[]
 }>
 
