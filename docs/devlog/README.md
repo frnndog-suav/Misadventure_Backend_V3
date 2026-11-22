@@ -81,6 +81,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 061 | T-51 | [Queda e continuidade do desfecho](061-T-51-queda-e-continuidade-do-desfecho.md) | concluída |
 | 062 | T-52 | [Penalidades e passagem de vez](062-T-52-penalidades-e-passagem-de-vez.md) | concluída |
 | 063 | T-53 | [Save, retomada e HTTP](063-T-53-save-retomada-e-http.md) | concluída |
+| 064 | T-54 | [Campanhas determinísticas de nocaute](064-T-54-campanhas-de-nocaute.md) | em andamento |
+| 065 | FEAT-15 | [Revisão da proposta de contrato](065-FEAT-15-revisao-contrato.md) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
