@@ -3,7 +3,7 @@
 - Data — 2026-11-22
 - Status — aguardando revisão
 - Spec — v0.66, REQ-132 e D-111
-- Contrato — v0.75, aceite documental do frontend recebido
+- Contrato — v0.76, FEAT-15 acordada após aceite da v0.75 pelo frontend
 - Horas — a preencher pelo autor
 
 ## Cobertura inicial
@@ -29,7 +29,11 @@ Sem serviços locais. A suíte deve passar. Nos três cenários de entrega pende
 
 - TypeScript, ESLint no arquivo de teste e `git diff --check` passaram.
 - Antes da implementação, o autor confirmou as duas falhas esperadas em `finishQuest`, com os dez testes da T-56 filtrados.
-- Após implementar a entrega, TypeScript, ESLint nos arquivos alterados e `git diff --check` passaram. A suíte unitária aguarda execução pelo autor.
-- As tentativas, os contadores e o cenário de Reflexão fatal continuam pendentes na T-57. A atualização do status do contrato e o envio dos resultados ao frontend estão pendentes. A validação integrada da FEAT-15 depende do backend real.
+- Após implementar a entrega, TypeScript, ESLint nos arquivos alterados e `git diff --check` passaram. O autor confirmou que a suíte unitária passou.
+- A v0.76 registra o acordo documental. A validação integrada da FEAT-15 depende do backend real.
 
-Commit sugerido para a entrega final — `feat/persist zone quest completion rewards (t-57)`.
+## Retomada
+
+Seguir na T-57 (REQ-132 e D-111) com o vínculo das tentativas de zona, o progresso dos contadores e o cenário de Reflexão fatal com recompensa pendente. A entrega final de zona está verificada.
+
+Commit da entrega final — `87db4b7` (`feat/persist zone quest completion rewards (t-57)`).
