@@ -1,9 +1,9 @@
 # 064 — T-54 — Campanhas determinísticas de nocaute
 
 - Data — 2026-11-21
-- Status — em andamento
+- Status — concluída em 2026-11-22
 - Spec — T-54, REQ-124 a REQ-130
-- Contrato — v0.69, FEAT-14 acordada
+- Contrato — v0.69 no roteiro, FEAT-14 validada na v0.74
 - Horas — a preencher pelo autor
 
 ## Preparação
@@ -90,6 +90,21 @@ Use `http://localhost:3334/parties/<id>`. Para ações, obtenha o ID do encontro
 - A consulta SQL direta confirmou os seis IDs na rodada 6, todos sem resumo de nocaute. As três derrotas legadas seguem caídas e em `idle`, com o ponto salvo, ausente ou inválido conforme o cenário. A vitória legada ainda tem a recompensa pendente e a Reflexão com escolha ainda tem o combate ativo. Os mesmos IDs podem ser usados após o backend voltar.
 - Após a inicialização pelo autor na porta 3334 com o catálogo temporário e o banco dedicado, o health, o laboratório, a carta de Reflexão e os GETs de espera zero, Reflexão com escolha e vitória legada responderam 200 com CORS para `http://localhost:5173`. Os três saves consultados estão na rodada 6. A Reflexão conserva o combate ativo e a vitória legada conserva a recompensa com 0 PA. As três derrotas legadas ficaram reservadas para a primeira operação do frontend. Revalidação liberada com os mesmos IDs.
 
+### Revalidação concluída em 2026-11-22
+
+O frontend confirmou no devlog 088 que os seis novos saves passaram em Chrome, com MSW desligado e a API em `http://localhost:3334`, sem divergências frente ao roteiro atualizado. Foram usados os resultados registrados da primeira leitura ou reabertura porque a rodada já alterou os saves.
+
+| Cenário | Resultado |
+| --- | --- |
+| Derrota legada com ponto salvo | Primeiro GET em `idle` aplicou respawn na Vila do Retorno. Segundo GET preservou `idle`, a ação retornou 409 `PARTY_SESSION_NOT_ACTIVE` e a reabertura preservou resumo, derrota e saldos. |
+| Derrota legada com ponto ausente | Primeiro GET em `idle` aplicou respawn no Porto Cinzento. Segundo GET preservou `idle`, a ação retornou 409 `PARTY_SESSION_NOT_ACTIVE` e a reabertura preservou resumo, derrota e saldos. |
+| Derrota legada com ponto inválido | POST de sessão antes do primeiro GET retornou 200. Respawn no Porto Cinzento na rodada 8, com 3 PA, bolsa 29 e cofre 80. GETs preservaram resumo e derrota. |
+| Vitória legada | GETs e reabertura preservaram a escolha com 0 PV e 0 PA. Deixar a recompensa abriu a rodada 8 com 3 PA e preservou a vitória. |
+| Reflexão com escolha | Reabertura preservou vitória e escolha com 0 PV e 2 PA. Deixar a picareta enviou-a ao limbo e abriu a rodada 8 com 3 PA, Pico 10, Vigor 5 e 2/22 PV. |
+| Espera zero | POST de Doação Fatal e GET seguinte mostraram rodada 7, 3 PA, uma rodada restante no status e somente Doação Fatal disponível na API e na tela. |
+
+Fechamento registrado em `docs/SPEC-BACKEND.md`, no índice do devlog, no contrato v0.74 e no roadmap v0.65. A validação integrada da FEAT-14 está concluída. O planejamento da FEAT-15 é a próxima etapa e consta no devlog 065.
+
 ## Commit sugerido
 
-`test/prepare knockout reference campaigns (t-54)`
+`docs/close solo knockout validation (t-54)`
