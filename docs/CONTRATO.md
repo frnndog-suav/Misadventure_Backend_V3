@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.72 · **Data:** 2026-11-22
+> **Versão do contrato:** 0.73 · **Data:** 2026-11-22
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -2733,9 +2733,9 @@ Exemplo de projeção solo após a conclusão da queda fora de combate, com trav
 
 No envelope real, `player` fica em `members[]`. Em uma variante para verificar a passagem de tempo, inclua um status com duas rodadas restantes e uma habilidade fora de combate com duas rodadas restantes de recarga, sem alterar os saldos do exemplo. Ao abrir a rodada 8, o status expirou, a recarga chegou a zero e a habilidade elegível volta a aparecer em `usableAbilities`, com `prepare` em `availableActions`. Confira a perda de 3 sobre 37 e `vault.gold: 80` no snapshot. Recarregue e reabra a sessão. O ID do nocaute, a rodada 8 e os saldos ficam iguais. Para os saves legados, reproduza também a vitória com escolha gravada e a derrota com a coisa ruim já aplicada. Confirme que o primeiro mantém a escolha e o segundo volta à vez jogável sem descontar os 5 de ouro novamente.
 
-### FEAT-15 — Missões e progressão de classes — `proposto (BE)`
+### FEAT-15 — Missões e progressão de classes — `acordado`
 
-Base: README §§3.4, 8.2–8.4, 12.2, 21 e Apêndice A. Primeira entrega para jogo solo. As formas e os limites desta seção aguardam aceite do frontend. Os exemplos mostram recortes do `Party` completo devolvido pelas rotas existentes.
+Base: README §§3.4, 8.2–8.4, 12.2, 21 e Apêndice A. Primeira entrega para jogo solo. As formas e os limites desta seção foram aceitos pelo frontend para os REQ-66 a REQ-70. Os exemplos mostram recortes do `Party` completo devolvido pelas rotas existentes.
 
 #### Estado e intenções
 
@@ -2872,7 +2872,7 @@ No exemplo, q1 tem duas etapas na zona atual e é a única missão aberta. A eta
 - Com o mesmo corpo e apenas `stages[0].eventCardId` trocado para `fixture.road-ambush`, PUT `/lab/content/cards/fixture.help-at-the-port` → 400 `CONTENT_INVALID` com `details.fields: [{"path":"stages.0.eventCardId","message":"A carta referenciada deve ser um evento aleatório executável da mesma coleção."}]`. A carta gravada conserva a referência anterior.
 - Com o corpo válido e apenas `stages[0].location.title` trocado para `"Porto Inexistente"`, PUT na mesma rota → 400 `CONTENT_INVALID` com `details.fields: [{"path":"stages.0.location.title","message":"Não há uma zona com esse título na coleção."}]`. Esta é a validação do campo, feita no salvamento. Em uma coleção com duas zonas publicadas de título Porto e o restante do mapa válido, POST `/lab/content/collections/fixture/validate-dimension` → 200 com `{"valid":false,"problems":["A etapa 1 da missão fixture.help-at-the-port exige um título de zona único: Porto."]}`. Essa segunda operação verifica a unicidade no conjunto publicado. POST `/parties` para a mesma dimensão inválida → 409 `DIMENSION_INVALID` com o mesmo problema.
 
-Troca de dimensão, ajudantes e recrutamento acompanham as FEATs correspondentes. O frontend aceitou na v0.71 a separação entre tentativa e entrega, o progresso no primeiro POST do desfecho e a vitória com dono caído. A v0.72 aguarda o aceite do combate embutido e dos exemplos acrescentados.
+Troca de dimensão, ajudantes e recrutamento acompanham as FEATs correspondentes. O frontend aceitou na v0.71 a separação entre tentativa e entrega, o progresso no primeiro POST do desfecho e a vitória com dono caído. O frontend aceitou o combate embutido e os exemplos acrescentados na v0.72. O acordo libera a T-69 para cliente e fixtures MSW. A validação contra a API real fica para a etapa integrada.
 
 ## 4. Códigos de erro
 
@@ -2976,3 +2976,4 @@ Troca de dimensão, ajudantes e recrutamento acompanham as FEATs correspondentes
 | 0.70 | 2026-11-22 | FE | FEAT-15 `proposto (FE)`: projeções, intenções, conteúdo, laboratório e respostas de referência para a T-69. |
 | 0.71 | 2026-11-22 | BE | FEAT-15 `proposto (BE)`: schemas de missões e classes, conteúdo e laboratório, desfechos com recompensa pendente e respostas de referência. Aguarda aceite do frontend. |
 | 0.72 | 2026-11-22 | BE | FEAT-15 `proposto (BE)` após aceite parcial: combate embutido, exemplos encadeados de tentativa e entrega, validação de referências e fixture de ativação de Cavaleiro. |
+| 0.73 | 2026-11-22 | BE | FEAT-15 `acordado` após aceite documental da v0.72 pelo frontend para os REQ-66 a REQ-70 no recorte solo. Acordo libera a T-69. |

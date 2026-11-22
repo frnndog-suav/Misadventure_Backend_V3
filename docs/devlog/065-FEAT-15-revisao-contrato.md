@@ -1,9 +1,9 @@
 # FEAT-15 — Revisão da proposta do frontend
 
 - Data: 2026-11-22
-- Status: aguardando revisão
+- Status: concluída
 - Spec: backend v0.64 (sem mudança), frontend v0.82
-- Contrato: v0.72, `proposto (BE)`
+- Contrato: v0.73, `acordado`
 - Horas: a preencher
 
 ## Objetivo e decisões
@@ -22,6 +22,6 @@ A v0.72 define o combate embutido conforme README §§18.1 e 21.1. Mantém refer
 
 ## Ponte com o frontend
 
-O frontend aceitou parcialmente a v0.71, incluindo o momento do progresso, a vitória com o dono caído e a separação entre tentativa e entrega. Levar a v0.72 para revisão. A T-69 aguarda o acordo. O planejamento do backend continua em etapa própria; a T-54 da FEAT-14 permanece em andamento.
+O frontend aceitou parcialmente a v0.71, incluindo o momento do progresso, a vitória com o dono caído e a separação entre tentativa e entrega. O frontend aceitou a v0.72 para os REQ-66 a REQ-70 no recorte solo. A v0.73 registra o acordo e libera a T-69 para cliente e fixtures MSW após a sincronização. Os cenários serão executados nas etapas de implementação e validação integrada. O planejamento do backend continua em etapa própria; a T-54 da FEAT-14 permanece em andamento.
 
-Commit sugerido: `docs/feat-15 contract counterproposal (contract v0.72)`
+Commit sugerido: `docs/feat-15 contract agreed (contract v0.73)`
