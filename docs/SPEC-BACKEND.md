@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.66 · **Data:** 2026-11-22
+> **Versão da spec:** 0.67 · **Data:** 2026-11-23
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -651,25 +651,25 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 ### FEAT-13 — Combate solo
 
 - [x] **T-44 — Critérios e contrato (REQ-117 a REQ-123, D-108 a D-110).** Frontend confirmou a interface v0.61. Acordo registrado no CONTRATO v0.62 e no devlog 053.
-- [ ] **T-45 — Catálogo, laboratório e decks (REQ-117).** Reutilizar os blocos de inimigos existentes, estruturar habilidades e desfechos e converter conteúdo com revisão do autor. Verificar publicação, cópias, decks mistos, reciclagem e regras ajustáveis no laboratório.
-- [ ] **T-46 — Estado de combate e dano (REQ-118, REQ-120).** Implementar entrada, turnos, alvos e cálculos puros. Verificar empates, Celeridade entre ciclos, Precisão zero, Área, Perfuração, elemento e Reflexão.
-- [ ] **T-47 — Habilidades, efeitos e IA (REQ-119, REQ-121).** Implementar formas, pagamento, recargas, status, execução nos momentos autorizados e perfis. Verificar Canalizada após dano, apoio a aliado ferido e ordem dos gatilhos.
-- [ ] **T-48 — Desfechos e retorno à vez (REQ-122).** Verificar fuga, ataque livre, limite em Sem fuga, última derrota inimiga, recompensa com inventário cheio, Reflexão fatal e jogador caído após recarga.
+- [x] **T-45 — Catálogo, laboratório e decks (REQ-117).** Reutilizar os blocos de inimigos existentes, estruturar habilidades e desfechos e converter conteúdo com revisão do autor. Verificar publicação, cópias, decks mistos, reciclagem e regras ajustáveis no laboratório. Concluída no devlog 054.
+- [x] **T-46 — Estado de combate e dano (REQ-118, REQ-120).** Implementar entrada, turnos, alvos e cálculos puros. Verificar empates, Celeridade entre ciclos, Precisão zero, Área, Perfuração, elemento e Reflexão. Concluída no devlog 055.
+- [x] **T-47 — Habilidades, efeitos e IA (REQ-119, REQ-121).** Implementar formas, pagamento, recargas, status, execução nos momentos autorizados e perfis. Verificar Canalizada após dano, apoio a aliado ferido e ordem dos gatilhos. Concluída no devlog 056.
+- [x] **T-48 — Desfechos e retorno à vez (REQ-122).** Verificar fuga, ataque livre, limite em Sem fuga, última derrota inimiga, recompensa com inventário cheio, Reflexão fatal e jogador caído após recarga. Concluída no devlog 057.
 - [x] **T-49 — Save, HTTP e validação (REQ-123).** Persistir e projetar o combate e integrar D-110 à gravação. Preparar restaurações determinísticas e entregar ao autor os testes e cenários HTTP. Validação BE registrada no devlog 058. O fechamento da FEAT aguarda retorno da integração.
 
 ### FEAT-14 — Nocaute, spawn e respawn
 
 - [x] **T-50 — Configuração e ponto de respawn (REQ-124, REQ-125, REQ-130).** Ação, projeção e ajustes do laboratório entregues. Verificação registrada no devlog 060.
-- [ ] **T-51 — Queda e continuidade do desfecho (REQ-126, REQ-127).** Integrar combate, Preparar e encontros à resolução de efeitos e recompensas. Cobrir pagamento fatal parcial, final e pagamento recusado.
-- [ ] **T-52 — Penalidades e passagem de vez (REQ-128).** Reutilizar o avanço normal para status, recargas e vitrines. Cobrir a proteção de Pico, a espera zero e o consumo da marca na ordem de participantes.
-- [ ] **T-53 — Save, retomada e HTTP (REQ-129).** Verificar o contrato público, a pausa para recompensa, a persistência do respawn e a retomada dos saves legados.
+- [x] **T-51 — Queda e continuidade do desfecho (REQ-126, REQ-127).** Integrar combate, Preparar e encontros à resolução de efeitos e recompensas. Cobrir pagamento fatal parcial, final e pagamento recusado. Concluída no devlog 061.
+- [x] **T-52 — Penalidades e passagem de vez (REQ-128).** Reutilizar o avanço normal para status, recargas e vitrines. Cobrir a proteção de Pico, a espera zero e o consumo da marca na ordem de participantes. Concluída no devlog 062.
+- [x] **T-53 — Save, retomada e HTTP (REQ-129).** Verificar o contrato público, a pausa para recompensa, a persistência do respawn e a retomada dos saves legados. Concluída no devlog 063.
 - [x] **T-54 — Campanhas e validação integrada.** Usar o padrão determinístico do devlog 058 com catálogo temporário e campanhas independentes. Preparar os cenários de referência da v0.69: ponto salvo e recusas, doação fatal fora de combate com passagem de tempo, doação fatal em encontro, cura antes e depois de escolha, derrota, Reflexão com entrega automática e com escolha, retomada de saves legados, laboratório e espera zero. Entregar URL, IDs, ações e resultados esperados para o frontend com MSW desligado. Registrar `implementado (BE)` após a entrega e os testes do backend, e `validado` após o retorno integrado.
 
 ### FEAT-15 — Missões e progressão de classes solo
 
-- [ ] **T-55 — Conteúdo e laboratório (REQ-135).** Implementar schemas, catálogo, editor, referências, validação de dimensão e dez ajustes acordados. Cobrir conteúdo legado, rascunho versus publicação, referências em uso, caminhos de erro e atomicidade de PATCH.
-- [ ] **T-56 — Quadro, ações de zona e save (REQ-131, D-111).** Implementar quadro, aceitação, abandono, etapas de interação, projeções, recusas e persistência pelas rotas existentes. Cobrir reposição, deck vazio, reaceitação e saves legados.
-- [ ] **T-57 — Tentativas, contadores e entrega de zona (REQ-132, D-111).** Reusar os fluxos das FEATs 12–14, registrar a origem da tentativa e a conclusão, integrar progresso e pendências de recompensa. Cobrir reflexão fatal e o mesmo desfecho após entrega, GET e reabertura. Resolver a lacuna de Pico descrita no devlog 066 antes dos testes de conclusão que dependerem dela.
+- [x] **T-55 — Conteúdo e laboratório (REQ-135).** Implementar schemas, catálogo, editor, referências, validação de dimensão e dez ajustes acordados. Cobrir conteúdo legado, rascunho versus publicação, referências em uso, caminhos de erro e atomicidade de PATCH. Concluída no devlog 067.
+- [x] **T-56 — Quadro, ações de zona e save (REQ-131, D-111).** Implementar quadro, aceitação, abandono, etapas de interação, projeções, recusas e persistência pelas rotas existentes. Cobrir reposição, deck vazio, reaceitação e saves legados. Concluída no devlog 068.
+- [x] **T-57 — Tentativas, contadores e entrega de zona (REQ-132, D-111).** Reusar os fluxos das FEATs 12–14, registrar a origem da tentativa e a conclusão, integrar progresso e pendências de recompensa. Cobrir reflexão fatal e o mesmo desfecho após entrega, GET e reabertura. Resolver a lacuna de Pico descrita no devlog 066 antes dos testes de conclusão que dependerem dela. Concluída no devlog 069.
 - [ ] **T-58 — Provação e mentor (REQ-133, REQ-132).** Entregar elegibilidade, custos, contadores e concessões inativas. Cobrir limite geral, exclusividade da genérica, ouro sem restituição no abandono e finalização após cumprir metas. Aplicar a decisão sobre Pico da T-57.
 - [ ] **T-59 — Ativação ao salvar a build (REQ-134).** Integrar Ajustar deck e Usar cofre, benefícios da especialização e seleção dos modificadores base. Cobrir nenhuma, uma ou várias classes ativas, persistência e ativação do Cavaleiro da fixture.
 - [ ] **T-60 — Campanhas e validação integrada (REQ-131 a REQ-135).** Preparar catálogo temporário e campanhas independentes com o padrão da T-54. Depois das verificações do backend pelo autor, registrar `implementado (BE)` e entregar URL da API, IDs das campanhas, ID da coleção de teste e ações com resultados esperados para os REQ-66 a REQ-70 do devlog 091, com MSW desligado. Registrar `validado` após o retorno integrado.
@@ -744,6 +744,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.64 | 2026-11-21 | Planejamento aprovado da FEAT-14 com base no CONTRATO v0.69, devlog 059 do backend e devlog 088 do frontend. REQ-124 a REQ-130 e T-50 a T-54. |
 | 0.65 | 2026-11-21 | T-50 concluída. Salvar ponto de respawn, cinco ajustes de nocaute e compatibilidade dos snapshots de configuração verificados no devlog 060. |
 | 0.66 | 2026-11-22 | Planejamento solo da FEAT-15 (CONTRATO v0.74, devlogs BE 065–066 e FE 091). REQ-131 a REQ-135, D-111 e T-55 a T-60. |
+| 0.67 | 2026-11-23 | Checkboxes alinhados ao devlog: T-45 a T-48, T-51 a T-53 e T-55 a T-57 marcadas como concluídas, com a entrada do devlog de cada uma (054 a 057, 061 a 063, 067 a 069). Sem mudança de comportamento. |
 
 ## Apêndice A — Conteúdo de teste
 
