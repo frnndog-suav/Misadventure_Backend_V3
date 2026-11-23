@@ -91,7 +91,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 071 | T-59 | [Ativação ao salvar a build](071-T-59-ativacao-ao-salvar-a-build.md) | concluída |
 | 072 | T-60 | [Campanhas da FEAT-15](072-T-60-campanhas-da-feat-15.md) | concluída |
 | 073 | FEAT-16 | [Planejamento do Mercado](073-FEAT-16-planejamento.md) | concluída |
-| 074 | FEAT-16 | [Contrato do Mercado proposto (BE): CONTRATO v0.79](074-FEAT-16-contrato-proposto.md) | aguardando revisão |
+| 074 | FEAT-16 | [Contrato do Mercado proposto (BE): CONTRATO v0.79](074-FEAT-16-contrato-proposto.md) | concluída |
+| 075 | FEAT-16 | [Contrato do Mercado acordado: CONTRATO v0.80](075-FEAT-16-contrato-acordado.md) | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

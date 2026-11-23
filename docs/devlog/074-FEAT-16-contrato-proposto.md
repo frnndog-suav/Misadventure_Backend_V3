@@ -1,7 +1,7 @@
 # 074 — FEAT-16 — Contrato do Mercado proposto pelo backend
 
 - Data — 2026-11-23
-- Status — aguardando revisão
+- Status — concluída
 - Spec — v0.73
 - Contrato — v0.79 (seção FEAT-16 `proposto (BE)`)
 - ROADMAP — v0.69 (FEAT-16: BE `aguardando outro lado`)

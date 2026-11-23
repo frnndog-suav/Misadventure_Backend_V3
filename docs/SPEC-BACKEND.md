@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.73 · **Data:** 2026-11-23
+> **Versão da spec:** 0.74 · **Data:** 2026-11-23
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -410,7 +410,7 @@ Base: README §§3.4, 8.2–8.4, 12.2, 21 e Apêndice A, seção FEAT-15 acordad
 
 ### FEAT-16 — Mercado
 
-Base: README §§3.4, 5.1–5.3, 6.3–6.6, 12.2, 24, 27, 28.1 e Apêndice A (linhas "Mercado" e "Guardar"); Apêndice B K5, K6, M4, O2, S3, C20, C25, F1, F2, F25. Decisões do autor em 2026-11-23: valor de tesouro pela tabela de raridade, lote de estoque como campo da carta, `marketShowcaseModifier` adiado, vitrine sem carta repetida (D-114, D-117, D-121). Estábulo e espaço da montaria são da FEAT-18; refino, encantamento e marcas de reparo na venda são da FEAT-17; coleções estendidas e o que passa de uma dimensão para outra são da FEAT-19 (D-116). Contrato proposto pelo backend no CONTRATO v0.79 (`proposto (BE)`); a T-61 espera o `acordado`.
+Base: README §§3.4, 5.1–5.3, 6.3–6.6, 12.2, 24, 27, 28.1 e Apêndice A (linhas "Mercado" e "Guardar"); Apêndice B K5, K6, M4, O2, S3, C20, C25, F1, F2, F25. Decisões do autor em 2026-11-23: valor de tesouro pela tabela de raridade, lote de estoque como campo da carta, `marketShowcaseModifier` adiado, vitrine sem carta repetida (D-114, D-117, D-121). Estábulo e espaço da montaria são da FEAT-18; refino, encantamento e marcas de reparo na venda são da FEAT-17; coleções estendidas e o que passa de uma dimensão para outra são da FEAT-19 (D-116). Contrato `acordado` no CONTRATO v0.80 (aceito pelo frontend sem mudanças); a T-61 pode começar.
 
 - **REQ-136 — Conteúdo do mercado (README 3.4, 5.1, 5.2, 24.1–24.4; D-114).** Dada uma carta no editor, na publicação, no import ou no boot, quando validar, então: (a) atributo, equipamento e item têm `priceMultiplier` de 0,8 a 1,5 com no máximo 2 casas decimais (o equipamento já tinha o campo); (b) item tem `stockPrice` (inteiro ≥ 1 ou `null`) e `stockQuantity` (inteiro ≥ 1); `stockPrice` só em `consumable`, `material` e `tool` (README 24.1, Apêndice B F25) e `stockQuantity` > 1 só com `stockPrice`; (c) item `booster`, e só ele, tem `boosterCollectionId` de uma coleção existente; (d) zona tem `market: { stock: string[], singles: boolean }` se e só se `zoneActions` contém `visitMarket`; cada id de `stock` é um item com `stockPrice`, de qualquer coleção (como D-91), sem repetição. Conteúdo legado é lido com `priceMultiplier: 1`, `stockPrice: null`, `stockQuantity: 1`, `boosterCollectionId: null` e `market: null`. Problemas usam os motivos e caminhos do contrato; carta citada em `market.stock` fica protegida como as do deck de recompensas (`CONTENT_REFERENCED`, `CONTENT_IN_USE`).
 - **REQ-137 — Laboratório do mercado (Apêndice A; D-115).** Dada a configuração, quando ler, editar ou restaurar, então expor e validar as chaves inteiras do mercado com os padrões do Apêndice A: vitrine `singlesShowcaseSlots` 4, `singlesDecayMax` 3, `singlesPoolSize` 20; fator `marketFactorMinPercent` 80 e `marketFactorMaxPercent` 120 (mínimo ≤ máximo); estoque de single por raridade 6/4/2/1/1; preço base de single por raridade 5/15/45/130/370; `scarcityStepPercent` 10; valor de tesouro por raridade 10/25/60/150/400; `boosterPrice` 30, `boosterCardCount` 8, `boosterSalePrice` 15 e chances do booster em milésimos 600/250/110/35/5 (soma 1.000); expansões: cofre +5 slots a 50, slot de deck +1 a 100, pasta +10 a 60 (tamanho e preço base de cada uma são chaves; o preço dobra a cada compra), bolsa a 50% e ouro do cofre a 25% da capacidade atual. O lote é atômico; snapshots de grupos existentes ganham os padrões nas chaves ausentes.
@@ -796,6 +796,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.71 | 2026-11-23 | T-60 concluída: FEAT-15 `validado` (solo) no CONTRATO v0.78 após o retorno integrado do frontend (devlog FE 093). Sem mudança de comportamento. |
 | 0.72 | 2026-11-23 | Planejamento da FEAT-16 (Mercado): REQ-136 a REQ-144, D-114 a D-122 (tesouro por raridade, lote na carta, `marketShowcaseModifier` adiado e vitrine sem repetição decididos pelo autor; as demais aprovadas pelo autor no mesmo dia) e T-61 a T-66. Contrato a propor com `/contrato FEAT-16`. |
 | 0.73 | 2026-11-23 | Alinhamento ao CONTRATO v0.79 (FEAT-16 `proposto (BE)`, aprovado pelo autor): `lastMarketVisit` (REQ-140, REQ-142) e `lastBoosterOpening` (REQ-144); entrega pendente do booster com fonte `booster` e origem `fixed` (REQ-144, D-122); tamanho das expansões como chave (REQ-137); projeção dos saves legados numa zona com mercado (T-62). |
+| 0.74 | 2026-11-23 | FEAT-16 `acordado` no CONTRATO v0.80 (frontend aceitou sem mudanças); T-61 liberada. Sem mudança de comportamento. |
 
 ## Apêndice A — Conteúdo de teste
 

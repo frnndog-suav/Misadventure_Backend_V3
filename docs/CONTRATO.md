@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.79 · **Data:** 2026-11-23
+> **Versão do contrato:** 0.80 · **Data:** 2026-11-23
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -2894,7 +2894,7 @@ No exemplo, q1 tem duas etapas na zona atual e é a única missão aberta. A eta
 
 Troca de dimensão, ajudantes e recrutamento acompanham as FEATs correspondentes. O frontend aceitou na v0.71 a separação entre tentativa e entrega, o progresso no primeiro POST do desfecho e a vitória com dono caído. O frontend aceitou o combate embutido e os exemplos acrescentados na v0.72. O acordo libera a T-69 para cliente e fixtures MSW. A validação contra a API real fica para a etapa integrada.
 
-### FEAT-16 — Mercado — `proposto (BE)`
+### FEAT-16 — Mercado — `acordado`
 
 Regras: README 3.4 (a carta de zona lista o estoque e diz se há singles), 5.1–5.3, 6.3–6.6, 12.2 (Ir ao Mercado: 1 PA, repetível; Preparar e Usar cofre abrem booster), 24.1–24.5, 27, 28.1 e Apêndice A (linhas "Mercado" e "Guardar"); Apêndice B K5, K6, M4, O2, S3, C20, C25, F1, F2, F25. Base no backend: SPEC-BACKEND REQ-136 a REQ-144, D-114 a D-122.
 
@@ -3296,3 +3296,4 @@ Só nos e2e do backend: sorteio exato do fator, do pool, da distribuição e da 
 | 0.77 | 2026-11-23 | BE | FEAT-15 `implementado (BE)` (SPEC-BACKEND T-55 a T-60). Cenários cobertos pelo e2e `take-party-action/index.quests.controller.e2e-spec.ts` e conferidos contra o backend real em campanhas determinísticas (devlog 072). Sem mudança de formato. Dados de teste: no catálogo temporário da T-60, "Porto" é `Porto Cinzento` (`fixture.gray-harbor`), `fixture.howling-wolves` faz o papel de `fixture.road-ambush`, e o Cavaleiro e o Mago existem só nesse catálogo. O `/health` volta a anunciar a versão atual. |
 | 0.78 | 2026-11-23 | FE | FEAT-15 `validado` (solo): as 13 campanhas da T-60 e os cenários de laboratório e editor passaram com chamadas HTTP contra o backend real (`http://localhost:3333`, health 0.77), e as telas de missões, ficha, laboratório e editor passaram no Chrome com o MSW desligado (devlog FE 093). Sem mudança de formato. A derrota foi conferida no save `derrota` já usado pelo backend, porque o save intacto terminou em vitória. |
 | 0.79 | 2026-11-23 | BE | FEAT-16 proposta (`proposto (BE)`): `VisitMarketAction` (lote de 1 a 50 `MarketOperation`: `buyStock`, `buyBooster`, `buySingle`, `sell`, `buyExpansion`); `openBooster` em `PrepareAction` e `VaultOperation`; `PlayerState.market` (`MarketView`), `expansions`, `lastMarketVisit`, `lastBoosterOpening` e capacidades efetivas; `visitMarket` em `availableActions`; fonte `booster` em `PendingReward`; `priceMultiplier` em atributo e item, `stockPrice`, `stockQuantity`, `boosterCollectionId` e `ZoneCard.market` (altera FEAT-04/31); 37 chaves no laboratório e motivo `sumMismatch` (altera FEAT-03); 8 motivos novos em `ActionNotAllowedDetails`; `fixture` com mercado no Porto Cinzento, `fixture.arrows` e `fixture.booster`; glossário §2.17. Sem rota nem código de erro novos.
+| 0.80 | 2026-11-23 | FE | FEAT-16 `acordado` sem mudanças: preços, capacidades, ofertas de venda, destino de cada single e resultados chegam prontos; o frontend só exibe, monta o lote e envia. Decisão do FE para o lote: cada slot da vitrine entra no máximo uma vez por lote; o preço exibido antes de confirmar é o da projeção, e o cobrado vem de `lastMarketVisit` (a escassez pode subir o preço de outra cópia da mesma carta dentro do lote). O FE alinha schemas, fixtures do MSW (inclusive `visitMarket` no `availableActions` da cidade), laboratório e editor nas tarefas da FEAT-16. |
