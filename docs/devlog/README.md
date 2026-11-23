@@ -87,6 +87,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 067 | T-55 | [Conteúdo e laboratório](067-T-55-conteudo-e-laboratorio.md) | concluída |
 | 068 | T-56 | [Quadro, ações de zona e save](068-T-56-quadro-acoes-de-zona-e-save.md) | concluída |
 | 069 | T-57 | [Tentativas, contadores e entrega de zona](069-T-57-tentativas-contadores-e-entrega-de-zona.md) | concluída |
+| 070 | T-58 | [Provação e mentor](070-T-58-provacao-e-mentor.md) | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

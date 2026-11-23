@@ -92,7 +92,9 @@ export class TakePartyActionUseCase {
       case 'takeQuest':
       case 'continueQuest':
       case 'finishQuest':
-      case 'abandonQuest': {
+      case 'abandonQuest':
+      case 'takeTrialQuest':
+      case 'trainWithMentor': {
         if (!this.ids)
           return left(
             new ActionInvalidError([{ field: 'type', reason: 'unknownAction' }])
@@ -103,9 +105,11 @@ export class TakePartyActionUseCase {
         const questCardId =
           action.type === 'takeQuest'
             ? action.questCardId
-            : player.openZoneQuests?.find(
-                ({ questId }) => questId === action.questId
-              )?.questCardId
+            : 'questId' in action
+              ? player.openZoneQuests?.find(
+                  ({ questId }) => questId === action.questId
+                )?.questCardId
+              : undefined
         const quest = questCardId
           ? await this.cardCatalog.findCard(questCardId)
           : null
@@ -120,7 +124,8 @@ export class TakePartyActionUseCase {
           this.clock.now(),
           this.ids,
           dimension,
-          this.combatEnabled
+          this.combatEnabled,
+          await this.cardCatalog.listClasses()
         )
         if (result.isLeft())
           return left(new ActionNotAllowedError(result.value))

@@ -424,6 +424,37 @@ const playerSchema = v7PlayerSchema.extend({
   completedZoneQuests: z
     .array(z.strictObject({ dimensionCardId: id, questCardId: id }))
     .optional(),
+  openGenericQuests: z
+    .array(
+      z.discriminatedUnion('type', [
+        z.strictObject({
+          questId: id,
+          type: z.literal('trialQuest'),
+          classId: z.enum(PLAYER_CLASSES),
+          specializationId: id,
+          randomEventSuccesses: count.optional(),
+          combatVictories: count.optional(),
+        }),
+        z.strictObject({
+          questId: id,
+          type: z.literal('mentorQuest'),
+          classId: z.enum(PLAYER_CLASSES),
+          randomEventSuccesses: count.optional(),
+          combatVictories: count.optional(),
+        }),
+      ])
+    )
+    .optional(),
+  questOrder: z.array(id).optional(),
+  specializations: z
+    .array(
+      z.strictObject({
+        playerClass: z.enum(PLAYER_CLASSES),
+        specializationId: id,
+        deckLockMet: z.boolean(),
+      })
+    )
+    .optional(),
   openZoneQuests: z
     .array(
       z.strictObject({
@@ -964,6 +995,19 @@ export class DrizzlePartyMapper {
             ...(m.player.openZoneQuests !== undefined && {
               openZoneQuests: m.player.openZoneQuests.map((quest) => ({
                 ...quest,
+              })),
+            }),
+            ...(m.player.openGenericQuests !== undefined && {
+              openGenericQuests: m.player.openGenericQuests.map((quest) => ({
+                ...quest,
+              })),
+            }),
+            ...(m.player.questOrder !== undefined && {
+              questOrder: [...m.player.questOrder],
+            }),
+            ...(m.player.specializations !== undefined && {
+              specializations: m.player.specializations.map((entry) => ({
+                ...entry,
               })),
             }),
             ...(m.player.completedZoneQuests !== undefined && {

@@ -14,6 +14,7 @@ import type {
   TAttributeCard,
   TCard,
   TClassDefinition,
+  TPlayerClass,
   TDimensionCard,
   TEquipmentCard,
   TEquipmentSlot,
@@ -72,14 +73,19 @@ import type { TPartyEvent } from '../../events/party-events'
 import { addToInventory, type TInventorySlot } from '../../inventory'
 import { assembleMap, type TMapZone, type TPartyMap } from '../../map-assembly'
 import {
+  acceptsGenericQuests,
+  describeGenericQuest,
   describeZoneQuest,
+  orderedQuestIds,
   questBoard,
   questDrawPile,
   questOffer,
   zoneQuest,
+  type TGenericQuestAction,
+  type TOpenGenericQuest,
+  type TQuestAction,
   type TQuestRefusal,
   type TOpenZoneQuest,
-  type TZoneQuestAction,
   type TZoneQuestAttempt,
   type TZoneQuestChoice,
 } from '../../zone-quests'
@@ -873,7 +879,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     }
   }
 
-  questState(member: PartyMember, cards: ReadonlyMap<string, TCard>) {
+  questState(
+    member: PartyMember,
+    cards: ReadonlyMap<string, TCard>,
+    classes: readonly TClassDefinition[] = []
+  ) {
     const { player } = member
     const zone = this.props.dimension.map.zones.find(
       ({ zoneId }) => zoneId === player.zoneId
@@ -884,22 +894,33 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         return card ? [questOffer(card)] : []
       }
     )
-    const openQuests = (player.openZoneQuests ?? []).flatMap((quest) => {
+    const described = new Map<
+      string,
+      | ReturnType<typeof describeZoneQuest>
+      | ReturnType<typeof describeGenericQuest>
+    >()
+    for (const quest of player.openZoneQuests ?? []) {
       const card = zoneQuest(cards, quest.questCardId)
-      return card?.stages[quest.stageIndex]
-        ? [describeZoneQuest(quest, card)]
-        : []
-    })
+      if (card?.stages[quest.stageIndex])
+        described.set(quest.questId, describeZoneQuest(quest, card))
+    }
+    for (const quest of player.openGenericQuests ?? [])
+      described.set(
+        quest.questId,
+        describeGenericQuest(quest, this.genericTargets(quest.type))
+      )
+    const openQuests = orderedQuestIds(player).flatMap(
+      (questId) => described.get(questId) ?? []
+    )
     const choices: TZoneQuestChoice[] = []
+    const atZone = cards.get(player.zoneId)
     if (
       this.status === 'inSession' &&
       this.turn.memberId.equals(member.id) &&
       !this.eventActionBlock({ type: 'abandonQuest', questId: '' })
     ) {
       if (this.turn.actionPoints > 0) {
-        if (
-          (player.openZoneQuests?.length ?? 0) < this.props.config.maxOpenQuests
-        ) {
+        if (openQuestCount(player) < this.props.config.maxOpenQuests) {
           for (const { questCardId } of board)
             choices.push({
               type: 'takeQuest',
@@ -908,28 +929,60 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
               gold: 0,
             })
         }
+        const openIds = orderedQuestIds(player)
         for (const type of ['continueQuest', 'finishQuest'] as const) {
-          for (const quest of player.openZoneQuests ?? []) {
-            const card = zoneQuest(cards, quest.questCardId)
-            if (
-              card &&
-              !this.questStageRefusal(
-                type,
-                quest,
-                card,
-                cards.get(player.zoneId)
-              )
+          for (const questId of openIds) {
+            const generic = player.openGenericQuests?.find(
+              (entry) => entry.questId === questId
             )
+            const quest = player.openZoneQuests?.find(
+              (entry) => entry.questId === questId
+            )
+            const card = quest ? zoneQuest(cards, quest.questCardId) : undefined
+            const refusal = generic
+              ? type === 'continueQuest'
+                ? 'questWrongStage'
+                : this.genericFinishRefusal(generic, atZone)
+              : quest && card
+                ? this.questStageRefusal(type, quest, card, atZone)
+                : 'questNotOpen'
+            if (!refusal)
               choices.push({
                 type,
-                questId: quest.questId,
+                questId,
                 actionPoints: 1,
                 gold: 0,
               })
           }
         }
+        if (acceptsGenericQuests(atZone)) {
+          for (const { playerClass } of player.playerClasses)
+            for (const { id } of classes.find(
+              (entry) => entry.playerClass === playerClass
+            )?.specializations ?? []) {
+              const action = {
+                type: 'takeTrialQuest',
+                classId: playerClass,
+                specializationId: id,
+              } as const
+              if (!this.genericQuestRefusal(action, player, classes))
+                choices.push({ ...action, actionPoints: 1, gold: 0 })
+            }
+          for (const { playerClass } of classes) {
+            const action = {
+              type: 'trainWithMentor',
+              classId: playerClass,
+            } as const
+            if (!this.genericQuestRefusal(action, player, classes))
+              choices.push({
+                ...action,
+                actionPoints: this.turn.actionPoints,
+                gold: this.mentorCost(player),
+              })
+          }
+        }
       }
-      for (const { questId } of player.openZoneQuests ?? [])
+      for (const questId of orderedQuestIds(player))
         choices.push({
           type: 'abandonQuest',
           questId,
@@ -941,15 +994,23 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   }
 
   takeZoneQuestAction(
-    action: TZoneQuestAction,
+    action: TQuestAction,
     cards: ReadonlyMap<string, TCard>,
     at: Date,
     ids: IdGenerator,
     dimension: TDimensionCard | null = null,
-    combatEnabled = true
+    combatEnabled = true,
+    classes: readonly TClassDefinition[] = []
   ): Either<TQuestRefusal, undefined> {
+    if (action.type === 'takeTrialQuest' || action.type === 'trainWithMentor')
+      return this.takeGenericQuest(action, cards, at, ids, classes)
     const index = this.actorIndex()
     const { player } = this.props.members[index]
+    const generic = (player.openGenericQuests ?? []).find(
+      (entry) => 'questId' in action && entry.questId === action.questId
+    )
+    if (generic && 'questId' in action)
+      return this.useGenericQuest(action, generic, cards, at)
     const open = player.openZoneQuests ?? []
     const size = this.props.config.questBoardSize
     const zones = this.props.dimension.map.zones
@@ -960,7 +1021,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       const slot = board.indexOf(questCardId)
       if (!zone || slot < 0 || !zoneQuest(cards, questCardId)?.stages.length)
         return left({ reason: 'questOfferUnavailable', questCardId })
-      if (open.length >= this.props.config.maxOpenQuests)
+      if (openQuestCount(player) >= this.props.config.maxOpenQuests)
         return left({ reason: 'questLimitReached', questCardId })
       if (this.turn.actionPoints < 1) return left({ reason: 'noActionPoints' })
       const [next, ...rest] = questDrawPile(zone, size)
@@ -972,7 +1033,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         originZoneId: zone.zoneId,
         stageIndex: 0,
       }
-      this.replaceActor(index, { ...player, openZoneQuests: [...open, quest] })
+      this.replaceActor(index, {
+        ...player,
+        openZoneQuests: [...open, quest],
+        questOrder: [...orderedQuestIds(player), quest.questId],
+      })
     } else {
       const { questId } = action
       const quest = open.find((entry) => entry.questId === questId)
@@ -1112,6 +1177,194 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       }
     }
     if (action.type !== 'abandonQuest') this.spendActionPoint()
+    this.pruneQuestOrder(index)
+    this.props.savedAt = at
+    return right(undefined)
+  }
+
+  private genericTargets(type: TOpenGenericQuest['type']) {
+    const { config } = this.props
+    return type === 'trialQuest'
+      ? {
+          randomEventSuccesses: config.trialRandomEventTarget,
+          combatVictories: config.trialCombatTarget,
+        }
+      : {
+          randomEventSuccesses: config.mentorRandomEventTarget,
+          combatVictories: config.mentorCombatTarget,
+        }
+  }
+
+  /** README 8.4: o custo base do mentor dobra a cada classe já adquirida. */
+  private mentorCost(player: TPlayerState): number {
+    return (
+      this.props.config.mentorBaseGoldCost *
+      2 ** (player.playerClasses.length - 1)
+    )
+  }
+
+  /** Motivo de recusa de provação ou mentor, na ordem de D-112. */
+  private genericQuestRefusal(
+    action: TGenericQuestAction,
+    player: TPlayerState,
+    classes: readonly TClassDefinition[]
+  ): TQuestRefusal['reason'] | null {
+    const definition = classes.find(
+      ({ playerClass }) => playerClass === action.classId
+    )
+    const owned = player.playerClasses.some(
+      ({ playerClass }) => playerClass === action.classId
+    )
+    const specialized = (playerClass: string) =>
+      (player.specializations ?? []).some(
+        (entry) => entry.playerClass === playerClass
+      )
+    const blocked = (): TQuestRefusal['reason'] | null =>
+      player.openGenericQuests?.length
+        ? 'genericQuestAlreadyOpen'
+        : openQuestCount(player) >= this.props.config.maxOpenQuests
+          ? 'questLimitReached'
+          : null
+    if (action.type === 'takeTrialQuest') {
+      if (!owned || specialized(action.classId)) return 'questClassIneligible'
+      if (
+        !definition?.specializations?.some(
+          ({ id }) => id === action.specializationId
+        )
+      )
+        return 'questSpecializationIneligible'
+      return (
+        blocked() ??
+        (player.peak < this.props.config.trialMinPeak
+          ? 'questPeakTooLow'
+          : this.turn.actionPoints < 1
+            ? 'noActionPoints'
+            : null)
+      )
+    }
+    if (owned || !definition) return 'questClassIneligible'
+    return (
+      blocked() ??
+      (!player.playerClasses.every(({ playerClass }) =>
+        specialized(playerClass)
+      )
+        ? 'questSpecializationIneligible'
+        : this.turn.actionPoints < 1
+          ? 'noActionPoints'
+          : player.gold < this.mentorCost(player)
+            ? 'notEnoughGold'
+            : null)
+    )
+  }
+
+  private genericFinishRefusal(
+    quest: TOpenGenericQuest,
+    zone: TCard | undefined
+  ): TQuestRefusal['reason'] | null {
+    const targets = this.genericTargets(quest.type)
+    if (!acceptsGenericQuests(zone)) return 'questWrongZone'
+    if (
+      (quest.randomEventSuccesses ?? 0) < targets.randomEventSuccesses ||
+      (quest.combatVictories ?? 0) < targets.combatVictories
+    )
+      return 'questObjectivesIncomplete'
+    return this.turn.actionPoints < 1 ? 'noActionPoints' : null
+  }
+
+  private takeGenericQuest(
+    action: TGenericQuestAction,
+    cards: ReadonlyMap<string, TCard>,
+    at: Date,
+    ids: IdGenerator,
+    classes: readonly TClassDefinition[]
+  ): Either<TQuestRefusal, undefined> {
+    const index = this.actorIndex()
+    const { player } = this.props.members[index]
+    const target = {
+      classId: action.classId,
+      ...(action.type === 'takeTrialQuest' && {
+        specializationId: action.specializationId,
+      }),
+    }
+    if (!acceptsGenericQuests(cards.get(player.zoneId)))
+      return left({ reason: 'questWrongZone', ...target })
+    const reason = this.genericQuestRefusal(action, player, classes)
+    if (reason) return left({ reason, ...target })
+    // A recusa acima já conferiu a classe contra o catálogo publicado.
+    const classId = action.classId as TPlayerClass
+    const questId = ids.next().toString()
+    const quest: TOpenGenericQuest =
+      action.type === 'takeTrialQuest'
+        ? {
+            questId,
+            type: 'trialQuest',
+            classId,
+            specializationId: action.specializationId,
+          }
+        : { questId, type: 'mentorQuest', classId }
+    const gold =
+      action.type === 'trainWithMentor'
+        ? player.gold - this.mentorCost(player)
+        : player.gold
+    this.replaceActor(index, {
+      ...player,
+      gold,
+      openGenericQuests: [...(player.openGenericQuests ?? []), quest],
+      questOrder: [...orderedQuestIds(player), questId],
+    })
+    if (action.type === 'trainWithMentor')
+      this.props.turn = { ...this.props.turn, actionPoints: 0 }
+    else this.spendActionPoint()
+    this.props.savedAt = at
+    return right(undefined)
+  }
+
+  private useGenericQuest(
+    action: Extract<TQuestAction, { questId: string }>,
+    quest: TOpenGenericQuest,
+    cards: ReadonlyMap<string, TCard>,
+    at: Date
+  ): Either<TQuestRefusal, undefined> {
+    const { questId } = action
+    const index = this.actorIndex()
+    const { player } = this.props.members[index]
+    const open = (player.openGenericQuests ?? []).filter(
+      (entry) => entry !== quest
+    )
+    if (action.type === 'continueQuest')
+      return left({ reason: 'questWrongStage', questId })
+    if (action.type === 'abandonQuest')
+      this.replaceActor(index, { ...player, openGenericQuests: open })
+    else {
+      const reason = this.genericFinishRefusal(quest, cards.get(player.zoneId))
+      if (reason) return left({ reason, questId })
+      const granted =
+        quest.type === 'trialQuest'
+          ? {
+              specializations: [
+                ...(player.specializations ?? []),
+                {
+                  playerClass: quest.classId,
+                  specializationId: quest.specializationId,
+                  deckLockMet: false,
+                },
+              ],
+            }
+          : {
+              playerClasses: [
+                ...player.playerClasses,
+                { playerClass: quest.classId, deckLockMet: false },
+              ],
+            }
+      this.replaceActor(index, {
+        ...player,
+        ...granted,
+        peak: player.peak + this.props.config.genericQuestPeakGain,
+        openGenericQuests: open,
+      })
+      this.spendActionPoint()
+    }
+    this.pruneQuestOrder(index)
     this.props.savedAt = at
     return right(undefined)
   }
@@ -1154,28 +1407,52 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     counter: 'randomEventSuccesses' | 'combatVictories' | null,
     cards: ReadonlyMap<string, TCard>
   ): TPlayerState {
-    if (!player.openZoneQuests?.length) return player
+    if (!player.openZoneQuests?.length && !player.openGenericQuests?.length)
+      return player
     const attempt = this.questAttempt
     return {
       ...player,
-      openZoneQuests: player.openZoneQuests.map((quest) => {
-        if (
-          attempt?.encounterId === encounterId &&
-          quest.questId === attempt.questId &&
-          quest.stageIndex === attempt.stageIndex &&
-          quest.status === 'inProgress'
-        )
-          return { ...quest, status: succeeded ? 'completed' : 'ready' }
-        if (!counter) return quest
-        const stage = zoneQuest(cards, quest.questCardId)?.stages[
-          quest.stageIndex
-        ]
-        const current = quest[counter] ?? 0
-        return stage?.type === 'objectives' && current < stage[counter]
-          ? { ...quest, [counter]: current + 1 }
-          : quest
+      ...(player.openGenericQuests?.length
+        ? {
+            openGenericQuests: player.openGenericQuests.map((quest) => {
+              const current = quest[counter ?? 'combatVictories'] ?? 0
+              return counter &&
+                current < this.genericTargets(quest.type)[counter]
+                ? { ...quest, [counter]: current + 1 }
+                : quest
+            }),
+          }
+        : {}),
+      ...(player.openZoneQuests && {
+        openZoneQuests: player.openZoneQuests.map((quest) => {
+          if (
+            attempt?.encounterId === encounterId &&
+            quest.questId === attempt.questId &&
+            quest.stageIndex === attempt.stageIndex &&
+            quest.status === 'inProgress'
+          )
+            return { ...quest, status: succeeded ? 'completed' : 'ready' }
+          if (!counter) return quest
+          const stage = zoneQuest(cards, quest.questCardId)?.stages[
+            quest.stageIndex
+          ]
+          const current = quest[counter] ?? 0
+          return stage?.type === 'objectives' && current < stage[counter]
+            ? { ...quest, [counter]: current + 1 }
+            : quest
+        }),
       }),
     }
+  }
+
+  /** Mantém em `questOrder` só os ids ainda abertos (D-112). */
+  private pruneQuestOrder(index: number): void {
+    const { player } = this.props.members[index]
+    if (player.questOrder)
+      this.replaceActor(index, {
+        ...player,
+        questOrder: orderedQuestIds(player),
+      })
   }
 
   private deliverQuestRewards(
@@ -5362,3 +5639,10 @@ type TLabGrantAppliedPayload = Extract<
   TPartyEvent,
   { type: 'LabGrantApplied' }
 >['grant']
+
+function openQuestCount(player: TPlayerState): number {
+  return (
+    (player.openZoneQuests?.length ?? 0) +
+    (player.openGenericQuests?.length ?? 0)
+  )
+}

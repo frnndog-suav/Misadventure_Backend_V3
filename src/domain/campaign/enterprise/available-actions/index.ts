@@ -97,8 +97,14 @@ export function availableActions(
   if (turn.actionPoints >= 1 && zoneActions.includes('useVault')) {
     actions.push('useVault')
   }
-  for (const type of ['takeQuest', 'continueQuest', 'finishQuest'] as const)
+  for (const type of [
+    'takeQuest',
+    'continueQuest',
+    'finishQuest',
+    'takeTrialQuest',
+  ] as const)
     if (questActionTypes.has(type)) actions.push(type)
+  if (questActionTypes.has('trainWithMentor')) actions.push('trainWithMentor')
   if (
     member &&
     party.status === 'inSession' &&

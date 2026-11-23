@@ -4,7 +4,7 @@ import {
   type TEquipmentSlot,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import type { TResolveRewardAction, TRewardDiscard } from '../rewards'
-import type { TZoneQuestAction } from '../zone-quests'
+import type { TQuestAction, TZoneQuestAction } from '../zone-quests'
 
 /** Os três modos do Recuperar (README 12.5; REQ-63). */
 export const RECOVER_OPTIONS = [
@@ -89,7 +89,7 @@ export type TVaultOperation =
 /** Intenção de jogo (CONTRATO §1.6). União por `type`; as FEATs 10+ acrescentam variantes. */
 export type TPartyAction =
   | TRandomEventAction
-  | TZoneQuestAction
+  | TQuestAction
   | TResolveTriggeredEffectAction
   | TCombatAction
   | TResolveRewardAction
@@ -194,6 +194,9 @@ export function parsePartyAction(
     case 'finishQuest':
     case 'abandonQuest':
       return parseZoneQuestAction(body.type, body)
+    case 'takeTrialQuest':
+    case 'trainWithMentor':
+      return parseGenericQuestAction(body.type, body)
     case 'scavenge':
       return parseScavenge(body)
     case 'resolveReward':
@@ -506,6 +509,28 @@ function parseScavenge(
   issues.push(...extraKeys(body, ['type', 'cardId']))
   if (issues.length > 0 || typeof cardId !== 'string') return left(issues)
   return right({ type: 'scavenge', cardId })
+}
+
+function parseGenericQuestAction(
+  type: 'takeTrialQuest' | 'trainWithMentor',
+  body: Record<string, unknown>
+): Either<TActionIssue[], TQuestAction> {
+  const fields =
+    type === 'takeTrialQuest'
+      ? (['classId', 'specializationId'] as const)
+      : (['classId'] as const)
+  const issues: TActionIssue[] = []
+  for (const field of fields) {
+    if (body[field] === undefined) issues.push({ field, reason: 'required' })
+    else if (typeof body[field] !== 'string')
+      issues.push({ field, reason: 'notString' })
+  }
+  issues.push(...extraKeys(body, ['type', ...fields]))
+  const { classId, specializationId } = body
+  if (issues.length || typeof classId !== 'string') return left(issues)
+  if (type === 'trainWithMentor') return right({ type, classId })
+  if (typeof specializationId !== 'string') return left(issues)
+  return right({ type, classId, specializationId })
 }
 
 function parseZoneQuestAction(

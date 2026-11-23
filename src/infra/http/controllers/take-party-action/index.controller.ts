@@ -38,7 +38,8 @@ export class TakePartyActionController {
     return {
       ...PartyPresenter.toHTTP(
         party,
-        await findPartyCards(this.cardCatalog, party)
+        await findPartyCards(this.cardCatalog, party),
+        await this.cardCatalog.listClasses()
       ),
       combatUpdates: party.combatUpdates,
     }

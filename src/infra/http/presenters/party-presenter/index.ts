@@ -33,6 +33,7 @@ import { questBoard } from '@/domain/campaign/enterprise/zone-quests'
 import type { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import type {
   TCard,
+  TClassDefinition,
   TEquipmentCard,
   TEquipmentSlot,
   TModifier,
@@ -58,7 +59,11 @@ export interface TPlayerStateHttp {
   questBoard: ReturnType<Party['questState']>['questBoard']
   openQuests: ReturnType<Party['questState']>['openQuests']
   questChoices: ReturnType<Party['questState']>['questChoices']
-  specializations: []
+  specializations: {
+    classId: TPlayerClass
+    specializationId: string
+    deckLockMet: boolean
+  }[]
   gold: number
   baseHealth: number
   maxHealth: number
@@ -163,7 +168,8 @@ function playerToHTTP(
   party: Party,
   member: PartyMember,
   cards: TPartyCards,
-  encounter: TPartyHttp['randomEventEncounter']
+  encounter: TPartyHttp['randomEventEncounter'],
+  classes: readonly TClassDefinition[]
 ): TPlayerStateHttp {
   const player = member.player
   const { map } = party.dimension
@@ -202,14 +208,28 @@ function playerToHTTP(
   const usableAbilities = party.turn.memberId.equals(member.id)
     ? party.adventureAbilityOptions(cards)
     : []
-  const quests = party.questState(member, cards)
+  const quests = party.questState(member, cards, classes)
   return {
     down: player.down ?? false,
     skipNextTurn: player.skipNextTurn ?? false,
     lastKnockout: player.lastKnockout ?? null,
     usableAbilities,
     ...quests,
-    specializations: [],
+    specializations: (player.specializations ?? [])
+      .map(({ playerClass, specializationId, deckLockMet }) => ({
+        classId: playerClass,
+        specializationId,
+        deckLockMet,
+      }))
+      .sort(
+        (first, second) =>
+          player.playerClasses.findIndex(
+            ({ playerClass }) => playerClass === first.classId
+          ) -
+          player.playerClasses.findIndex(
+            ({ playerClass }) => playerClass === second.classId
+          )
+      ),
     playerClasses: player.playerClasses.map(({ playerClass, deckLockMet }) => ({
       playerClass,
       deckLockMet,
@@ -352,7 +372,11 @@ export async function findPartyCards(
 }
 
 export class PartyPresenter {
-  static toHTTP(party: Party, cards: TPartyCards): TPartyHttp {
+  static toHTTP(
+    party: Party,
+    cards: TPartyCards,
+    classes: readonly TClassDefinition[] = []
+  ): TPartyHttp {
     const { dimensionCardId, startingCityZoneId, map } = party.dimension
     const encounter = party.describeRandomEvent(cards)
     return {
@@ -364,7 +388,7 @@ export class PartyPresenter {
         characterName: member.characterName,
         kind: member.kind,
         isHost: party.isHost(member),
-        player: playerToHTTP(party, member, cards, encounter),
+        player: playerToHTTP(party, member, cards, encounter, classes),
       })),
       dimension: {
         dimensionCardId,

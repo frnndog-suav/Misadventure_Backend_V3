@@ -24,7 +24,8 @@ export class GetPartyController {
     const { party } = result.value
     return PartyPresenter.toHTTP(
       party,
-      await findPartyCards(this.cardCatalog, party)
+      await findPartyCards(this.cardCatalog, party),
+      await this.cardCatalog.listClasses()
     )
   }
 }

@@ -6,8 +6,11 @@ import { GetPartyUseCase } from '@/domain/campaign/application/use-cases/get-par
 import { ResumeLegacyKnockout } from '@/domain/campaign/application/use-cases/resume-legacy-knockout'
 import { StartSessionUseCase } from '@/domain/campaign/application/use-cases/start-session'
 import { TakePartyActionUseCase } from '@/domain/campaign/application/use-cases/take-party-action'
+import type { TPartyProps } from '@/domain/campaign/enterprise/entities/party'
+import type { TPlayerState } from '@/domain/campaign/enterprise/entities/party-member'
 import type {
   TCard,
+  TClassDefinition,
   TZoneQuestCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import {
@@ -16,12 +19,14 @@ import {
 } from '@/infra/http/presenters/party-presenter'
 import {
   makeAttributeCard,
+  makeClassDefinition,
   makeCombatEventCard,
   makeDimensionCard,
   makeEnemy,
   makeItemCard,
   makeRandomEventCard,
   makeUrbanZoneCard,
+  makeZoneCard,
 } from '../../../../../test/factories/make-card'
 import { makeParty } from '../../../../../test/factories/make-party'
 import { fixedClock } from '../../../../../test/fakes/fixed-clock'
@@ -63,7 +68,13 @@ async function setup(
   deck?: TZoneQuestCard[],
   maxOpenQuests = 3,
   fullInventory = false,
-  encounter?: { cards: TCard[]; deckCardId: string; health: number }
+  encounter?: { cards: TCard[]; deckCardId: string; health: number },
+  options: {
+    player?: Partial<TPlayerState>
+    config?: Partial<TPartyProps['config']>
+    classes?: TClassDefinition[]
+    cards?: TCard[]
+  } = {}
 ) {
   const repository = new InMemoryPartiesRepository()
   const catalog = new InMemoryCardCatalog()
@@ -76,39 +87,57 @@ async function setup(
     carried,
     prize,
     ...(encounter?.cards ?? []),
+    ...(options.cards ?? []),
     ...(deck ?? [a, b, c, d, e]),
   ]
+  catalog.classes = options.classes ?? []
   const ids = sequentialIds('quest')
   const clock = fixedClock('2026-11-22T12:00:00.000Z')
   const actions = new TakePartyActionUseCase(repository, clock, catalog, ids)
   const initial = makeParty()
   const [host] = initial.members
   const { dimension, turn } = initial
+  const withPlayer = (members: PartyMember[]) =>
+    members.map((member) =>
+      options.player
+        ? PartyMember.create(
+            {
+              characterName: member.characterName,
+              kind: member.kind,
+              player: { ...member.player, ...options.player },
+            },
+            member.id
+          )
+        : member
+    )
   const party = makeParty({
     status: 'inSession',
     turn,
-    members: fullInventory
-      ? [
-          PartyMember.create(
-            {
-              characterName: host.characterName,
-              kind: host.kind,
-              player: {
-                ...host.player,
-                vigor: 4,
-                health: encounter?.health ?? host.player.health,
-                modifiers: encounter
-                  ? { ...host.player.modifiers, evasion: 0 }
-                  : host.player.modifiers,
-                inventory: [{ cardId: carried.id, quantity: 1 }],
+    members: withPlayer(
+      fullInventory
+        ? [
+            PartyMember.create(
+              {
+                characterName: host.characterName,
+                kind: host.kind,
+                player: {
+                  ...host.player,
+                  vigor: 4,
+                  health: encounter?.health ?? host.player.health,
+                  modifiers: encounter
+                    ? { ...host.player.modifiers, evasion: 0 }
+                    : host.player.modifiers,
+                  inventory: [{ cardId: carried.id, quantity: 1 }],
+                },
               },
-            },
-            host.id
-          ),
-        ]
-      : [...initial.members],
+              host.id
+            ),
+          ]
+        : [...initial.members]
+    ),
     config: {
       ...initial.config,
+      ...options.config,
       maxOpenQuests,
       inventoryCapacity: fullInventory ? 1 : initial.config.inventoryCapacity,
     },
@@ -135,8 +164,11 @@ async function setup(
     return current
   }
   const project = async (current: Party) =>
-    PartyPresenter.toHTTP(current, await findPartyCards(catalog, current))
-      .members[0].player
+    PartyPresenter.toHTTP(
+      current,
+      await findPartyCards(catalog, current),
+      await catalog.listClasses()
+    ).members[0].player
   const execute = (body: unknown) => actions.execute({ partyId, body })
   const act = async (body: unknown) => {
     const result = await execute(body)
@@ -816,4 +848,869 @@ describe('T-57 — Pico na conclusão de missão de zona', () => {
       expect(await project(await stored())).toMatchObject(expectedPlayer)
     }
   )
+})
+
+describe('T-58 — provação e mentor', () => {
+  const specialization = (id: string) =>
+    ({
+      id,
+      name: id,
+      additionalAttributes: ['wisdom'],
+      reinforcedAttributes: ['endurance'],
+      effects: [],
+    }) as const
+  const classes = [
+    makeClassDefinition({
+      specializations: ['knight', 'guardian', 'duelist', 'vanguard'].map(
+        specialization
+      ),
+    }),
+    makeClassDefinition({
+      playerClass: 'rogue',
+      name: 'Ladino',
+      specializations: ['shadow', 'thief', 'trickster', 'duelist'].map(
+        specialization
+      ),
+    }),
+    makeClassDefinition({
+      playerClass: 'mage',
+      name: 'Mago',
+      specializations: ['pyromancer', 'seer', 'warlock', 'sage'].map(
+        specialization
+      ),
+    }),
+  ]
+  const trial = {
+    type: 'takeTrialQuest',
+    classId: 'warrior',
+    specializationId: 'knight',
+  }
+  const knight = {
+    playerClass: 'warrior',
+    specializationId: 'knight',
+    deckLockMet: false,
+  } as const
+  const rogueClass = { playerClass: 'rogue', deckLockMet: true } as const
+  const warriorClass = { playerClass: 'warrior', deckLockMet: true } as const
+  const shadow = {
+    playerClass: 'rogue',
+    specializationId: 'shadow',
+    deckLockMet: false,
+  } as const
+  const instant = {
+    trialRandomEventTarget: 0,
+    trialCombatTarget: 0,
+    mentorRandomEventTarget: 0,
+    mentorCombatTarget: 0,
+  }
+  const forest = makeZoneCard({
+    id: 'fixture.forest',
+    title: 'Floresta',
+    zoneType: 'forest',
+  })
+  const event = makeRandomEventCard({
+    requirements: [
+      {
+        id: 'vigor',
+        kind: 'minimum',
+        stat: 'vigor',
+        value: 1,
+        text: 'Vigor mínimo 1.',
+      },
+    ],
+    goodOutcome: {
+      text: 'Receba uma recompensa.',
+      steps: [{ type: 'grantReward', cardId: prize.id, copies: 1 }],
+    },
+    badOutcome: { text: 'Sem efeito.', steps: [] },
+  })
+
+  function begin(
+    player: Partial<TPlayerState> = {},
+    config: Partial<TPartyProps['config']> = {},
+    maxOpenQuests = 3
+  ) {
+    return setup([a, b], maxOpenQuests, false, undefined, {
+      player: { peak: 30, ...player },
+      config,
+      classes,
+      cards: [forest],
+    })
+  }
+
+  async function reload(game: Awaited<ReturnType<typeof setup>>) {
+    const row = DrizzlePartyMapper.toDrizzle(await game.stored())
+    const restored = DrizzlePartyMapper.toDomain(row)
+    await game.repository.save(restored)
+    return restored
+  }
+
+  it('REQ-133: oferece e aceita a provação com 1 PA e contadores em zero', async () => {
+    const game = await begin()
+    const before = await game.project(await game.stored())
+    expect(before.questChoices).toEqual([
+      ...[a, b].map(({ id }) => ({
+        type: 'takeQuest',
+        questCardId: id,
+        actionPoints: 1,
+        gold: 0,
+      })),
+      ...['knight', 'guardian', 'duelist', 'vanguard'].map(
+        (specializationId) => ({
+          ...trial,
+          specializationId,
+          actionPoints: 1,
+          gold: 0,
+        })
+      ),
+    ])
+    const actions = before.availableActions
+    expect(actions.indexOf('takeTrialQuest')).toBe(
+      actions.indexOf('takeQuest') + 1
+    )
+    const accepted = await game.act(trial)
+    expect(accepted.turn.actionPoints).toBe(2)
+    const expected = {
+      openQuests: [
+        {
+          questId: 'quest-1',
+          type: 'trialQuest',
+          title: 'Missão de provação',
+          classId: 'warrior',
+          specializationId: 'knight',
+          objectives: {
+            randomEventSuccesses: { current: 0, target: 3 },
+            combatVictories: { current: 0, target: 3 },
+          },
+        },
+      ],
+    }
+    expect(await game.project(accepted)).toMatchObject(expected)
+    expect(await game.project(await reload(game))).toMatchObject(expected)
+  })
+
+  it.each([
+    {
+      name: 'Pico abaixo do mínimo',
+      player: { peak: 29 },
+      body: trial,
+      details: {
+        reason: 'questPeakTooLow',
+        classId: 'warrior',
+        specializationId: 'knight',
+      },
+    },
+    {
+      name: 'classe não adquirida',
+      player: {},
+      body: { ...trial, classId: 'mage', specializationId: 'seer' },
+      details: { reason: 'questClassIneligible', classId: 'mage' },
+    },
+    {
+      name: 'classe já especializada',
+      player: { specializations: [knight] },
+      body: { ...trial, specializationId: 'guardian' },
+      details: { reason: 'questClassIneligible', classId: 'warrior' },
+    },
+    {
+      name: 'especialização que a classe não oferece',
+      player: {},
+      body: { ...trial, specializationId: 'ghost' },
+      details: {
+        reason: 'questSpecializationIneligible',
+        classId: 'warrior',
+        specializationId: 'ghost',
+      },
+    },
+    {
+      name: 'zona fora de Urbana e Habitada',
+      player: { zoneId: forest.id },
+      body: trial,
+      details: {
+        reason: 'questWrongZone',
+        classId: 'warrior',
+        specializationId: 'knight',
+      },
+    },
+  ])(
+    'REQ-133: recusa a provação por $name e preserva o save',
+    async ({ player, body, details }) => {
+      const game = await begin(player)
+      const row = DrizzlePartyMapper.toDrizzle(await game.stored())
+      const result = await game.execute(body)
+      expect(result.value).toMatchObject({
+        code: 'ACTION_NOT_ALLOWED',
+        details,
+      })
+      expect(DrizzlePartyMapper.toDrizzle(await game.stored())).toEqual(row)
+    }
+  )
+
+  it('REQ-133: aceita só uma genérica e conta a genérica no limite geral', async () => {
+    const game = await begin({ playerClasses: [warriorClass, rogueClass] })
+    await game.act(trial)
+    for (const body of [
+      { ...trial, classId: 'rogue', specializationId: 'shadow' },
+      { type: 'trainWithMentor', classId: 'mage' },
+    ]) {
+      const result = await game.execute(body)
+      expect(result.value).toMatchObject({
+        code: 'ACTION_NOT_ALLOWED',
+        details: { reason: 'genericQuestAlreadyOpen' },
+      })
+    }
+    const projected = await game.project(await game.stored())
+    expect(projected.questChoices).not.toContainEqual(
+      expect.objectContaining({ type: 'takeTrialQuest' })
+    )
+    const limited = await begin({}, {}, 1)
+    await limited.act({ type: 'takeQuest', questCardId: a.id })
+    const refused = await limited.execute(trial)
+    expect(refused.value).toMatchObject({
+      code: 'ACTION_NOT_ALLOWED',
+      details: { reason: 'questLimitReached' },
+    })
+    expect(
+      (await limited.project(await limited.stored())).questChoices
+    ).not.toContainEqual(expect.objectContaining({ type: 'takeTrialQuest' }))
+  })
+
+  it('REQ-132 e REQ-133: conta o êxito aleatório na provação mesmo com recompensa pendente', async () => {
+    const game = await setup(
+      [a],
+      3,
+      true,
+      { cards: [event], deckCardId: event.id, health: 22 },
+      { player: { peak: 30 }, classes }
+    )
+    await game.act(trial)
+    const started = await game.act({ type: 'startEvent' })
+    const encounterId = started.randomEventEncounter!.id
+    await game.act({ type: 'revealEvent', encounterId })
+    const success = await game.act({ type: 'resolveEvent', encounterId })
+    const expected = {
+      openQuests: [
+        {
+          type: 'trialQuest',
+          objectives: {
+            randomEventSuccesses: { current: 1, target: 3 },
+            combatVictories: { current: 0, target: 3 },
+          },
+        },
+      ],
+    }
+    expect(success.pendingRewards).toMatchObject([{ cardId: prize.id }])
+    expect(await game.project(success)).toMatchObject(expected)
+    expect(await game.project(await reload(game))).toMatchObject(expected)
+    const delivered = await game.act({
+      type: 'resolveReward',
+      rewardId: success.pendingRewards[0].id,
+      choice: 'leave',
+    })
+    expect(await game.project(delivered)).toMatchObject(expected)
+  })
+
+  it('REQ-133: recusa finalizar com metas incompletas e não há continuar', async () => {
+    const game = await begin()
+    await game.act(trial)
+    const cases = [
+      { type: 'finishQuest', reason: 'questObjectivesIncomplete' },
+      { type: 'continueQuest', reason: 'questWrongStage' },
+    ]
+    for (const { type, reason } of cases) {
+      const result = await game.execute({ type, questId: 'quest-1' })
+      expect(result.value).toMatchObject({
+        code: 'ACTION_NOT_ALLOWED',
+        details: { reason, questId: 'quest-1' },
+      })
+    }
+    const choices = (await game.project(await game.stored())).questChoices
+    expect(choices).toContainEqual({
+      type: 'abandonQuest',
+      questId: 'quest-1',
+      actionPoints: 0,
+      gold: 0,
+    })
+    expect(choices).not.toContainEqual(
+      expect.objectContaining({ type: 'finishQuest' })
+    )
+    expect(choices).not.toContainEqual(
+      expect.objectContaining({ type: 'continueQuest' })
+    )
+  })
+
+  it('REQ-133 e REQ-132: finaliza a provação, concede a especialização inativa e o Pico', async () => {
+    const game = await begin({}, instant)
+    await game.act(trial)
+    const choices = (await game.project(await game.stored())).questChoices
+    expect(choices).toContainEqual({
+      type: 'finishQuest',
+      questId: 'quest-1',
+      actionPoints: 1,
+      gold: 0,
+    })
+    const finished = await game.act({ type: 'finishQuest', questId: 'quest-1' })
+    expect(finished.turn.actionPoints).toBe(1)
+    const expected = {
+      peak: 35,
+      vigor: 10,
+      openQuests: [],
+      playerClasses: [{ playerClass: 'warrior', deckLockMet: true }],
+      specializations: [
+        { classId: 'warrior', specializationId: 'knight', deckLockMet: false },
+      ],
+    }
+    expect(await game.project(finished)).toMatchObject(expected)
+    expect(await game.project(await reload(game))).toMatchObject(expected)
+    const again = await game.execute({
+      type: 'finishQuest',
+      questId: 'quest-1',
+    })
+    expect(again.value).toMatchObject({
+      details: { reason: 'questNotOpen' },
+    })
+  })
+
+  it('REQ-133: abandona a provação sem custo e permite aceitá-la de novo com outro ID', async () => {
+    const game = await begin()
+    const accepted = await game.act(trial)
+    const board = (await game.project(accepted)).questBoard
+    const abandoned = await game.act({
+      type: 'abandonQuest',
+      questId: 'quest-1',
+    })
+    expect(abandoned.turn.actionPoints).toBe(accepted.turn.actionPoints)
+    expect(await game.project(abandoned)).toMatchObject({
+      openQuests: [],
+      questBoard: board,
+    })
+    await game.act({ ...trial, specializationId: 'guardian' })
+    expect(await game.project(await game.stored())).toMatchObject({
+      openQuests: [
+        {
+          questId: 'quest-2',
+          type: 'trialQuest',
+          specializationId: 'guardian',
+        },
+      ],
+    })
+  })
+
+  it('REQ-133: treina com mentor, consome os PA restantes e mantém o ouro no abandono', async () => {
+    const game = await begin({ gold: 200, specializations: [knight] })
+    const before = await game.project(await game.stored())
+    expect(before.questChoices).toEqual(
+      expect.arrayContaining(
+        ['rogue', 'mage'].map((classId) => ({
+          type: 'trainWithMentor',
+          classId,
+          actionPoints: 3,
+          gold: 150,
+        }))
+      )
+    )
+    expect(before.questChoices).not.toContainEqual(
+      expect.objectContaining({ type: 'trainWithMentor', classId: 'warrior' })
+    )
+    expect(before.availableActions).toContain('trainWithMentor')
+    const trained = await game.act({ type: 'trainWithMentor', classId: 'mage' })
+    expect(trained.turn.actionPoints).toBe(0)
+    const expected = {
+      gold: 50,
+      openQuests: [
+        {
+          questId: 'quest-1',
+          type: 'mentorQuest',
+          title: 'Missão do mentor',
+          classId: 'mage',
+          objectives: {
+            randomEventSuccesses: { current: 0, target: 5 },
+            combatVictories: { current: 0, target: 5 },
+          },
+        },
+      ],
+    }
+    expect(await game.project(trained)).toMatchObject(expected)
+    expect(await game.project(await reload(game))).toMatchObject(expected)
+    const abandoned = await game.act({
+      type: 'abandonQuest',
+      questId: 'quest-1',
+    })
+    expect(await game.project(abandoned)).toMatchObject({
+      gold: 50,
+      openQuests: [],
+    })
+    await game.act({ type: 'endTurn' })
+    const result = await game.execute({
+      type: 'trainWithMentor',
+      classId: 'mage',
+    })
+    expect(result.value).toMatchObject({
+      code: 'ACTION_NOT_ALLOWED',
+      details: { reason: 'notEnoughGold', classId: 'mage' },
+    })
+    expect(
+      (await game.project(await game.stored())).questChoices
+    ).not.toContainEqual(expect.objectContaining({ type: 'trainWithMentor' }))
+  })
+
+  it.each([
+    { gold: 299, paid: false },
+    { gold: 300, paid: true },
+  ])(
+    'REQ-133: cobra o dobro a cada classe adquirida (ouro $gold)',
+    async ({ gold, paid }) => {
+      const game = await begin({
+        gold,
+        playerClasses: [warriorClass, rogueClass],
+        specializations: [knight, shadow],
+      })
+      const result = await game.execute({
+        type: 'trainWithMentor',
+        classId: 'mage',
+      })
+      if (paid) {
+        expect(result.isRight()).toBe(true)
+        expect((await game.project(await game.stored())).gold).toBe(0)
+      } else {
+        expect(result.value).toMatchObject({
+          details: { reason: 'notEnoughGold', classId: 'mage' },
+        })
+      }
+    }
+  )
+
+  it.each([
+    {
+      name: 'classe já adquirida',
+      player: { gold: 200, specializations: [knight] },
+      classId: 'warrior',
+      reason: 'questClassIneligible',
+    },
+    {
+      name: 'classe que o catálogo não publica',
+      player: { gold: 200, specializations: [knight] },
+      classId: 'ranger',
+      reason: 'questClassIneligible',
+    },
+    {
+      name: 'classe atual sem especialização',
+      player: { gold: 200 },
+      classId: 'mage',
+      reason: 'questSpecializationIneligible',
+    },
+  ])(
+    'REQ-133: recusa o mentor por $name e preserva o save',
+    async ({ player, classId, reason }) => {
+      const game = await begin(player)
+      const row = DrizzlePartyMapper.toDrizzle(await game.stored())
+      const result = await game.execute({ type: 'trainWithMentor', classId })
+      expect(result.value).toMatchObject({
+        code: 'ACTION_NOT_ALLOWED',
+        details: { reason, classId },
+      })
+      expect(DrizzlePartyMapper.toDrizzle(await game.stored())).toEqual(row)
+    }
+  )
+
+  it('REQ-133 e REQ-132: finaliza o mentor, concede a classe inativa e o Pico', async () => {
+    const game = await begin({ gold: 150, specializations: [knight] }, instant)
+    await game.act({ type: 'trainWithMentor', classId: 'mage' })
+    await game.act({ type: 'endTurn' })
+    const finished = await game.act({ type: 'finishQuest', questId: 'quest-1' })
+    expect(finished.turn.actionPoints).toBe(2)
+    const expected = {
+      peak: 35,
+      gold: 0,
+      openQuests: [],
+      playerClasses: [
+        { playerClass: 'warrior', deckLockMet: true },
+        { playerClass: 'mage', deckLockMet: false },
+      ],
+      specializations: [
+        { classId: 'warrior', specializationId: 'knight', deckLockMet: false },
+      ],
+    }
+    expect(await game.project(finished)).toMatchObject(expected)
+    expect(await game.project(await reload(game))).toMatchObject(expected)
+  })
+
+  it('REQ-133: lista as missões abertas na ordem de aceitação entre os tipos', async () => {
+    const game = await begin()
+    await game.act({ type: 'takeQuest', questCardId: a.id })
+    await game.act(trial)
+    await game.act({ type: 'takeQuest', questCardId: b.id })
+    const expected = [
+      { questId: 'quest-1', type: 'zoneQuest' },
+      { questId: 'quest-2', type: 'trialQuest' },
+      { questId: 'quest-3', type: 'zoneQuest' },
+    ]
+    expect((await game.project(await game.stored())).openQuests).toMatchObject(
+      expected
+    )
+    expect((await game.project(await reload(game))).openQuests).toMatchObject(
+      expected
+    )
+  })
+
+  it('REQ-133: valida os campos públicos das intenções', async () => {
+    const game = await begin()
+    const trialResult = await game.execute({
+      type: 'takeTrialQuest',
+      gold: 1,
+    })
+    expect(trialResult.value).toMatchObject({
+      code: 'ACTION_INVALID',
+      details: {
+        fields: expect.arrayContaining([
+          { field: 'classId', reason: 'required' },
+          { field: 'specializationId', reason: 'required' },
+          { field: 'gold', reason: 'unknownKey' },
+        ]),
+      },
+    })
+    const mentorResult = await game.execute({
+      type: 'trainWithMentor',
+      classId: 1,
+    })
+    expect(mentorResult.value).toMatchObject({
+      code: 'ACTION_INVALID',
+      details: { fields: [{ field: 'classId', reason: 'notString' }] },
+    })
+  })
+})
+
+describe('T-58 â€” provaÃ§Ã£o e mentor: bordas', () => {
+  const specialization = (id: string) =>
+    ({
+      id,
+      name: id,
+      additionalAttributes: ['wisdom'],
+      reinforcedAttributes: ['endurance'],
+      effects: [],
+    }) as const
+  const classes = [
+    makeClassDefinition({
+      specializations: ['knight', 'guardian'].map(specialization),
+    }),
+    makeClassDefinition({
+      playerClass: 'rogue',
+      name: 'Ladino',
+      specializations: ['shadow'].map(specialization),
+    }),
+    makeClassDefinition({ playerClass: 'mage', name: 'Mago' }),
+  ]
+  const trial = {
+    type: 'takeTrialQuest',
+    classId: 'warrior',
+    specializationId: 'knight',
+  }
+  const knight = {
+    playerClass: 'warrior',
+    specializationId: 'knight',
+    deckLockMet: false,
+  } as const
+  const instant = {
+    trialRandomEventTarget: 0,
+    trialCombatTarget: 0,
+    mentorRandomEventTarget: 0,
+    mentorCombatTarget: 0,
+  }
+  const forest = makeZoneCard({
+    id: 'fixture.forest',
+    title: 'Floresta',
+    zoneType: 'forest',
+  })
+  const village = makeZoneCard({
+    id: 'fixture.village',
+    title: 'Vila',
+    zoneType: 'inhabited',
+  })
+  const prizeOutcome = {
+    text: 'Receba uma recompensa.',
+    steps: [{ type: 'grantReward', cardId: prize.id, copies: 1 }],
+  } as const
+  const emptyOutcome = { text: 'Sem efeito.', steps: [] }
+  const event = makeRandomEventCard({
+    requirements: [
+      {
+        id: 'vigor',
+        kind: 'minimum',
+        stat: 'vigor',
+        value: 1,
+        text: 'Vigor mÃ­nimo 1.',
+      },
+    ],
+    goodOutcome: prizeOutcome,
+    badOutcome: emptyOutcome,
+  })
+
+  function begin(
+    player: Partial<TPlayerState> = {},
+    config: Partial<TPartyProps['config']> = {},
+    maxOpenQuests = 3
+  ) {
+    return setup([a, b], maxOpenQuests, false, undefined, {
+      player: { peak: 30, ...player },
+      config,
+      classes,
+      cards: [forest, village],
+    })
+  }
+
+  /** Leva o jogador a outra zona pelo save (a zona nÃ£o precisa estar no mapa). */
+  async function relocate(
+    game: Awaited<ReturnType<typeof setup>>,
+    zoneId: string,
+    zoneType?: string
+  ) {
+    const row = DrizzlePartyMapper.toDrizzle(await game.stored())
+    const state = row.state as unknown as {
+      members: { player: { zoneId: string } }[]
+      eventDecks: { zoneType: string }[]
+    }
+    state.members[0].player.zoneId = zoneId
+    if (zoneType) for (const deck of state.eventDecks) deck.zoneType = zoneType
+    const restored = DrizzlePartyMapper.toDomain(row)
+    await game.repository.save(restored)
+  }
+
+  async function exhaust(game: Awaited<ReturnType<typeof setup>>) {
+    for (const zoneId of [mine.id, harbor.id, mine.id]) {
+      if ((await game.stored()).turn.actionPoints === 0) return
+      await game.act({ type: 'move', zoneId })
+    }
+  }
+
+  it('REQ-133: aceita e finaliza em zona Habitada', async () => {
+    const game = await begin({ zoneId: village.id }, instant)
+    await game.act(trial)
+    const finished = await game.act({ type: 'finishQuest', questId: 'quest-1' })
+    expect(await game.project(finished)).toMatchObject({
+      specializations: [
+        { classId: 'warrior', specializationId: 'knight', deckLockMet: false },
+      ],
+    })
+  })
+
+  it('REQ-133: recusa finalizar fora de Urbana e Habitada', async () => {
+    const game = await begin({}, instant)
+    await game.act(trial)
+    await relocate(game, forest.id)
+    const result = await game.execute({
+      type: 'finishQuest',
+      questId: 'quest-1',
+    })
+    expect(result.value).toMatchObject({
+      code: 'ACTION_NOT_ALLOWED',
+      details: { reason: 'questWrongZone', questId: 'quest-1' },
+    })
+    expect(
+      (await game.project(await game.stored())).questChoices
+    ).not.toContainEqual(expect.objectContaining({ type: 'finishQuest' }))
+  })
+
+  it('REQ-133: recusa sem PA aceitar provaÃ§Ã£o, treinar com mentor e finalizar', async () => {
+    const taking = await begin({ gold: 200 })
+    await exhaust(taking)
+    expect((await taking.stored()).turn.actionPoints).toBe(0)
+    const refusedTrial = await taking.execute(trial)
+    expect(refusedTrial.value).toMatchObject({
+      details: { reason: 'noActionPoints' },
+    })
+    const mentor = await begin({ gold: 200, specializations: [knight] })
+    await exhaust(mentor)
+    const refusedMentor = await mentor.execute({
+      type: 'trainWithMentor',
+      classId: 'mage',
+    })
+    expect(refusedMentor.value).toMatchObject({
+      details: { reason: 'noActionPoints', classId: 'mage' },
+    })
+    const finishing = await begin({}, instant)
+    await finishing.act(trial)
+    await exhaust(finishing)
+    const refusedFinish = await finishing.execute({
+      type: 'finishQuest',
+      questId: 'quest-1',
+    })
+    expect(refusedFinish.value).toMatchObject({
+      details: { reason: 'noActionPoints', questId: 'quest-1' },
+    })
+  })
+
+  it('REQ-133: recusa o mentor com genÃ©rica aberta ou limite atingido', async () => {
+    const game = await begin({ gold: 400, specializations: [knight] })
+    await game.act({ type: 'trainWithMentor', classId: 'mage' })
+    await game.act({ type: 'endTurn' })
+    const again = await game.execute({
+      type: 'trainWithMentor',
+      classId: 'rogue',
+    })
+    expect(again.value).toMatchObject({
+      details: { reason: 'genericQuestAlreadyOpen', classId: 'rogue' },
+    })
+    const limited = await begin({ gold: 400, specializations: [knight] }, {}, 1)
+    await limited.act({ type: 'takeQuest', questCardId: a.id })
+    const refused = await limited.execute({
+      type: 'trainWithMentor',
+      classId: 'mage',
+    })
+    expect(refused.value).toMatchObject({
+      details: { reason: 'questLimitReached', classId: 'mage' },
+    })
+  })
+
+  it('D-112: com dois motivos, vence o primeiro da ordem', async () => {
+    const mentor = await begin({ gold: 0, specializations: [knight] })
+    const owned = await mentor.execute({
+      type: 'trainWithMentor',
+      classId: 'warrior',
+    })
+    expect(owned.value).toMatchObject({
+      details: { reason: 'questClassIneligible', classId: 'warrior' },
+    })
+    const open = await begin({
+      playerClasses: [
+        { playerClass: 'warrior', deckLockMet: true },
+        { playerClass: 'rogue', deckLockMet: true },
+      ],
+    })
+    await open.act(trial)
+    const row = DrizzlePartyMapper.toDrizzle(await open.stored())
+    const state = row.state as unknown as {
+      members: { player: { peak: number } }[]
+    }
+    state.members[0].player.peak = 29
+    await open.repository.save(DrizzlePartyMapper.toDomain(row))
+    const both = await open.execute({
+      ...trial,
+      classId: 'rogue',
+      specializationId: 'shadow',
+    })
+    expect(both.value).toMatchObject({
+      details: { reason: 'genericQuestAlreadyOpen', classId: 'rogue' },
+    })
+  })
+
+  it('REQ-132 e REQ-133: conta a vitÃ³ria de pÃ© na provaÃ§Ã£o', async () => {
+    const enemy = makeEnemy({ count: 1, health: 1 })
+    const quest: TZoneQuestCard = {
+      ...a,
+      stages: [
+        {
+          type: 'combatEvent',
+          text: 'Derrote o inimigo',
+          location: { type: 'zoneType', zoneType: 'urban' },
+          combat: {
+            enemies: [
+              {
+                ...enemy,
+                modifiers: {
+                  ...enemy.modifiers,
+                  attack: 20,
+                  accuracy: 100,
+                  defense: 0,
+                  evasion: 0,
+                  celerity: 0,
+                  reflection: 1,
+                },
+              },
+            ],
+            goodOutcome: prizeOutcome,
+            badOutcome: emptyOutcome,
+            noEscape: false,
+            escapeThreshold: 0,
+          },
+        },
+      ],
+    }
+    const deckCombat = makeCombatEventCard()
+    const game = await setup(
+      [quest],
+      3,
+      true,
+      {
+        cards: [
+          deckCombat,
+          makeAttributeCard(),
+          makeAttributeCard({
+            id: 'fixture.endurance-basic',
+            attributes: ['endurance'],
+          }),
+        ],
+        deckCardId: deckCombat.id,
+        health: 22,
+      },
+      { player: { peak: 30 }, classes }
+    )
+    await game.act({ type: 'takeQuest', questCardId: quest.id })
+    await game.act(trial)
+    const started = await game.act({
+      type: 'continueQuest',
+      questId: 'quest-1',
+    })
+    const combat = started.combat!
+    const victory = await game.act({
+      type: 'combatAttack',
+      combatId: combat.id,
+      turnId: combat.turn.id,
+      targetId: combat.enemies[0].id,
+    })
+    expect(victory.lastCombatResult).toMatchObject({
+      resolution: 'victory',
+      playerDown: false,
+    })
+    expect(await game.project(victory)).toMatchObject({
+      openQuests: [
+        { questId: 'quest-1' },
+        {
+          questId: 'quest-2',
+          type: 'trialQuest',
+          objectives: {
+            randomEventSuccesses: { current: 0, target: 3 },
+            combatVictories: { current: 1, target: 3 },
+          },
+        },
+      ],
+    })
+  })
+
+  it('REQ-132 e REQ-133: conta fora de Urbana e para na meta', async () => {
+    const game = await setup(
+      [a],
+      3,
+      false,
+      { cards: [event], deckCardId: event.id, health: 22 },
+      {
+        player: { peak: 30 },
+        classes,
+        cards: [forest],
+        config: { trialRandomEventTarget: 1 },
+      }
+    )
+    await game.act(trial)
+    await relocate(game, forest.id, 'forest')
+    for (let round = 0; round < 2; round++) {
+      const started = await game.act({ type: 'startEvent' })
+      const encounterId = started.randomEventEncounter!.id
+      await game.act({ type: 'revealEvent', encounterId })
+      const success = await game.act({ type: 'resolveEvent', encounterId })
+      for (const reward of success.pendingRewards)
+        await game.act({
+          type: 'resolveReward',
+          rewardId: reward.id,
+          choice: 'leave',
+        })
+      expect(
+        (await game.project(await game.stored())).openQuests
+      ).toMatchObject([
+        {
+          type: 'trialQuest',
+          objectives: { randomEventSuccesses: { current: 1, target: 1 } },
+        },
+      ])
+      await game.act({ type: 'endTurn' })
+    }
+  })
 })

@@ -12,7 +12,11 @@ import type { TInventorySlot } from '../../inventory'
 import type { TPlayerStatus } from '../../player-status'
 import type { TEventResult, THandCopy } from '../../random-event'
 import type { TVault } from '../../vault'
-import type { TOpenZoneQuest } from '../../zone-quests'
+import type {
+  TGrantedSpecialization,
+  TOpenGenericQuest,
+  TOpenZoneQuest,
+} from '../../zone-quests'
 
 /** Na FEAT-20 entra o ajudante de IA. */
 export type TPartyMemberKind = 'human'
@@ -32,6 +36,12 @@ export type TKnockoutResult = Readonly<{
 /** Estado do jogador na partida (D-42). `maxHealth` é derivado (README 7.4). */
 export type TPlayerState = Readonly<{
   openZoneQuests?: readonly TOpenZoneQuest[]
+  /** Provação e mentor abertas (README 8.3 e 8.4; REQ-133). */
+  openGenericQuests?: readonly TOpenGenericQuest[]
+  /** Ids das missões abertas na ordem de aceitação entre os tipos. */
+  questOrder?: readonly string[]
+  /** Especializações concedidas, na ordem de concessão (REQ-133). */
+  specializations?: readonly TGrantedSpecialization[]
   completedZoneQuests?: readonly {
     dimensionCardId: string
     questCardId: string

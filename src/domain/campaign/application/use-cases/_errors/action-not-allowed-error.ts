@@ -62,6 +62,8 @@ export class ActionNotAllowedError extends DomainError {
     checks?: TMinimumCheck[]
     questId?: string
     questCardId?: string
+    classId?: string
+    specializationId?: string
   }
 
   /**
