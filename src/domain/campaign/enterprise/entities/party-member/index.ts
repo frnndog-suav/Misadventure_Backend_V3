@@ -9,6 +9,7 @@ import {
 } from '@/domain/catalog/enterprise/value-objects/card'
 
 import type { TInventorySlot } from '../../inventory'
+import type { TMarketVisitResult } from '../../market-trade'
 import type { TExpansions } from '../../markets'
 import type { TPlayerStatus } from '../../player-status'
 import type { TEventResult, THandCopy } from '../../random-event'
@@ -64,6 +65,8 @@ export type TPlayerState = Readonly<{
   vault: TVault
   /** Expansões compradas no mercado (REQ-143; D-120); ausente = tudo 0. */
   expansions?: TExpansions
+  /** Resultado do último Ir ao Mercado aceito (REQ-140); ausente/`null` até o primeiro. */
+  lastMarketVisit?: TMarketVisitResult | null
   /** Resultado do último Vasculhar aceito (REQ-96); `null` até o primeiro. */
   lastScavenge: Readonly<{
     cardId: string

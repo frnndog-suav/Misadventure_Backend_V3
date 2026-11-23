@@ -4,6 +4,7 @@ import type { IdGenerator } from '@/core/ports/id-generator'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
 import { marketCandidatesOf } from '@/domain/campaign/enterprise/markets'
+import { findMarketBoosters } from '@/domain/campaign/application/market-catalog'
 import {
   parsePartyAction,
   type TPrepareOperation,
@@ -372,6 +373,37 @@ export class TakePartyActionUseCase {
         }
         break
       }
+      case 'visitMarket': {
+        const visited = party.visitMarket(
+          action.operations,
+          await this.findMarketCatalog(party),
+          this.clock.now()
+        )
+        if (visited.isLeft()) {
+          const refusal = visited.value
+          if (typeof refusal === 'object') {
+            return left(
+              new ActionNotAllowedError(
+                refusal.reason,
+                refusal.cardId,
+                refusal.operationIndex
+              )
+            )
+          }
+          switch (refusal) {
+            case 'sessionNotActive':
+              return left(new PartySessionNotActiveError())
+            case 'noActionPoints':
+            case 'zoneActionUnavailable':
+              return left(new ActionNotAllowedError(refusal))
+            default: {
+              const _exhaustive: never = refusal
+              return _exhaustive
+            }
+          }
+        }
+        break
+      }
       case 'scavenge': {
         const scavenged = party.scavenge(
           action.cardId,
@@ -643,6 +675,53 @@ export class TakePartyActionUseCase {
       if (card) cards.push(card)
     }
     return { zone, dimension, cards }
+  }
+
+  /**
+   * O que o Ir ao Mercado precisa do catálogo (REQ-140): a zona atual, a
+   * coleção vigente inteira (a vitrine pode repor com qualquer elegível, ou
+   * sortear novo pool), o estoque da zona (de qualquer coleção, D-124),
+   * os boosters da coleção vigente e as cartas do inventário e da pasta.
+   */
+  private async findMarketCatalog(party: Party): Promise<{
+    zone: TZoneCard | null
+    cards: TCard[]
+    collectionId: string | null
+  }> {
+    const player = party.members.find(({ id }) =>
+      id.equals(party.turn.memberId)
+    )?.player
+    const [zone, dimension] = await Promise.all([
+      player ? this.cardCatalog.findCard(player.zoneId) : null,
+      this.cardCatalog.findCard(party.dimension.dimensionCardId),
+    ])
+    const collectionId =
+      dimension?.type === 'dimension' ? dimension.collectionId : null
+    const cards = new Map<string, TCard>()
+    if (collectionId !== null) {
+      for (const card of await this.cardCatalog.listCards(collectionId))
+        cards.set(card.id, card)
+      for (const card of await findMarketBoosters(
+        this.cardCatalog,
+        collectionId
+      ))
+        cards.set(card.id, card)
+    }
+    const cardIds = [
+      ...(zone?.type === 'zone' ? (zone.market?.stock ?? []) : []),
+      ...(player?.inventory ?? []).map(({ cardId }) => cardId),
+      ...(player?.tcgFolder ?? []).map(({ cardId }) => cardId),
+    ]
+    for (const cardId of cardIds) {
+      if (cards.has(cardId)) continue
+      const card = await this.cardCatalog.findCard(cardId)
+      if (card) cards.set(cardId, card)
+    }
+    return {
+      zone: zone?.type === 'zone' ? zone : null,
+      cards: [...cards.values()],
+      collectionId,
+    }
   }
 
   /**

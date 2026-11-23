@@ -7,6 +7,7 @@ import type {
   TPlayerClass,
 } from '@/domain/catalog/enterprise/value-objects/card'
 
+import type { TMarketOperationResult } from '../../market-trade'
 import type { TRecoverOption } from '../../party-action'
 
 // Eventos do agregado `Party` (D-27), união discriminada por `type`.
@@ -124,6 +125,15 @@ export interface VaultUsedEvent extends DomainEvent {
   readonly operationCount: number
 }
 
+/** Ir ao Mercado aceito (README 12.2; REQ-140): o que cada operação fez, na ordem, e o ouro perdido acima da bolsa (REQ-142). */
+export interface MarketVisitedEvent extends DomainEvent {
+  readonly type: 'MarketVisited'
+  readonly memberId: UniqueEntityID
+  readonly zoneId: string
+  readonly results: readonly TMarketOperationResult[]
+  readonly goldLost: number
+}
+
 /** Carta destruída pelo Descartar do cofre (README 6.5; REQ-86); nada volta do limbo. */
 export interface SentToLimboEvent extends DomainEvent {
   readonly type: 'SentToLimbo'
@@ -184,6 +194,7 @@ export type TPartyEvent =
   | EquipmentEquippedEvent
   | LabGrantAppliedEvent
   | VaultUsedEvent
+  | MarketVisitedEvent
   | SentToLimboEvent
   | ScavengedEvent
   | StatusExpiredEvent

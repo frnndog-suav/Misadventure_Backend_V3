@@ -22,7 +22,12 @@ import {
   activatableEffects,
   type TActivatableEffect,
 } from '@/domain/campaign/enterprise/activatable-effects'
+import type {
+  TMarketView,
+  TMarketVisitResult,
+} from '@/domain/campaign/enterprise/market-trade'
 import type { TPlayerStatus } from '@/domain/campaign/enterprise/player-status'
+import { findMarketBoosters } from '@/domain/campaign/application/market-catalog'
 import { availableActions } from '@/domain/campaign/enterprise/available-actions'
 import { connectedZones } from '@/domain/campaign/enterprise/connected-zones'
 import { effectiveModifiers } from '@/domain/campaign/enterprise/effective-modifiers'
@@ -107,6 +112,9 @@ export interface TPlayerStateHttp {
   vaultDeckSlots: number
   vaultGoldCapacity: number
   scavengeTargets: string[]
+  /** FEAT-16 (REQ-140). Só para o membro da vez numa zona com mercado. */
+  market: TMarketView | null
+  lastMarketVisit: TMarketVisitResult | null
   lastScavenge:
     | (NonNullable<TPlayerState['lastScavenge']> & {
         delivery: NonNullable<
@@ -302,6 +310,8 @@ function playerToHTTP(
     vaultDeckSlots: party.config.vaultDeckSlots,
     vaultGoldCapacity: party.config.vaultGoldCapacity,
     scavengeTargets: targets,
+    market: party.describeMarket(member, cards),
+    lastMarketVisit: player.lastMarketVisit ?? null,
     lastScavenge:
       player.lastScavenge === null
         ? null
@@ -362,6 +372,24 @@ export async function findPartyCards(
       for (const deck of dimension.eventDecks ?? []) {
         for (const { cardId } of deck.cards) cardIds.add(cardId)
       }
+    }
+  }
+  const actor = party.members.find(({ id }) => party.turn.memberId.equals(id))
+  const actorZone = actor ? await catalog.findCard(actor.player.zoneId) : null
+  if (actor && actorZone?.type === 'zone' && actorZone.market) {
+    // FEAT-16 (REQ-140): estoque, vitrine, pasta e boosters da coleção vigente.
+    for (const cardId of actorZone.market.stock) cardIds.add(cardId)
+    for (const cardId of party.markets.find(
+      ({ zoneId }) => zoneId === actorZone.id
+    )?.showcase ?? [])
+      if (cardId !== null) cardIds.add(cardId)
+    for (const { cardId } of actor.player.tcgFolder) cardIds.add(cardId)
+    if (dimension?.type === 'dimension') {
+      for (const booster of await findMarketBoosters(
+        catalog,
+        dimension.collectionId
+      ))
+        cards.set(booster.id, booster)
     }
   }
   for (const cardId of cardIds) {

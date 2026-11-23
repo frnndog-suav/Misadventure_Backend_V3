@@ -76,6 +76,12 @@ import type { TPartyEvent } from '../../events/party-events'
 import { addToInventory, type TInventorySlot } from '../../inventory'
 import { assembleMap, type TMapZone, type TPartyMap } from '../../map-assembly'
 import {
+  applyMarketOperations,
+  describeMarket,
+  type TMarketRefusal,
+  type TMarketView,
+} from '../../market-trade'
+import {
   decayMarkets,
   drawMarkets,
   marketZonesOf,
@@ -103,6 +109,7 @@ import {
 import type {
   TPrepareOperation,
   TRecoverOption,
+  TMarketOperation,
   TVaultOperation,
   TRandomEventAction,
   TCombatAction,
@@ -210,6 +217,13 @@ export type TUseVaultRefusal =
   | 'noActionPoints'
   | 'zoneActionUnavailable'
   | TVaultRefusal
+
+/** Por que o Ir ao Mercado foi recusado (REQ-140; D-118). */
+export type TVisitMarketRefusal =
+  | 'sessionNotActive'
+  | 'noActionPoints'
+  | 'zoneActionUnavailable'
+  | TMarketRefusal
 
 /** Por que o Vasculhar foi recusado (REQ-92; D-88). */
 export type TScavengeRefusal =
@@ -5045,6 +5059,104 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.addDeckEvents(actor.id, actor.player, rebuilt, buildSize, at)
     }
     return right(undefined)
+  }
+
+  /**
+   * Ir ao Mercado (README 12.2, 24; REQ-140 a REQ-142; D-118, D-119). Quem age
+   * é o membro da vez; gasta 1 ponto. `catalog.zone` é a carta da zona atual;
+   * `cards` as que as operações, o estoque, as vitrines e o jogador citam;
+   * `collectionId` a coleção vigente (boosters, D-116). Ordem das recusas: fora
+   * de sessão, sem pontos, zona sem `visitMarket`, a primeira operação que falha
+   * (simulando em ordem, com `operationIndex`). Recusado, nada muda: nem ponto,
+   * ouro, cartas, vitrine ou RNG. Aceito: grava `lastMarketVisit` e registra
+   * `MarketVisited`.
+   */
+  visitMarket(
+    operations: readonly TMarketOperation[],
+    catalog: {
+      zone: TZoneCard | null
+      cards: readonly TCard[]
+      collectionId: string | null
+    },
+    at: Date
+  ): Either<TVisitMarketRefusal, void> {
+    switch (this.props.status) {
+      case 'idle':
+        return left('sessionNotActive')
+      case 'inSession':
+        break
+      default: {
+        const _exhaustive: never = this.props.status
+        return _exhaustive
+      }
+    }
+
+    if (this.props.turn.actionPoints < 1) return left('noActionPoints')
+    const { zone } = catalog
+    if (!zone?.zoneActions.includes('visitMarket') || !zone.market) {
+      return left('zoneActionUnavailable')
+    }
+
+    const index = this.actorIndex()
+    const actor = this.props.members[index]
+    const rng = SeededRng.fromState(this.props.rngState)
+    const applied = applyMarketOperations({
+      player: actor.player,
+      config: this.props.config,
+      cards: new Map(catalog.cards.map((card) => [card.id, card])),
+      operations,
+      zoneId: zone.id,
+      zoneStock: zone.market.stock,
+      collectionId: catalog.collectionId,
+      state: { markets: this.markets, pool: this.marketPool },
+      candidates: this.marketCandidates,
+      rng,
+    })
+    if (applied.isLeft()) return left(applied.value)
+    const { player, state, result } = applied.value
+
+    this.props.markets = state.markets
+    this.props.marketPool = state.pool
+    this.props.rngState = rng.state()
+    this.spendActionPoint()
+    this.replaceActor(index, { ...player, lastMarketVisit: result })
+    this.props.savedAt = at
+    this.addDomainEvent({
+      type: 'MarketVisited',
+      memberId: actor.id,
+      zoneId: result.zoneId,
+      results: result.results,
+      goldLost: result.goldLost,
+      occurredAt: at,
+      aggregateId: this.id,
+    })
+    return right(undefined)
+  }
+
+  /**
+   * Projeção do mercado para o membro da vez numa zona com mercado (REQ-140);
+   * `null` para os demais, ou se a carta da zona não está em `cards`.
+   * `cards` precisa trazer o estoque, as cartas da vitrine, os boosters, o
+   * inventário e a pasta do membro.
+   */
+  describeMarket(
+    member: PartyMember,
+    cards: ReadonlyMap<string, TCard>
+  ): TMarketView | null {
+    if (!this.props.turn.memberId.equals(member.id)) return null
+    const zone = cards.get(member.player.zoneId)
+    if (zone?.type !== 'zone' || !zone.market) return null
+    const dimension = cards.get(this.props.dimension.dimensionCardId)
+    return describeMarket({
+      config: this.props.config,
+      player: member.player,
+      cards,
+      zoneId: zone.id,
+      zoneStock: zone.market.stock,
+      collectionId:
+        dimension?.type === 'dimension' ? dimension.collectionId : null,
+      state: { markets: this.markets, pool: this.marketPool },
+    })
   }
 
   saveRespawnPoint(

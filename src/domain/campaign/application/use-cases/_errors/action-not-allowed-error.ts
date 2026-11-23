@@ -1,4 +1,5 @@
 import { DomainError } from '@/core/error/domain-error'
+import type { TMarketRefusalReason } from '../../../enterprise/market-trade'
 import type { TCombatRefusal } from '../../../enterprise/combat'
 import type { TTriggeredEffectRefusal } from '../../../enterprise/entities/party'
 import type {
@@ -51,6 +52,7 @@ export type TActionNotAllowedReason =
   | 'notEnoughPeak'
   | 'paymentInvalid'
   | 'minimumNotMet'
+  | TMarketRefusalReason
 
 export class ActionNotAllowedError extends DomainError {
   readonly code = 'ACTION_NOT_ALLOWED'
@@ -68,7 +70,7 @@ export class ActionNotAllowedError extends DomainError {
 
   /**
    * `cardId` só em `notOwned` e `copyLimitExceeded` (CONTRATO FEAT-09);
-   * `operationIndex` só no `useVault` (CONTRATO FEAT-32).
+   * `operationIndex` só no `useVault` e no `visitMarket` (CONTRATO FEAT-32 e FEAT-16).
    */
   constructor(
     reason: TActionNotAllowedReason | TQuestRefusal,

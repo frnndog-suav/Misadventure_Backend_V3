@@ -178,6 +178,80 @@ describe('availableActions — useVault (REQ-93)', () => {
   })
 })
 
+describe('availableActions — visitMarket (REQ-140)', () => {
+  const memberId = new UniqueEntityID('member-1')
+  const inSession = () => makeParty({ status: 'inSession' })
+
+  it('REQ-140: zona com visitMarket e pontos → visitMarket entra depois de useVault e antes de endTurn', () => {
+    expect(
+      availableActions(inSession(), memberId, new Set(), [
+        'useVault',
+        'visitMarket',
+      ])
+    ).toEqual([
+      'move',
+      'recover',
+      'adjustDeck',
+      'useVault',
+      'visitMarket',
+      'endTurn',
+    ])
+  })
+
+  it('REQ-140: zona sem visitMarket → não entra', () => {
+    expect(
+      availableActions(inSession(), memberId, new Set(), ['useVault'])
+    ).not.toContain('visitMarket')
+  })
+
+  it('REQ-140: com 0 pontos → visitMarket não entra (custa 1 ponto)', () => {
+    const party = inSession()
+    party.move(MINE, party.savedAt)
+    party.move(HARBOR, party.savedAt)
+    party.move(MINE, party.savedAt)
+
+    expect(
+      availableActions(party, memberId, new Set(), ['visitMarket'])
+    ).toEqual(['endTurn'])
+  })
+
+  it('REQ-140: depois das ações de missão e antes de trainWithMentor', () => {
+    const actions = availableActions(
+      inSession(),
+      memberId,
+      new Set(),
+      ['visitMarket'],
+      [],
+      [],
+      false,
+      undefined,
+      false,
+      undefined,
+      true,
+      [
+        { type: 'takeTrialQuest', actionPoints: 1, gold: 0 },
+        { type: 'trainWithMentor', actionPoints: 1, gold: 0 },
+      ] as never
+    )
+
+    expect(actions.slice(actions.indexOf('takeTrialQuest'))).toEqual([
+      'takeTrialQuest',
+      'visitMarket',
+      'trainWithMentor',
+      'saveRespawnPoint',
+      'endTurn',
+    ])
+  })
+
+  it('REQ-140: quem não é da vez não tem nada', () => {
+    expect(
+      availableActions(inSession(), new UniqueEntityID('outro'), new Set(), [
+        'visitMarket',
+      ])
+    ).toEqual([])
+  })
+})
+
 describe('availableActions — scavenge (REQ-93)', () => {
   const inSession = () => makeParty({ status: 'inSession' })
   const memberId = new UniqueEntityID('member-1')

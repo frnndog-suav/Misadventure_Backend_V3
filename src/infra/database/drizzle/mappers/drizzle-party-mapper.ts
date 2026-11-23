@@ -715,6 +715,46 @@ const expansionsSchema = z.strictObject({
   vaultGold: count,
 })
 
+const marketGold = z.number().int()
+const marketQuantity = z.number().int().min(1)
+const marketVisitSchema = z.strictObject({
+  zoneId: id,
+  results: z
+    .array(
+      z.discriminatedUnion('operation', [
+        z.strictObject({
+          operation: z.literal('buyStock'),
+          cardId: id,
+          quantity: marketQuantity,
+          copiesReceived: marketQuantity,
+          gold: marketGold,
+        }),
+        z.strictObject({
+          operation: z.literal('buyBooster'),
+          cardId: id,
+          quantity: marketQuantity,
+          gold: marketGold,
+        }),
+        z.strictObject({
+          operation: z.literal('buySingle'),
+          slotIndex: count,
+          cardId: id,
+          destination: z.enum(['inventory', 'tcgFolder']),
+          gold: marketGold,
+        }),
+        z.strictObject({
+          operation: z.literal('sell'),
+          source: z.enum(['inventory', 'tcgFolder']),
+          cardId: id,
+          quantity: marketQuantity,
+          gold: marketGold,
+        }),
+      ])
+    )
+    .readonly(),
+  goldLost: count,
+})
+
 const marketSchema = z.strictObject({
   zoneId: id,
   factorPercent: z.number().int().min(1),
@@ -821,6 +861,7 @@ const stateSchema = z
         currentConfigSchema,
         playerSchema.extend({
           expansions: expansionsSchema.optional(),
+          lastMarketVisit: marketVisitSchema.nullable().optional(),
           down: z.boolean().optional(),
           skipNextTurn: z.boolean().optional(),
           lastKnockout: z
@@ -1019,6 +1060,9 @@ export class DrizzlePartyMapper {
             ...(m.player.expansions !== undefined && {
               expansions: { ...m.player.expansions },
             }),
+            ...(m.player.lastMarketVisit !== undefined && {
+              lastMarketVisit: m.player.lastMarketVisit,
+            }),
             deck: [...m.player.deck],
             hand: [...m.player.hand],
             discard: [...m.player.discard],
@@ -1180,6 +1224,7 @@ type TStoredPlayer = z.infer<typeof legacyPlayerSchema> &
       | 'lastRewardDelivery'
       | 'lastKnockout'
       | 'expansions'
+      | 'lastMarketVisit'
     >
   >
 

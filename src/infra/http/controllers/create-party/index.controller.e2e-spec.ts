@@ -95,6 +95,7 @@ describe('POST /parties (e2e)', () => {
               'recover',
               'adjustDeck',
               'useVault',
+              'visitMarket',
               'startEvent',
               'endTurn',
             ],
@@ -133,6 +134,9 @@ describe('POST /parties (e2e)', () => {
             vaultGoldCapacity: 2000,
             scavengeTargets: [],
             lastScavenge: null,
+            // FEAT-16 (REQ-140): o fator e a vitrine são sorteados; os valores ficam no e2e do mercado.
+            market: expect.objectContaining({ zoneId: 'fixture.gray-harbor' }),
+            lastMarketVisit: null,
             statuses: [],
             activatableEffects: [],
           },

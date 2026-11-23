@@ -99,7 +99,7 @@ function removeFromSlots(
 }
 
 /** Tira `quantity` unidades de `cardId` do inventário, dos primeiros slots (REQ-85); faltando → `null`. */
-function removeFromInventory(
+export function removeFromInventory(
   inventory: TSlots,
   cardId: string,
   quantity: number

@@ -10,7 +10,8 @@ import type { TZoneQuestChoice } from '../zone-quests'
 /**
  * Ações que o membro pode mandar agora (README 12.1, 11.4; REQ-58; D-65).
  * Ordem fixa: `move`, `recover`, `prepare`, `adjustDeck`, `scavenge`,
- * `useVault`, `endTurn` (12.2; REQ-75, REQ-93). Só a vez de quem age; os
+ * `useVault`, as ações de missão, `visitMarket`, `trainWithMentor`,
+ * `saveRespawnPoint`, `endTurn` (12.2; REQ-75, REQ-93, REQ-140). Só a vez de quem age; os
  * demais não têm nada.
  * `equipmentCardIds`: quais ids do inventário são cartas `equipment` (o
  * inventário guarda só o id, D-75; quem chama lê no catálogo).
@@ -104,6 +105,9 @@ export function availableActions(
     'takeTrialQuest',
   ] as const)
     if (questActionTypes.has(type)) actions.push(type)
+  if (turn.actionPoints >= 1 && zoneActions.includes('visitMarket')) {
+    actions.push('visitMarket')
+  }
   if (questActionTypes.has('trainWithMentor')) actions.push('trainWithMentor')
   if (
     member &&

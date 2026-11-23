@@ -252,6 +252,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
       'recover',
       'adjustDeck',
       'useVault',
+      'visitMarket',
       'startEvent',
       'endTurn',
     ])

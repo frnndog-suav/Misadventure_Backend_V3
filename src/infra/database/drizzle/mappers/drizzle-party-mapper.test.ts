@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { SeededRng } from '@/core/rng/seeded-rng'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
+import type { Party } from '@/domain/campaign/enterprise/entities/party'
 import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
 import { PartyPresenter } from '@/infra/http/presenters/party-presenter'
 import { removePostV6Config } from '../../../../../test/factories/remove-post-v6-config'
@@ -881,6 +882,71 @@ describe('DrizzlePartyMapper', () => {
       vaultGold: 0,
     })
     expect(DrizzlePartyMapper.toDrizzle(restored).state.schemaVersion).toBe(9)
+  })
+
+  it('REQ-140: ida e volta preserva lastMarketVisit; save sem ele lê undefined', () => {
+    const lastMarketVisit = {
+      zoneId: 'fixture.gray-harbor',
+      goldLost: 15,
+      results: [
+        {
+          operation: 'buyStock' as const,
+          cardId: 'fixture.arrows',
+          quantity: 2,
+          copiesReceived: 20,
+          gold: -8,
+        },
+        {
+          operation: 'buyBooster' as const,
+          cardId: 'fixture.booster',
+          quantity: 1,
+          gold: -30,
+        },
+        {
+          operation: 'buySingle' as const,
+          slotIndex: 1,
+          cardId: 'fixture.short-sword',
+          destination: 'inventory' as const,
+          gold: -6,
+        },
+        {
+          operation: 'sell' as const,
+          source: 'tcgFolder' as const,
+          cardId: 'fixture.strength-basic',
+          quantity: 2,
+          gold: 4,
+        },
+      ],
+    }
+    const withVisit = makeParty({
+      status: 'inSession',
+      members: [
+        PartyMember.create(
+          {
+            characterName: 'Lia',
+            kind: 'human',
+            player: makePlayerState({ lastMarketVisit }),
+          },
+          new UniqueEntityID('member-1')
+        ),
+      ],
+    })
+    const withoutVisit = makeParty({ status: 'inSession' })
+    const toRow = (party: Party) =>
+      ({
+        ...JSON.parse(JSON.stringify(DrizzlePartyMapper.toDrizzle(party))),
+        createdAt: party.createdAt,
+        savedAt: party.savedAt,
+      }) as TPartyRow
+
+    expect(
+      DrizzlePartyMapper.toDomain(toRow(withVisit)).members[0].player
+        .lastMarketVisit
+    ).toEqual(lastMarketVisit)
+    expect(
+      DrizzlePartyMapper.toDomain(toRow(withoutVisit)).members[0].player
+        .lastMarketVisit
+    ).toBeUndefined()
   })
 
   /** Linha como era gravada antes da FEAT-16: sem `expansions` nos jogadores. */

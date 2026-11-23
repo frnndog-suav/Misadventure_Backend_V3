@@ -144,6 +144,7 @@ describe('Cofre e Vasculhar (e2e)', () => {
       'recover',
       'adjustDeck',
       'useVault',
+      'visitMarket',
       'startEvent',
       'endTurn',
     ])
@@ -175,6 +176,7 @@ describe('Cofre e Vasculhar (e2e)', () => {
       'adjustDeck',
       'scavenge',
       'useVault',
+      'visitMarket',
       'saveRespawnPoint',
       'startEvent',
       'endTurn',

@@ -86,6 +86,18 @@ export type TVaultOperation =
   | { operation: 'swapBuild'; deckIndex: number }
   | { operation: 'editBuild'; build: { cardId: string; copies: number }[] }
 
+/** Uma operação do Ir ao Mercado (README 24; REQ-140; D-118). `buyExpansion` entra na T-64. */
+export type TMarketOperation =
+  | { operation: 'buyStock'; cardId: string; quantity: number }
+  | { operation: 'buyBooster'; cardId: string; quantity: number }
+  | { operation: 'buySingle'; slotIndex: number }
+  | {
+      operation: 'sell'
+      source: 'inventory' | 'tcgFolder'
+      cardId: string
+      quantity: number
+    }
+
 /** Intenção de jogo (CONTRATO §1.6). União por `type`; as FEATs 10+ acrescentam variantes. */
 export type TPartyAction =
   | TRandomEventAction
@@ -100,6 +112,7 @@ export type TPartyAction =
   | { type: 'adjustDeck'; build: { cardId: string; copies: number }[] }
   | ({ type: 'prepare' } & TPrepareOperation)
   | { type: 'useVault'; operations: TVaultOperation[] }
+  | { type: 'visitMarket'; operations: TMarketOperation[] }
   | { type: 'scavenge'; cardId: string }
 
 /** Os `type` possíveis, para `availableActions` (REQ-58). */
@@ -134,6 +147,7 @@ export type TActionIssue =
         | 'notNonNegativeInteger'
         | 'duplicateCard'
         | 'unknownOperation'
+        | 'unknownOption'
         | 'invalidLength'
     }
 
@@ -189,6 +203,8 @@ export function parsePartyAction(
       return parsePrepare(body, effectActivationEnabled, combatEnabled)
     case 'useVault':
       return parseUseVault(body)
+    case 'visitMarket':
+      return parseVisitMarket(body)
     case 'takeQuest':
     case 'continueQuest':
     case 'finishQuest':
@@ -953,6 +969,144 @@ function parseVaultOperation(
       extras(['deckIndex'])
       if (issues.length > before || index === null) return null
       return { operation, deckIndex: index }
+    }
+    default:
+      issues.push({ field: `${path}.operation`, reason: 'unknownOperation' })
+      return null
+  }
+}
+
+/**
+ * REQ-140. Mesmas regras de `operations` do Usar cofre (máximo de 50). Em cada
+ * operação: `operation` ausente/inválida/desconhecida vem sozinha; `source` fora
+ * de inventory|tcgFolder → `unknownOption`.
+ */
+function parseVisitMarket(
+  body: Record<string, unknown>
+): Either<TActionIssue[], TPartyAction> {
+  const { operations } = body
+  const issues: TActionIssue[] = []
+  const parsed: TMarketOperation[] = []
+
+  if (operations === undefined) {
+    issues.push({ field: 'operations', reason: 'required' })
+  } else if (!Array.isArray(operations)) {
+    issues.push({ field: 'operations', reason: 'notArray' })
+  } else if (
+    operations.length < 1 ||
+    operations.length > VAULT_MAX_OPERATIONS
+  ) {
+    issues.push({ field: 'operations', reason: 'invalidLength' })
+  } else {
+    operations.forEach((item: unknown, index) => {
+      const operation = parseMarketOperation(
+        item,
+        `operations.${index}`,
+        issues
+      )
+      if (operation !== null) parsed.push(operation)
+    })
+  }
+  issues.push(...extraKeys(body, ['type', 'operations']))
+  if (issues.length > 0) return left(issues)
+  return right({ type: 'visitMarket', operations: parsed })
+}
+
+function parseMarketOperation(
+  item: unknown,
+  path: string,
+  issues: TActionIssue[]
+): TMarketOperation | null {
+  if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+    issues.push({ field: path, reason: 'invalidItem' })
+    return null
+  }
+  const entry = item as Record<string, unknown>
+  const { operation } = entry
+  if (operation === undefined) {
+    issues.push({ field: `${path}.operation`, reason: 'required' })
+    return null
+  }
+  if (typeof operation !== 'string') {
+    issues.push({ field: `${path}.operation`, reason: 'notString' })
+    return null
+  }
+
+  const before = issues.length
+  const text = (key: string): string | null => {
+    const value = entry[key]
+    if (value === undefined) {
+      issues.push({ field: `${path}.${key}`, reason: 'required' })
+    } else if (typeof value !== 'string') {
+      issues.push({ field: `${path}.${key}`, reason: 'notString' })
+    } else {
+      return value
+    }
+    return null
+  }
+  const quantity = (): number | null => {
+    const value = entry.quantity
+    if (value === undefined) {
+      issues.push({ field: `${path}.quantity`, reason: 'required' })
+    } else if (!isPositiveInteger(value)) {
+      issues.push({
+        field: `${path}.quantity`,
+        reason: 'notPositiveInteger',
+      })
+    } else {
+      return value
+    }
+    return null
+  }
+  const extras = (allowed: readonly string[]) =>
+    issues.push(...extraKeys(entry, ['operation', ...allowed], `${path}.`))
+
+  switch (operation) {
+    case 'buyStock':
+    case 'buyBooster': {
+      const cardId = text('cardId')
+      const count = quantity()
+      extras(['cardId', 'quantity'])
+      if (issues.length > before || cardId === null || count === null) {
+        return null
+      }
+      return { operation, cardId, quantity: count }
+    }
+    case 'buySingle': {
+      const slotIndex = entry.slotIndex
+      if (slotIndex === undefined) {
+        issues.push({ field: `${path}.slotIndex`, reason: 'required' })
+      } else if (
+        typeof slotIndex !== 'number' ||
+        !Number.isInteger(slotIndex) ||
+        slotIndex < 0
+      ) {
+        issues.push({
+          field: `${path}.slotIndex`,
+          reason: 'notNonNegativeInteger',
+        })
+      }
+      extras(['slotIndex'])
+      if (issues.length > before || typeof slotIndex !== 'number') return null
+      return { operation, slotIndex }
+    }
+    case 'sell': {
+      const source = text('source')
+      if (source !== null && source !== 'inventory' && source !== 'tcgFolder') {
+        issues.push({ field: `${path}.source`, reason: 'unknownOption' })
+      }
+      const cardId = text('cardId')
+      const count = quantity()
+      extras(['source', 'cardId', 'quantity'])
+      if (
+        issues.length > before ||
+        (source !== 'inventory' && source !== 'tcgFolder') ||
+        cardId === null ||
+        count === null
+      ) {
+        return null
+      }
+      return { operation, source, cardId, quantity: count }
     }
     default:
       issues.push({ field: `${path}.operation`, reason: 'unknownOperation' })
