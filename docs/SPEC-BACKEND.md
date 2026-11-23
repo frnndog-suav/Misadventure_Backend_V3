@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.79 · **Data:** 2026-11-23
+> **Versão da spec:** 0.80 · **Data:** 2026-11-23
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -448,7 +448,7 @@ Base: README §§3.4, 5.1–5.3, 6.3–6.6, 12.2, 24, 27, 28.1 e Apêndice A (li
 
 - **D-122 — Sorteio e entrega do booster (aprovada pelo autor em 2026-11-23).** Raridade sorteada sem carta elegível naquela coleção → refaz o sorteio só entre as raridades com elegíveis, mantendo a proporção entre elas; no slot garantido, entre as raridades a partir de Incomum com elegíveis, e, se não houver, como slot comum. Coleção sem nenhuma elegível publicada → recusa `boosterEmpty`. Ordem das 8 cartas = ordem do sorteio; a divisão pasta/inventário segue essa ordem. No Usar cofre, o booster sai do cofre (o lote pode guardá-lo antes com `store`). A entrega pendente reusa a da FEAT-12 (`lastRewardDelivery`), com `source.type: 'booster'` e `origin.type: 'fixed'` (CONTRATO v0.79); deixar uma carta do booster manda ao limbo (não veio de deck).
 
-- **D-123 — Coleção citada por booster não é protegida (decisão do autor em 2026-11-23, T-61).** Excluir no editor uma coleção citada por `boosterCollectionId` de um booster de outra coleção não é recusado: o CONTRATO v0.80 só protege `market.stock`. O conteúdo fica inválido até o booster ser corrigido. Pendência: rever no contrato antes da T-66.
+- **D-123 — Coleção citada por booster não é protegida (decisão do autor em 2026-11-23, T-61).** Excluir no editor uma coleção citada por `boosterCollectionId` de um booster de outra coleção não é recusado: o CONTRATO v0.80 só protege `market.stock`. O conteúdo fica inválido até o booster ser corrigido. Revista na T-66 (2026-11-23): o autor manteve o comportamento, sem mudança de contrato; o booster órfão dá `boosterEmpty` ao abrir. Decisão fechada.
 
 - **D-124 — Estoque não exige item publicado (decisão do autor em 2026-11-23, T-61).** Publicar uma zona não exige que os itens de `market.stock` estejam publicados (diferente dos decks de recompensas, REQ-82): o contrato não tem regra nem mensagem para isso. Item fora do catálogo publicado não aparece no estoque (T-63).
 
@@ -812,6 +812,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.77 | 2026-11-23 | T-63 concluída (devlog 078): `visitMarket` (compras, venda, projeção `market`, `lastMarketVisit`, evento `MarketVisited`). D-126. `buyExpansion` e as capacidades efetivas ficam na T-64. Sem mudança de contrato. |
 | 0.78 | 2026-11-23 | T-64 concluída (devlog 079): `buyExpansion`, capacidades efetivas em todas as regras, no save e no presenter (`expansions`). D-127. Sem mudança de contrato. |
 | 0.79 | 2026-11-23 | T-65 concluída (devlog 080): `openBooster` no Preparar e no Usar cofre, sorteio com slot garantido, entrega pendente com fonte `booster` (fila `boosterQueue`), `lastBoosterOpening`. D-128. Sem mudança de contrato. |
+| 0.80 | 2026-11-23 | T-66 em andamento: preparador das campanhas da FEAT-16 (devlog 081); FEAT-16 `implementado (BE)` no CONTRATO v0.81. D-123 fechada (mantida). A T-66 fecha após o retorno integrado do frontend. |
 
 ## Apêndice A — Conteúdo de teste
 

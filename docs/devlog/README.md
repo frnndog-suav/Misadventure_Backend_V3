@@ -98,6 +98,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 078 | T-63 | [Ir ao Mercado: compras, venda e projeção](078-T-63-ir-ao-mercado.md) | aguardando revisão |
 | 079 | T-64 | [Serviços de expansão e capacidades efetivas](079-T-64-servicos-de-expansao.md) | aguardando revisão |
 | 080 | T-65 | [Abrir booster](080-T-65-abrir-booster.md) | aguardando revisão |
+| 081 | T-66 | [Campanhas da FEAT-16](081-T-66-campanhas-da-feat-16.md) | aguardando validação do frontend |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
