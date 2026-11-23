@@ -6,7 +6,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { DRIZZLE, type Database } from '@/infra/database/database.tokens'
 import { parties } from '@/infra/database/drizzle/schema'
 import { createContentApp } from '../../../../../test/content-app'
-import { postParty, resetCampaign } from '../../../../../test/parties-e2e'
+import {
+  postParty,
+  resetCampaign,
+  withoutMarkets,
+} from '../../../../../test/parties-e2e'
 
 const traveler = 'fixture.wounded-traveler'
 const strength = 'fixture.strength-basic'
@@ -184,7 +188,10 @@ describe('Eventos aleatórios (HTTP e save)', () => {
     delete player.lastRewardSearch
     delete player.lastRewardDelivery
     player.lastScavenge = { cardId: ore, found: true }
-    await db().update(parties).set({ state: legacy }).where(eq(parties.id, id))
+    await db()
+      .update(parties)
+      .set({ state: withoutMarkets(legacy) })
+      .where(eq(parties.id, id))
 
     const read = await get(id).expect(200)
     expect(read.body).toMatchObject({

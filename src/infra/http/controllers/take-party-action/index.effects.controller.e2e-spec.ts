@@ -13,7 +13,11 @@ import {
   createContentApp,
 } from '../../../../../test/content-app'
 import { removePostV6Config } from '../../../../../test/factories/remove-post-v6-config'
-import { resetCampaign, WARRIOR_BODY } from '../../../../../test/parties-e2e'
+import {
+  resetCampaign,
+  WARRIOR_BODY,
+  withoutMarkets,
+} from '../../../../../test/parties-e2e'
 
 const POTION = 'fixture.healing-potion'
 const TONIC = 'fixture.strength-tonic'
@@ -686,7 +690,10 @@ describe('FEAT-11 — efeitos e status (e2e)', () => {
     delete state.config.escapeVigorPercent
     delete state.config.reserveDeck
     delete state.members[0].player.statuses
-    await db.update(parties).set({ state }).where(eq(parties.id, party.id))
+    await db
+      .update(parties)
+      .set({ state: withoutMarkets(state) })
+      .where(eq(parties.id, party.id))
     expect(player(await get(party)).statuses).toEqual([])
     expect((await repository.findContentInUse()).cardIds.has(TONIC)).toBe(false)
     await act(party, { type: 'endTurn' }).expect(200)

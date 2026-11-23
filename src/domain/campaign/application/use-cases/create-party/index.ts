@@ -5,6 +5,7 @@ import type { SeedGenerator } from '@/core/ports/seed-generator'
 import { SeededRng } from '@/core/rng/seeded-rng'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import { Party } from '@/domain/campaign/enterprise/entities/party'
+import { marketCandidatesOf } from '@/domain/campaign/enterprise/markets'
 import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import type {
   TAttributeCard,
@@ -71,6 +72,7 @@ export class CreatePartyUseCase {
         dimension,
         zones,
         dimensionCards: cards,
+        marketCandidates: marketCandidatesOf(cards),
         config: config.values,
         rngState: SeededRng.fromSeed(this.seeds.next()).state(),
         now: this.clock.now(),

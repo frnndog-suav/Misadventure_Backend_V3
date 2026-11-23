@@ -103,4 +103,36 @@ describe('DeleteCardUseCase', () => {
 
     expect(result.isLeft() && result.value).toBeInstanceOf(ContentInUseError)
   })
+
+  it('REQ-136: carta no pool ou numa vitrine de um save → CONTENT_IN_USE', async () => {
+    for (const cardId of ['fixture.pool-card', 'fixture.showcase-card']) {
+      store.cards.push({
+        status: 'published',
+        card: makeItemCard({ id: cardId, itemCategory: 'consumable' }),
+      })
+    }
+    await parties.create(
+      makeParty({
+        markets: [
+          {
+            zoneId: 'fixture.gray-harbor',
+            factorPercent: 100,
+            singles: true,
+            stock: [{ cardId: 'fixture.showcase-card', copies: 1 }],
+            showcase: ['fixture.showcase-card'],
+          },
+        ],
+        marketPool: [
+          { cardId: 'fixture.pool-card', departed: 2 },
+          { cardId: 'fixture.showcase-card', departed: 0 },
+        ],
+      })
+    )
+
+    for (const cardId of ['fixture.pool-card', 'fixture.showcase-card']) {
+      const result = await sut.execute({ cardId })
+
+      expect(result.isLeft() && result.value).toBeInstanceOf(ContentInUseError)
+    }
+  })
 })

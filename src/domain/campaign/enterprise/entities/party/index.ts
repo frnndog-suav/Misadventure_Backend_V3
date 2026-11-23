@@ -76,6 +76,14 @@ import type { TPartyEvent } from '../../events/party-events'
 import { addToInventory, type TInventorySlot } from '../../inventory'
 import { assembleMap, type TMapZone, type TPartyMap } from '../../map-assembly'
 import {
+  decayMarkets,
+  drawMarkets,
+  marketZonesOf,
+  type TMarket,
+  type TMarketCandidate,
+  type TMarketPoolEntry,
+} from '../../markets'
+import {
   acceptsGenericQuests,
   describeGenericQuest,
   describeZoneQuest,
@@ -348,6 +356,9 @@ export interface TPartyProps {
   dimension: TPartyDimension
   /** Decks de recompensas por tipo de zona (README 3.4; REQ-89, D-87). */
   rewardDecks: readonly TPartyRewardDeck[]
+  /** Mercados do mapa e pool de singles (REQ-138, REQ-139); ausentes em save antigo. */
+  markets?: readonly TMarket[]
+  marketPool?: readonly TMarketPoolEntry[]
   eventDecks?: readonly TEventDeck[]
   upgradedCombatDecks?: readonly TEventDeck['zoneType'][]
   eventEncounter?: TEventEncounter | null
@@ -383,6 +394,8 @@ export interface TCreatePartyInput {
   /** Zonas publicadas da coleção da dimensão. */
   zones: readonly TZoneCard[]
   dimensionCards?: readonly TCard[]
+  /** Elegíveis a single da coleção da dimensão (REQ-138); sem lista, o pool nasce vazio. */
+  marketCandidates?: readonly TMarketCandidate[]
   config: TGameConfigValues
   rngState: RngState
   now: Date
@@ -425,6 +438,31 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   get dimension(): TPartyDimension {
     return this.props.dimension
   }
+
+  /** Mercados do mapa, na ordem do mapa (REQ-138); vazio em save antigo. */
+  get markets(): readonly TMarket[] {
+    return this.props.markets ?? []
+  }
+
+  /** Pool de singles com as cópias já saídas de cada carta (REQ-138, REQ-139). */
+  get marketPool(): readonly TMarketPoolEntry[] {
+    return this.props.marketPool ?? []
+  }
+
+  /**
+   * Elegíveis a single da coleção vigente (REQ-138, D-125). O caso de uso
+   * entrega antes de cada ação: o novo pool (REQ-139) sorteia entre elas e o
+   * agregado não conhece o catálogo.
+   */
+  provideMarketCandidates(candidates: readonly TMarketCandidate[]): void {
+    this.marketCandidates = candidates
+  }
+
+  get hasSinglesMarkets(): boolean {
+    return this.markets.some(({ singles }) => singles)
+  }
+
+  private marketCandidates: readonly TMarketCandidate[] = []
 
   /** Ordem secreta: não trafega (REQ-89). */
   get rewardDecks(): readonly TPartyRewardDeck[] {
@@ -4099,6 +4137,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       ...this.props.config.reserveDeck.flatMap((entry) =>
         entry.type === 'card' ? [entry.cardId] : []
       ),
+      ...this.marketPool.map(({ cardId }) => cardId),
+      ...this.markets.flatMap(({ stock, showcase }) => [
+        ...stock.map(({ cardId }) => cardId),
+        ...showcase.flatMap((cardId) => (cardId === null ? [] : [cardId])),
+      ]),
     ])
     const combatCard = this.combatOutcomeCard
     if (combatCard) {
@@ -4249,6 +4292,15 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       rng
     )
     const rewardDecks = assembleRewardDecks(dimension.rewardDecks, rng)
+    const marketState = drawMarkets(
+      marketZonesOf(
+        map.zones.map(({ zoneId }) => zoneId),
+        zones
+      ),
+      input.marketCandidates ?? [],
+      input.config,
+      rng
+    )
 
     const party = new Party(
       {
@@ -4264,6 +4316,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           map: mapWithQuestDecks,
         },
         rewardDecks,
+        markets: marketState.markets,
+        marketPool: marketState.pool,
         turnOrder,
         turn: {
           round: 1,
@@ -4692,6 +4746,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     })
     this.addDomainEvent({ type: 'TurnStarted', memberId, round, ...base })
     const roundEnded = round !== ended.round
+    if (roundEnded) this.decayMarkets()
     this.props.members = this.props.members.map((member) => {
       const ownTurnEnded = member.id.equals(ended.memberId)
       const ownTurnStarted = member.id.equals(memberId)
@@ -4704,6 +4759,21 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       )
     })
     return skip
+  }
+
+  /** Decaimento dos singles no fim da rodada (README 24.4; REQ-139). Sem singles, não usa o RNG. */
+  private decayMarkets(): void {
+    if (!this.hasSinglesMarkets) return
+    const rng = SeededRng.fromState(this.props.rngState)
+    const next = decayMarkets(
+      { markets: this.markets, pool: this.marketPool },
+      this.marketCandidates,
+      this.props.config,
+      rng
+    )
+    this.props.markets = next.markets
+    this.props.marketPool = next.pool
+    this.props.rngState = rng.state()
   }
 
   /**

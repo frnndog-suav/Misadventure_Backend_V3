@@ -78,34 +78,37 @@ describe('TakePartyActionUseCase', () => {
   it.each([
     [1, 'zoneActionUnavailable'],
     [3, 'noActionPoints'],
-  ] as const)('REQ-125: após %i movimentos recusa com %s sem gravar', async (moves, reason) => {
-    const partyId = await seed()
-    for (let index = 0; index < moves; index++) {
-      await sut.execute({
+  ] as const)(
+    'REQ-125: após %i movimentos recusa com %s sem gravar',
+    async (moves, reason) => {
+      const partyId = await seed()
+      for (let index = 0; index < moves; index++) {
+        await sut.execute({
+          partyId,
+          body: { type: 'move', zoneId: index % 2 === 0 ? MINE : HARBOR },
+        })
+      }
+      const before = await repository.findById(partyId)
+      const rngState = before?.rngState
+      const savedAt = before?.savedAt
+      const save = vi.spyOn(repository, 'save')
+
+      const result = await sut.execute({
         partyId,
-        body: { type: 'move', zoneId: index % 2 === 0 ? MINE : HARBOR },
+        body: { type: 'saveRespawnPoint' },
       })
+
+      expect(result.isLeft() && result.value).toMatchObject({
+        code: 'ACTION_NOT_ALLOWED',
+        details: { reason },
+      })
+      expect(save).not.toHaveBeenCalled()
+      const after = await repository.findById(partyId)
+      expect(after?.rngState).toEqual(rngState)
+      expect(after?.savedAt).toEqual(savedAt)
+      expect(after?.members[0].player.respawnZoneId).toBe(HARBOR)
     }
-    const before = await repository.findById(partyId)
-    const rngState = before?.rngState
-    const savedAt = before?.savedAt
-    const save = vi.spyOn(repository, 'save')
-
-    const result = await sut.execute({
-      partyId,
-      body: { type: 'saveRespawnPoint' },
-    })
-
-    expect(result.isLeft() && result.value).toMatchObject({
-      code: 'ACTION_NOT_ALLOWED',
-      details: { reason },
-    })
-    expect(save).not.toHaveBeenCalled()
-    const after = await repository.findById(partyId)
-    expect(after?.rngState).toEqual(rngState)
-    expect(after?.savedAt).toEqual(savedAt)
-    expect(after?.members[0].player.respawnZoneId).toBe(HARBOR)
-  })
+  )
 
   it('REQ-125: zoneId extra é recusado antes de conferir a sessão', async () => {
     const partyId = await seed('idle')

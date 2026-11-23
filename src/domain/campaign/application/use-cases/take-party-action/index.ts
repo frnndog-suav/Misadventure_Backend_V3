@@ -3,6 +3,7 @@ import type { Clock } from '@/core/ports/clock'
 import type { IdGenerator } from '@/core/ports/id-generator'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
+import { marketCandidatesOf } from '@/domain/campaign/enterprise/markets'
 import {
   parsePartyAction,
   type TPrepareOperation,
@@ -83,6 +84,7 @@ export class TakePartyActionUseCase {
 
     const action = parsed.value
     if (party.status === 'idle') return left(new PartySessionNotActiveError())
+    await this.provideMarketCandidates(party)
     const blocked =
       action.type === 'saveRespawnPoint' ? null : party.eventActionBlock(action)
     if (typeof blocked === 'string')
@@ -439,6 +441,20 @@ export class TakePartyActionUseCase {
     await save(party)
 
     return right({ party })
+  }
+
+  /** REQ-139: o fim da rodada pode precisar de um novo pool; o agregado recebe as elegíveis da coleção vigente (D-116, D-125). */
+  private async provideMarketCandidates(party: Party): Promise<void> {
+    if (!party.hasSinglesMarkets) return
+    const dimension = await this.cardCatalog.findCard(
+      party.dimension.dimensionCardId
+    )
+    if (dimension?.type !== 'dimension') return
+    party.provideMarketCandidates(
+      marketCandidatesOf(
+        await this.cardCatalog.listCards(dimension.collectionId)
+      )
+    )
   }
 
   private async findEventCatalog(

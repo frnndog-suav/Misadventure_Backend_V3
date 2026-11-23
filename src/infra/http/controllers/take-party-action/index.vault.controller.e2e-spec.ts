@@ -5,7 +5,11 @@ import { DRIZZLE, type Database } from '@/infra/database/database.tokens'
 import { parties } from '@/infra/database/drizzle/schema'
 import { removePostV6Config } from '../../../../../test/factories/remove-post-v6-config'
 import { createContentApp } from '../../../../../test/content-app'
-import { postParty, resetCampaign } from '../../../../../test/parties-e2e'
+import {
+  postParty,
+  resetCampaign,
+  withoutMarkets,
+} from '../../../../../test/parties-e2e'
 
 // CONTRATO v0.46, FEAT-32: cofre, limbo, deck de recompensas e Vasculhar
 // (REQ-83 a REQ-96) de ponta a ponta. O estado é montado pela doação do
@@ -558,7 +562,7 @@ describe('Cofre e Vasculhar (e2e)', () => {
     })
     const legacy = { ...state, schemaVersion: 5, config, members }
     delete legacy.rewardDecks
-    await writeState(party.id, legacy)
+    await writeState(party.id, withoutMarkets(legacy))
 
     const read = player(await get(party.id))
     expect(read.vault).toEqual({ slots: [], decks: [], gold: 0 })

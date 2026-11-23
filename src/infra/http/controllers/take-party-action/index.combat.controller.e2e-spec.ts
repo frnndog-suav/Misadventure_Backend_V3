@@ -7,7 +7,11 @@ import { DRIZZLE, type Database } from '@/infra/database/database.tokens'
 import { DrizzlePartyMapper } from '@/infra/database/drizzle/mappers/drizzle-party-mapper'
 import { parties } from '@/infra/database/drizzle/schema'
 import { createContentApp } from '../../../../../test/content-app'
-import { postParty, resetCampaign } from '../../../../../test/parties-e2e'
+import {
+  postParty,
+  resetCampaign,
+  withoutMarkets,
+} from '../../../../../test/parties-e2e'
 
 const wolves = 'fixture.howling-wolves'
 const traveler = 'fixture.wounded-traveler'
@@ -95,7 +99,7 @@ describe('Combate solo (HTTP e save)', () => {
     await db()
       .update(parties)
       .set({
-        state: {
+        state: withoutMarkets({
           ...state,
           schemaVersion: legacy ? 8 : 9,
           rngState: [0, 0, 0, 10],
@@ -114,7 +118,7 @@ describe('Combate solo (HTTP e save)', () => {
               inventory: [{ cardId: fish, quantity: 1 }],
             },
           })),
-        },
+        }),
       })
       .where(eq(parties.id, id))
     return id
@@ -197,7 +201,7 @@ describe('Combate solo (HTTP e save)', () => {
     await db()
       .update(parties)
       .set({
-        state: {
+        state: withoutMarkets({
           ...paused,
           schemaVersion: 9,
           members: paused.members.map((member) => ({
@@ -208,7 +212,7 @@ describe('Combate solo (HTTP e save)', () => {
               skipNextTurn: undefined,
             },
           })),
-        },
+        }),
       })
       .where(eq(parties.id, id))
     expect((await get(id).expect(200)).body).toEqual(pending)
@@ -306,7 +310,7 @@ describe('Combate solo (HTTP e save)', () => {
       await db()
         .update(parties)
         .set({
-          state: {
+          state: withoutMarkets({
             ...state,
             schemaVersion: 9,
             turn: { ...state.turn, round: 6, actionPoints: 0 },
@@ -333,7 +337,7 @@ describe('Combate solo (HTTP e save)', () => {
                 },
               },
             ],
-          },
+          }),
         })
         .where(eq(parties.id, id))
 

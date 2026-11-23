@@ -66,6 +66,8 @@ function snapshot(party: Party): Party {
       rngState: [...party.rngState] as unknown as Party['rngState'],
       dimension: structuredClone(party.dimension),
       rewardDecks: structuredClone(party.rewardDecks),
+      markets: structuredClone(party.markets),
+      marketPool: structuredClone(party.marketPool),
       eventDecks: structuredClone(party.eventDecks),
       eventEncounter: structuredClone(party.eventEncounter),
       ...structuredClone(party.combatSnapshot()),

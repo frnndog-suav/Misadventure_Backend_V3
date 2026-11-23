@@ -1,5 +1,6 @@
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { SeededRng } from '@/core/rng/seeded-rng'
+import { noExpansions } from '@/domain/campaign/enterprise/markets'
 import {
   emptyEquipment,
   PartyMember,
@@ -27,6 +28,7 @@ export function makePlayerState(
     inventory: [],
     equipment: emptyEquipment(),
     vault: { slots: [], decks: [], gold: 0 },
+    expansions: noExpansions(),
     lastScavenge: null,
     statuses: [],
     deck: [

@@ -12,13 +12,13 @@ Este arquivo define como trabalhar no backend do Misadventures. `docs/` reúne o
 
 ## Mapa de consultas pontuais
 
-| Fonte | Quando consultar |
-| --- | --- |
-| `docs/SPEC-BACKEND.md` | Requisitos, decisões, arquitetura e critérios da tarefa. |
-| `docs/README.md` | Seções das regras afetadas e decisões registradas no Apêndice B. |
-| `docs/CONTRATO.md` | Situação da FEAT e convenções antes de alterar rotas, campos, eventos ou erros expostos ao frontend. |
-| `docs/ROADMAP.md` | Planejamento da FEAT e protocolo da ponte entre repositórios (§2). |
-| `docs/devlog/README.md` e entrada da área | Histórico, formato do registro e ponto de retomada antes de alterar funcionalidade. |
+| Fonte                                     | Quando consultar                                                                                     |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `docs/SPEC-BACKEND.md`                    | Requisitos, decisões, arquitetura e critérios da tarefa.                                             |
+| `docs/README.md`                          | Seções das regras afetadas e decisões registradas no Apêndice B.                                     |
+| `docs/CONTRATO.md`                        | Situação da FEAT e convenções antes de alterar rotas, campos, eventos ou erros expostos ao frontend. |
+| `docs/ROADMAP.md`                         | Planejamento da FEAT e protocolo da ponte entre repositórios (§2).                                   |
+| `docs/devlog/README.md` e entrada da área | Histórico, formato do registro e ponto de retomada antes de alterar funcionalidade.                  |
 
 Use o mapa para selecionar as consultas da tarefa e mantenha o conteúdo técnico nos documentos de origem.
 

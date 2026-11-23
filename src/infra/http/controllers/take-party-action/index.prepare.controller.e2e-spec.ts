@@ -5,7 +5,11 @@ import { DRIZZLE, type Database } from '@/infra/database/database.tokens'
 import { parties } from '@/infra/database/drizzle/schema'
 import { removePostV6Config } from '../../../../../test/factories/remove-post-v6-config'
 import { createContentApp } from '../../../../../test/content-app'
-import { postParty, resetCampaign } from '../../../../../test/parties-e2e'
+import {
+  postParty,
+  resetCampaign,
+  withoutMarkets,
+} from '../../../../../test/parties-e2e'
 
 // CONTRATO FEAT-10: Preparar (REQ-71 a REQ-75) e save v5 (REQ-79). O estado é
 // montado pela doação do laboratório; só o Pico abaixo do requisito com o
@@ -389,13 +393,16 @@ describe('Preparar — equip e unequip (e2e)', () => {
       delete player.lastScavenge
       return { ...m, player }
     })
-    await writeState(party.id, {
-      ...state,
-      rewardDecks: undefined,
-      schemaVersion: 4,
-      config,
-      members,
-    })
+    await writeState(
+      party.id,
+      withoutMarkets({
+        ...state,
+        rewardDecks: undefined,
+        schemaVersion: 4,
+        config,
+        members,
+      })
+    )
 
     const read = await get(party.id)
     const { player } = read.members[0]

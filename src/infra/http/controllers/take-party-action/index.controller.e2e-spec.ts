@@ -13,6 +13,7 @@ import {
   PARTY_NOT_FOUND,
   postParty,
   resetCampaign,
+  withoutMarkets,
 } from '../../../../../test/parties-e2e'
 
 type TTurn = { round: number; memberId: string; actionPoints: number }
@@ -414,13 +415,13 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
     await db
       .update(parties)
       .set({
-        state: {
+        state: withoutMarkets({
           ...rest,
           rewardDecks: undefined,
           members,
           schemaVersion: 2,
           config: legacyConfig,
-        },
+        }),
       })
       .where(eq(parties.id, party.id))
 

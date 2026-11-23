@@ -17,6 +17,7 @@ import {
 } from '@/domain/campaign/enterprise/entities/party'
 import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
 import { DIRECTIONS } from '@/domain/campaign/enterprise/map-assembly'
+import { noExpansions } from '@/domain/campaign/enterprise/markets'
 import { sortedByCardId } from '@/domain/campaign/enterprise/starting-player'
 import { emptyVault } from '@/domain/campaign/enterprise/vault'
 import type { TEventEncounter } from '@/domain/campaign/enterprise/random-event'
@@ -706,6 +707,24 @@ const dimensionSchema = z.strictObject({
   }),
 })
 
+const expansionsSchema = z.strictObject({
+  vaultSlots: count,
+  deckSlots: count,
+  tcgFolder: count,
+  purse: count,
+  vaultGold: count,
+})
+
+const marketSchema = z.strictObject({
+  zoneId: id,
+  factorPercent: z.number().int().min(1),
+  singles: z.boolean(),
+  stock: z.array(
+    z.strictObject({ cardId: id, copies: z.number().int().min(1) })
+  ),
+  showcase: z.array(id.nullable()),
+})
+
 const turnSchema = z.strictObject({
   round: z.number().int().min(1),
   memberId: id,
@@ -801,6 +820,7 @@ const stateSchema = z
       ...stateFields(
         currentConfigSchema,
         playerSchema.extend({
+          expansions: expansionsSchema.optional(),
           down: z.boolean().optional(),
           skipNextTurn: z.boolean().optional(),
           lastKnockout: z
@@ -823,6 +843,10 @@ const stateSchema = z
           brokenEquipment: z.array(slot).optional(),
         })
       ),
+      markets: z.array(marketSchema).optional(),
+      marketPool: z
+        .array(z.strictObject({ cardId: id, departed: count }))
+        .optional(),
       combat: combat.nullable().optional(),
       combatZone: zoneType.optional(),
       lastCombatResult: combatResult.nullable().optional(),
@@ -915,6 +939,8 @@ export class DrizzlePartyMapper {
         }),
         ...(state.schemaVersion === SCHEMA_VERSION
           ? {
+              markets: state.markets,
+              marketPool: state.marketPool,
               combat: state.combat as TPartyProps['combat'],
               questRewardDelivery:
                 state.questRewardDelivery as TPartyProps['questRewardDelivery'],
@@ -990,6 +1016,9 @@ export class DrizzlePartyMapper {
             },
             equipment: { ...m.player.equipment },
             lastScavenge: upgradeScavenge(m.player.lastScavenge),
+            ...(m.player.expansions !== undefined && {
+              expansions: { ...m.player.expansions },
+            }),
             deck: [...m.player.deck],
             hand: [...m.player.hand],
             discard: [...m.player.discard],
@@ -1093,6 +1122,14 @@ export class DrizzlePartyMapper {
         ...(party.rewardSequence > 0 && {
           rewardSequence: party.rewardSequence,
         }),
+        ...(party.markets.length > 0 && {
+          markets: party.markets.map((market) => ({
+            ...market,
+            stock: market.stock.map((item) => ({ ...item })),
+            showcase: [...market.showcase],
+          })),
+          marketPool: party.marketPool.map((entry) => ({ ...entry })),
+        }),
         ...(snapshot.combat && { combat: combat.parse(snapshot.combat) }),
         ...(party.questAttempt && { questAttempt: { ...party.questAttempt } }),
         ...(snapshot.combatZone && { combatZone: snapshot.combatZone }),
@@ -1142,6 +1179,7 @@ type TStoredPlayer = z.infer<typeof legacyPlayerSchema> &
       | 'lastRewardSearch'
       | 'lastRewardDelivery'
       | 'lastKnockout'
+      | 'expansions'
     >
   >
 
@@ -1173,6 +1211,7 @@ function upgradePlayer(
     vault: player.vault ?? emptyVault(),
     lastScavenge: upgradeScavenge(player.lastScavenge),
     statuses: player.statuses ?? [],
+    expansions: player.expansions ?? noExpansions(),
   }
 }
 

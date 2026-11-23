@@ -46,3 +46,17 @@ export const DIMENSION_INVALID = {
 export const PARTY_NOT_FOUND = {
   error: { code: 'PARTY_NOT_FOUND', message: 'Grupo não encontrado.' },
 }
+
+/** Estado como era gravado antes da FEAT-16 (T-62): sem `markets`, `marketPool` e `expansions`. */
+export function withoutMarkets<T>(state: T): T {
+  const copy = { ...(state as Record<string, unknown>) }
+  delete copy.markets
+  delete copy.marketPool
+  if (Array.isArray(copy.members))
+    copy.members = copy.members.map((member: Record<string, unknown>) => {
+      const player = { ...(member.player as Record<string, unknown>) }
+      delete player.expansions
+      return { ...member, player }
+    })
+  return copy as T
+}

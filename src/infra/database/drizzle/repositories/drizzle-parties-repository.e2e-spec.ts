@@ -136,6 +136,40 @@ describe('DrizzlePartiesRepository (e2e)', () => {
     expect(read?.rngState).toEqual(original.rngState)
   })
 
+  it('REQ-138/REQ-139: mercados, pool e expansões no jsonb voltam iguais e contam como conteúdo em uso', async () => {
+    const markets = [
+      {
+        zoneId: 'fixture.gray-harbor',
+        factorPercent: 104,
+        singles: true,
+        stock: [{ cardId: 'fixture.a-card', copies: 3 }],
+        showcase: ['fixture.a-card', null],
+      },
+    ]
+    const marketPool = [
+      { cardId: 'fixture.a-card', departed: 2 },
+      { cardId: 'fixture.b-card', departed: 0 },
+    ]
+    await repository.create(
+      makeParty({ markets, marketPool }, new UniqueEntityID(ID_1))
+    )
+
+    const read = await repository.findById(ID_1)
+
+    expect(read?.markets).toEqual(markets)
+    expect(read?.marketPool).toEqual(marketPool)
+    expect(read?.members[0]?.player.expansions).toEqual({
+      vaultSlots: 0,
+      deckSlots: 0,
+      tcgFolder: 0,
+      purse: 0,
+      vaultGold: 0,
+    })
+    const { cardIds } = await repository.findContentInUse()
+    expect(cardIds.has('fixture.a-card')).toBe(true)
+    expect(cardIds.has('fixture.b-card')).toBe(true)
+  })
+
   it('D-43: a migração 0002 apaga os saves v1', async () => {
     await db.execute(
       sql`insert into parties (id, name, status, state, created_at, saved_at)

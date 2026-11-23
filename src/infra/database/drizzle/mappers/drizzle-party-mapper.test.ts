@@ -318,6 +318,7 @@ describe('DrizzlePartyMapper', () => {
       members: row.state.members.map(({ player, ...member }) => {
         const legacyPlayer: Partial<typeof player> = { ...player }
         delete legacyPlayer.statuses
+        delete legacyPlayer.expansions
         return { ...member, player: legacyPlayer }
       }),
     }
@@ -424,6 +425,7 @@ describe('DrizzlePartyMapper', () => {
     for (const key of removedKeys) delete config[key]
     for (const member of row.state.members) {
       delete member.player.statuses
+      delete member.player.expansions
       delete member.player.vault
       delete member.player.lastScavenge
       if (version < 5) {
@@ -807,5 +809,154 @@ describe('DrizzlePartyMapper', () => {
         savedAt: new Date(),
       })
     ).toThrow()
+  })
+
+  const MARKET_STATE = {
+    markets: [
+      {
+        zoneId: 'fixture.gray-harbor',
+        factorPercent: 113,
+        singles: true,
+        stock: [
+          { cardId: 'fixture.a-card', copies: 2 },
+          { cardId: 'fixture.b-card', copies: 1 },
+        ],
+        showcase: ['fixture.b-card', null, 'fixture.a-card', null],
+      },
+      {
+        zoneId: 'fixture.old-mine',
+        factorPercent: 87,
+        singles: false,
+        stock: [],
+        showcase: [],
+      },
+    ],
+    pool: [
+      { cardId: 'fixture.a-card', departed: 3 },
+      { cardId: 'fixture.b-card', departed: 0 },
+    ],
+  }
+
+  it('REQ-138/REQ-143: ida e volta preserva mercados, pool, saídas e expansões', () => {
+    const party = makeParty({
+      status: 'inSession',
+      markets: MARKET_STATE.markets,
+      marketPool: MARKET_STATE.pool,
+      members: [
+        PartyMember.create(
+          {
+            characterName: 'Lia',
+            kind: 'human',
+            player: makePlayerState({
+              expansions: {
+                vaultSlots: 2,
+                deckSlots: 1,
+                tcgFolder: 0,
+                purse: 1,
+                vaultGold: 0,
+              },
+            }),
+          },
+          new UniqueEntityID('member-1')
+        ),
+      ],
+    })
+    const row = JSON.parse(
+      JSON.stringify(DrizzlePartyMapper.toDrizzle(party))
+    ) as TPartyRow
+
+    const restored = DrizzlePartyMapper.toDomain({
+      ...row,
+      createdAt: party.createdAt,
+      savedAt: party.savedAt,
+    })
+
+    expect(restored.markets).toEqual(MARKET_STATE.markets)
+    expect(restored.marketPool).toEqual(MARKET_STATE.pool)
+    expect(restored.members[0].player.expansions).toEqual({
+      vaultSlots: 2,
+      deckSlots: 1,
+      tcgFolder: 0,
+      purse: 1,
+      vaultGold: 0,
+    })
+    expect(DrizzlePartyMapper.toDrizzle(restored).state.schemaVersion).toBe(9)
+  })
+
+  /** Linha como era gravada antes da FEAT-16: sem `expansions` nos jogadores. */
+  function rowBeforeMarkets(
+    party: ReturnType<typeof usedRngParty>,
+    schemaVersion: number
+  ) {
+    const row = JSON.parse(
+      JSON.stringify(DrizzlePartyMapper.toDrizzle(party))
+    ) as TPartyRow & {
+      state: {
+        schemaVersion: number
+        members: { player: Record<string, unknown> }[]
+      }
+    }
+    row.state.schemaVersion = schemaVersion
+    for (const member of row.state.members) delete member.player.expansions
+    return row
+  }
+
+  it('REQ-138: o save v9 de antes da FEAT-16 lê mercados vazios e expansões em 0, sem usar o RNG', () => {
+    const party = usedRngParty()
+    const row = rowBeforeMarkets(party, 9)
+
+    const restored = DrizzlePartyMapper.toDomain({
+      ...row,
+      createdAt: party.createdAt,
+      savedAt: party.savedAt,
+    })
+
+    expect(restored.markets).toEqual([])
+    expect(restored.marketPool).toEqual([])
+    expect(restored.members[0].player.expansions).toEqual({
+      vaultSlots: 0,
+      deckSlots: 0,
+      tcgFolder: 0,
+      purse: 0,
+      vaultGold: 0,
+    })
+    expect(restored.rngState).toEqual(party.rngState)
+  })
+
+  it.each([2, 3, 4, 5] as const)(
+    'REQ-138: o save v%i lê mercados vazios e expansões em 0, sem usar o RNG, e regrava como v9',
+    (version) => {
+      const { party, row } = legacyRow(version)
+
+      const restored = DrizzlePartyMapper.toDomain(row)
+
+      expect(restored.markets).toEqual([])
+      expect(restored.marketPool).toEqual([])
+      expect(restored.members[0].player.expansions).toEqual({
+        vaultSlots: 0,
+        deckSlots: 0,
+        tcgFolder: 0,
+        purse: 0,
+        vaultGold: 0,
+      })
+      expect(restored.rngState).toEqual(party.rngState)
+      expect(DrizzlePartyMapper.toDrizzle(restored).state.schemaVersion).toBe(9)
+    }
+  )
+
+  it('REQ-138: o save v8 lê mercados vazios e expansões em 0, sem usar o RNG', () => {
+    const party = usedRngParty()
+    const row = rowBeforeMarkets(party, 8)
+
+    const restored = DrizzlePartyMapper.toDomain({
+      ...row,
+      createdAt: party.createdAt,
+      savedAt: party.savedAt,
+    })
+
+    expect(restored.markets).toEqual([])
+    expect(restored.marketPool).toEqual([])
+    expect(restored.members[0].player.expansions?.purse).toBe(0)
+    expect(restored.rngState).toEqual(party.rngState)
   })
 })

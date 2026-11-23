@@ -12,7 +12,11 @@ import {
   MAGE_INPUT,
 } from '../../../../../test/content-app'
 import { removePostV6Config } from '../../../../../test/factories/remove-post-v6-config'
-import { postParty, resetCampaign } from '../../../../../test/parties-e2e'
+import {
+  postParty,
+  resetCampaign,
+  withoutMarkets,
+} from '../../../../../test/parties-e2e'
 
 // CONTRATO FEAT-09 (REQ-60 a REQ-68). A pasta ainda não enche no jogo (D-69):
 // as trocas com a pasta partem de saves montados direto no jsonb.
@@ -535,13 +539,13 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
     await db
       .update(parties)
       .set({
-        state: {
+        state: withoutMarkets({
           ...state,
           rewardDecks: undefined,
           schemaVersion: 3,
           config,
           members,
-        },
+        }),
       })
       .where(eq(parties.id, party.id))
 

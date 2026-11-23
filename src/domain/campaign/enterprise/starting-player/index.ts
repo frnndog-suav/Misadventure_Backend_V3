@@ -12,6 +12,7 @@ import {
   maxHealthOf,
   type TPlayerState,
 } from '../entities/party-member'
+import { noExpansions } from '../markets'
 import { shuffle } from '../shuffle'
 import { emptyVault } from '../vault'
 
@@ -87,6 +88,7 @@ export function createStartingPlayer({
     inventory: [],
     equipment: emptyEquipment(),
     vault: emptyVault(),
+    expansions: noExpansions(),
     lastScavenge: null,
     statuses: [],
     deck,

@@ -412,3 +412,43 @@ describe('CreatePartyUseCase', () => {
     expect(create).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('CreatePartyUseCase — mercados (REQ-138)', () => {
+  it('REQ-138: entrega ao grupo as elegíveis da coleção da dimensão e sorteia os mercados', async () => {
+    const fixture = makeFixtureContent()
+    const catalog = new InMemoryCardCatalog()
+    catalog.collections = fixture.collections
+    catalog.classes = fixture.classes
+    catalog.cards = fixture.cards.map((card) =>
+      card.type === 'zone' && card.id === 'fixture.gray-harbor'
+        ? {
+            ...card,
+            zoneActions: [...card.zoneActions, 'visitMarket' as const],
+            market: { stock: [], singles: true },
+          }
+        : card
+    )
+    const parties = new InMemoryPartiesRepository()
+    const sut = new CreatePartyUseCase(
+      parties,
+      new GetGameConfigUseCase(new InMemoryGameConfigRepository()),
+      catalog,
+      fixedClock(NOW),
+      sequentialIds('p'),
+      fixedSeed(42)
+    )
+
+    const result = await sut.execute({ body: BODY })
+
+    if (!result.isRight()) throw new Error('esperava sucesso')
+    const { party } = result.value
+    expect(party.markets.map(({ zoneId }) => zoneId)).toEqual([
+      'fixture.gray-harbor',
+    ])
+    expect(party.marketPool.map(({ cardId }) => cardId)).toEqual([
+      'fixture.dexterity-basic',
+      'fixture.endurance-basic',
+      'fixture.strength-basic',
+    ])
+  })
+})
