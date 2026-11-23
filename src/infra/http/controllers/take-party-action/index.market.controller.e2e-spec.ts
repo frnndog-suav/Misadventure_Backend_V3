@@ -23,6 +23,12 @@ type TPlayer = {
   inventory: { cardId: string; quantity: number }[]
   tcgFolder: { cardId: string; copies: number }[]
   availableActions: string[]
+  purseCapacity: number
+  vaultCapacity: number
+  vaultDeckSlots: number
+  vaultGoldCapacity: number
+  tcgFolderCapacity: number
+  expansions: Record<string, number>
   moveTargets: string[]
   market: {
     zoneId: string
@@ -382,6 +388,90 @@ describe('Ir ao Mercado (e2e)', () => {
     )
     expect(broke.status).toBe(409)
     expect(broke.body).toEqual(notAllowed({ reason: 'noActionPoints' }))
+  })
+
+  it('REQ-143: expansões — vaultGold recusado com 300 (500); purse a 150 → bolsa 600 e serviço seguinte; com 110, 50 + 100 recusa no índice 1; persiste', async () => {
+    const party = await startedParty()
+    await grant(party, { type: 'gold', amount: 300 })
+
+    const tooPoor = await act(
+      party.id,
+      visitMarket({ operation: 'buyExpansion', expansion: 'vaultGold' })
+    )
+    expect(tooPoor.status).toBe(409)
+    expect(tooPoor.body).toEqual(
+      notAllowed({ reason: 'notEnoughGold', operationIndex: 0 })
+    )
+    expect(player(await get(party.id)).gold).toBe(300)
+
+    const bought = await act(
+      party.id,
+      visitMarket({ operation: 'buyExpansion', expansion: 'purse' })
+    )
+    expect(bought.status).toBe(200)
+    const p = player(bought.body)
+    expect(p.gold).toBe(150)
+    expect(p.purseCapacity).toBe(600)
+    expect(p.expansions.purse).toBe(1)
+    expect(p.market?.services.find((s) => s.expansion === 'purse')).toEqual({
+      expansion: 'purse',
+      price: 300,
+      capacity: 1200,
+    })
+    expect(p.lastMarketVisit?.results).toEqual([
+      {
+        operation: 'buyExpansion',
+        expansion: 'purse',
+        capacity: 600,
+        gold: -150,
+      },
+    ])
+
+    const reread = player(await get(party.id))
+    expect(reread.expansions.purse).toBe(1)
+    expect(reread.purseCapacity).toBe(600)
+
+    const poorer = await startedParty()
+    await grant(poorer, { type: 'gold', amount: 110 })
+    const second = await act(
+      poorer.id,
+      visitMarket(
+        { operation: 'buyExpansion', expansion: 'vaultSlots' },
+        { operation: 'buyExpansion', expansion: 'vaultSlots' }
+      )
+    )
+    expect(second.status).toBe(409)
+    expect(second.body).toEqual(
+      notAllowed({ reason: 'notEnoughGold', operationIndex: 1 })
+    )
+  })
+
+  it('REQ-143: o cofre e a pasta efetivos aparecem no presenter (vaultSlots +5 → 35; tcgFolder +10 → 40)', async () => {
+    const party = await startedParty()
+    await grant(party, { type: 'gold', amount: 110 })
+
+    const bought = await act(
+      party.id,
+      visitMarket(
+        { operation: 'buyExpansion', expansion: 'vaultSlots' },
+        { operation: 'buyExpansion', expansion: 'tcgFolder' }
+      )
+    )
+
+    expect(bought.status).toBe(200)
+    const p = player(bought.body)
+    expect(p.vaultCapacity).toBe(35)
+    expect(p.tcgFolderCapacity).toBe(40)
+    expect(p.vaultDeckSlots).toBe(10)
+    expect(p.vaultGoldCapacity).toBe(2000)
+    expect(p.expansions).toEqual({
+      vaultSlots: 1,
+      deckSlots: 0,
+      tcgFolder: 1,
+      purse: 0,
+      vaultGold: 0,
+    })
+    expect(p.gold).toBe(0)
   })
 
   it('CONTRATO FEAT-16, Formato: lista vazia, slotIndex negativo, source e operation desconhecidos → 400', async () => {

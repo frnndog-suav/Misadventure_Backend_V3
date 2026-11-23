@@ -12,10 +12,9 @@ import {
 import { makePlayerState } from '../../../../../test/factories/make-party'
 
 import type { TMarketOperation } from '../party-action'
-import type { TMarketsState } from '../markets'
+import { capacitiesOf, noExpansions, type TMarketsState } from '../markets'
 import {
   applyMarketOperations,
-  capacitiesOf,
   describeMarket,
   marketBoosters,
   sellOffersOf,
@@ -690,5 +689,159 @@ describe('applyMarketOperations — lote (D-118)', () => {
     expect(result.isRight()).toBe(true)
     if (!result.isRight()) return
     expect(result.value.player.gold).toBe(5)
+  })
+})
+
+describe('applyMarketOperations — expansões (REQ-143; D-120)', () => {
+  it('REQ-143: vaultSlots a 50, depois a 100 no mesmo lote; grava a contagem e informa a capacidade depois da compra', () => {
+    const { result } = apply(
+      [
+        { operation: 'buyExpansion', expansion: 'vaultSlots' },
+        { operation: 'buyExpansion', expansion: 'vaultSlots' },
+      ],
+      { player: { gold: 150 } }
+    )
+
+    expect(result.isRight()).toBe(true)
+    if (!result.isRight()) return
+    expect(result.value.player.gold).toBe(0)
+    expect(result.value.player.expansions?.vaultSlots).toBe(2)
+    expect(result.value.result.results).toEqual([
+      {
+        operation: 'buyExpansion',
+        expansion: 'vaultSlots',
+        capacity: 35,
+        gold: -50,
+      },
+      {
+        operation: 'buyExpansion',
+        expansion: 'vaultSlots',
+        capacity: 40,
+        gold: -100,
+      },
+    ])
+    expect(result.value.result.goldLost).toBe(0)
+  })
+
+  it('REQ-143: deckSlots (100, 200) e tcgFolder (60, 120) seguem base × 2^compras', () => {
+    const { result } = apply(
+      [
+        { operation: 'buyExpansion', expansion: 'deckSlots' },
+        { operation: 'buyExpansion', expansion: 'deckSlots' },
+        { operation: 'buyExpansion', expansion: 'tcgFolder' },
+        { operation: 'buyExpansion', expansion: 'tcgFolder' },
+      ],
+      { player: { gold: 480 } }
+    )
+
+    expect(result.isRight()).toBe(true)
+    if (!result.isRight()) return
+    expect(result.value.player.gold).toBe(0)
+    expect(result.value.result.results.map((r) => r.gold)).toEqual([
+      -100, -200, -60, -120,
+    ])
+    expect(result.value.player.expansions).toMatchObject({
+      deckSlots: 2,
+      tcgFolder: 2,
+    })
+  })
+
+  it('REQ-143: bolsa 300 → 600 por 150; a 2ª compra custa 300 e leva a 1200', () => {
+    const { result } = apply(
+      [
+        { operation: 'buyExpansion', expansion: 'purse' },
+        { operation: 'buyExpansion', expansion: 'purse' },
+      ],
+      { player: { gold: 450 } }
+    )
+
+    expect(result.isRight()).toBe(true)
+    if (!result.isRight()) return
+    expect(result.value.result.results).toEqual([
+      {
+        operation: 'buyExpansion',
+        expansion: 'purse',
+        capacity: 600,
+        gold: -150,
+      },
+      {
+        operation: 'buyExpansion',
+        expansion: 'purse',
+        capacity: 1200,
+        gold: -300,
+      },
+    ])
+  })
+
+  it('REQ-143: a 1ª expansão do ouro do cofre (500) com a bolsa padrão (300) → notEnoughGold, índice e sem efeito', () => {
+    const { result, player } = apply(
+      [{ operation: 'buyExpansion', expansion: 'vaultGold' }],
+      { player: { gold: 300 } }
+    )
+
+    expect(result.isLeft() && result.value).toEqual({
+      reason: 'notEnoughGold',
+      operationIndex: 0,
+    })
+    expect(player.gold).toBe(300)
+    expect(player.expansions).toEqual({
+      vaultSlots: 0,
+      deckSlots: 0,
+      tcgFolder: 0,
+      purse: 0,
+      vaultGold: 0,
+    })
+  })
+
+  it('REQ-143: com a bolsa a 600 o ouro do cofre custa 500 e leva a 4000', () => {
+    const { result } = apply(
+      [{ operation: 'buyExpansion', expansion: 'vaultGold' }],
+      { player: { gold: 600, expansions: { ...noExpansions(), purse: 1 } } }
+    )
+
+    expect(result.isRight()).toBe(true)
+    if (!result.isRight()) return
+    expect(result.value.player.gold).toBe(100)
+    expect(result.value.result.results).toEqual([
+      {
+        operation: 'buyExpansion',
+        expansion: 'vaultGold',
+        capacity: 4000,
+        gold: -500,
+      },
+    ])
+  })
+
+  it('REQ-143: a bolsa expandida vale na venda do mesmo lote (nada se perde até 600)', () => {
+    const { result } = apply(
+      [
+        { operation: 'buyExpansion', expansion: 'purse' },
+        { operation: 'sell', source: 'inventory', cardId: C.id, quantity: 1 },
+      ],
+      { player: { gold: 450, inventory: [{ cardId: C.id, quantity: 1 }] } }
+    )
+
+    expect(result.isRight()).toBe(true)
+    if (!result.isRight()) return
+    expect(result.value.player.gold).toBe(300 + 25)
+    expect(result.value.result.goldLost).toBe(0)
+  })
+
+  it('REQ-143: a bolsa já expandida (600) vale na venda: 590 + 25 → 600 e perde 15', () => {
+    const { result } = apply(
+      [{ operation: 'sell', source: 'inventory', cardId: C.id, quantity: 1 }],
+      {
+        player: {
+          gold: 590,
+          inventory: [{ cardId: C.id, quantity: 1 }],
+          expansions: { ...noExpansions(), purse: 1 },
+        },
+      }
+    )
+
+    expect(result.isRight()).toBe(true)
+    if (!result.isRight()) return
+    expect(result.value.player.gold).toBe(600)
+    expect(result.value.result.goldLost).toBe(15)
   })
 })

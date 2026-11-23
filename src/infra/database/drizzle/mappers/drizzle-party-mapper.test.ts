@@ -4,6 +4,7 @@ import { SeededRng } from '@/core/rng/seeded-rng'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
 import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
+import { noExpansions } from '@/domain/campaign/enterprise/markets'
 import { PartyPresenter } from '@/infra/http/presenters/party-presenter'
 import { removePostV6Config } from '../../../../../test/factories/remove-post-v6-config'
 import { makeCombatEventCard } from '../../../../../test/factories/make-card'
@@ -663,6 +664,38 @@ describe('DrizzlePartyMapper', () => {
     expect(restored.members[0].player.gold).toBe(300)
   })
 
+  it('REQ-143: o ouro acima de purseCapacity é limitado pela bolsa efetiva (600 com purse 1 mantém 450; sem expansão, 300)', () => {
+    const load = (expansions: { purse: number }) => {
+      const party = makeParty({
+        status: 'inSession',
+        members: [
+          PartyMember.create(
+            {
+              characterName: 'Lia',
+              kind: 'human',
+              player: makePlayerState({
+                gold: 450,
+                expansions: { ...noExpansions(), ...expansions },
+              }),
+            },
+            new UniqueEntityID('member-1')
+          ),
+        ],
+      })
+      const row = JSON.parse(
+        JSON.stringify(DrizzlePartyMapper.toDrizzle(party))
+      ) as TPartyRow
+      return DrizzlePartyMapper.toDomain({
+        ...row,
+        createdAt: party.createdAt,
+        savedAt: party.savedAt,
+      }).members[0].player.gold
+    }
+
+    expect(load({ purse: 1 })).toBe(450)
+    expect(load({ purse: 0 })).toBe(300)
+  })
+
   it('REQ-79: ida e volta preserva inventário (com a ordem), equipamentos e ouro', () => {
     const base = makeParty({ status: 'inSession' })
     const member = base.members[0]
@@ -915,6 +948,12 @@ describe('DrizzlePartyMapper', () => {
           cardId: 'fixture.strength-basic',
           quantity: 2,
           gold: 4,
+        },
+        {
+          operation: 'buyExpansion' as const,
+          expansion: 'purse' as const,
+          capacity: 600,
+          gold: -150,
         },
       ],
     }

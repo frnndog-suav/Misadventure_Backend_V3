@@ -62,6 +62,13 @@ describe('POST /parties (e2e)', () => {
             openQuests: [],
             questChoices: [],
             specializations: [],
+            expansions: {
+              vaultSlots: 0,
+              deckSlots: 0,
+              tcgFolder: 0,
+              purse: 0,
+              vaultGold: 0,
+            },
             gold: 10,
             baseHealth: 20,
             maxHealth: 22,

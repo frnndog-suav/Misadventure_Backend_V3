@@ -34,6 +34,11 @@ import { effectiveModifiers } from '@/domain/campaign/enterprise/effective-modif
 import { scavengeTargets } from '@/domain/campaign/enterprise/scavenge'
 import type { TPartyActionType } from '@/domain/campaign/enterprise/party-action'
 import type { TDirection } from '@/domain/campaign/enterprise/map-assembly'
+import {
+  capacitiesOf,
+  noExpansions,
+  type TMarketExpansion,
+} from '@/domain/campaign/enterprise/markets'
 import { questBoard } from '@/domain/campaign/enterprise/zone-quests'
 import type { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import type {
@@ -114,6 +119,8 @@ export interface TPlayerStateHttp {
   scavengeTargets: string[]
   /** FEAT-16 (REQ-140). Só para o membro da vez numa zona com mercado. */
   market: TMarketView | null
+  /** FEAT-16 (REQ-143). Contagem de cada expansão comprada; as capacidades acima já são as efetivas. */
+  expansions: Record<TMarketExpansion, number>
   lastMarketVisit: TMarketVisitResult | null
   lastScavenge:
     | (NonNullable<TPlayerState['lastScavenge']> & {
@@ -180,6 +187,8 @@ function playerToHTTP(
   classes: readonly TClassDefinition[]
 ): TPlayerStateHttp {
   const player = member.player
+  const expansions = player.expansions ?? noExpansions()
+  const capacities = capacitiesOf(party.config, expansions)
   const { map } = party.dimension
   const equipmentCards = Object.values(player.equipment)
     .map((cardId) => (cardId === null ? undefined : cards.get(cardId)))
@@ -277,7 +286,7 @@ function playerToHTTP(
     build: copiesToHTTP(player.build),
     buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),
     tcgFolder: copiesToHTTP(player.tcgFolder),
-    tcgFolderCapacity: party.config.tcgFolderCapacity,
+    tcgFolderCapacity: capacities.tcgFolder,
     inventory: player.inventory.map(({ cardId, quantity }) => ({
       cardId,
       quantity,
@@ -286,7 +295,7 @@ function playerToHTTP(
     activatableEffects: effects,
     inventoryCapacity: party.config.inventoryCapacity,
     equipment: { ...player.equipment },
-    purseCapacity: party.config.purseCapacity,
+    purseCapacity: capacities.purse,
     effectiveModifiers:
       (party.turn.memberId.equals(member.id)
         ? party.combatPlayerModifiers(cards)
@@ -306,11 +315,12 @@ function playerToHTTP(
       decks: player.vault.decks.map(copiesToHTTP),
       gold: player.vault.gold,
     },
-    vaultCapacity: party.config.vaultCapacity,
-    vaultDeckSlots: party.config.vaultDeckSlots,
-    vaultGoldCapacity: party.config.vaultGoldCapacity,
+    vaultCapacity: capacities.vaultSlots,
+    vaultDeckSlots: capacities.deckSlots,
+    vaultGoldCapacity: capacities.vaultGold,
     scavengeTargets: targets,
     market: party.describeMarket(member, cards),
+    expansions: { ...expansions },
     lastMarketVisit: player.lastMarketVisit ?? null,
     lastScavenge:
       player.lastScavenge === null

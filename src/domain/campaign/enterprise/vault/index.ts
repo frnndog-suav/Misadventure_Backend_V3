@@ -7,6 +7,7 @@ import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/ga
 
 import type { TPlayerState } from '../entities/party-member'
 import { addToInventory, type TInventorySlot } from '../inventory'
+import { capacitiesOf } from '../markets'
 import type { TVaultOperation } from '../party-action'
 import { sortedByCardId } from '../starting-player'
 
@@ -138,6 +139,7 @@ export function applyVaultOperations(input: {
   operations: readonly TVaultOperation[]
 }): Either<TVaultRefusal, TVaultOutcome> {
   const { config, cards, operations } = input
+  const capacity = capacitiesOf(config, input.player.expansions)
   let { inventory, tcgFolder, gold, build } = input.player
   let { slots, decks, gold: vaultGold } = input.player.vault
   const limbo: TLimboEntry[] = []
@@ -190,12 +192,7 @@ export function applyVaultOperations(input: {
           if (!entry || entry.copies < quantity) {
             return refuse('notInTcgFolder')
           }
-          const added = addToSlots(
-            slots,
-            cardId,
-            quantity,
-            config.vaultCapacity
-          )
+          const added = addToSlots(slots, cardId, quantity, capacity.vaultSlots)
           if (added === null) return refuse('vaultFull')
           slots = added
           tcgFolder = tcgFolder.flatMap((e) =>
@@ -208,12 +205,7 @@ export function applyVaultOperations(input: {
         } else {
           const removed = removeFromInventory(inventory, cardId, quantity)
           if (removed === null) return refuse('notInInventory')
-          const added = addToSlots(
-            slots,
-            cardId,
-            quantity,
-            config.vaultCapacity
-          )
+          const added = addToSlots(slots, cardId, quantity, capacity.vaultSlots)
           if (added === null) return refuse('vaultFull')
           slots = added
           inventory = removed
@@ -227,7 +219,7 @@ export function applyVaultOperations(input: {
         const card = cardOf(cardId)
         if (!card) return refuse('notStorable')
         if (card.type === 'attribute') {
-          if (folderSize(tcgFolder) + quantity > config.tcgFolderCapacity) {
+          if (folderSize(tcgFolder) + quantity > capacity.tcgFolder) {
             return refuse('tcgFolderFull')
           }
           const existing = tcgFolder.find((e) => e.cardId === cardId)
@@ -253,7 +245,7 @@ export function applyVaultOperations(input: {
       case 'storeGold': {
         const { amount } = operation
         if (gold < amount) return refuse('notEnoughGold')
-        if (vaultGold + amount > config.vaultGoldCapacity) {
+        if (vaultGold + amount > capacity.vaultGold) {
           return refuse('vaultGoldFull')
         }
         gold -= amount
@@ -263,7 +255,7 @@ export function applyVaultOperations(input: {
       case 'takeGold': {
         const { amount } = operation
         if (vaultGold < amount) return refuse('notEnoughVaultGold')
-        if (gold + amount > config.purseCapacity) return refuse('purseFull')
+        if (gold + amount > capacity.purse) return refuse('purseFull')
         gold += amount
         vaultGold -= amount
         break
@@ -291,7 +283,7 @@ export function applyVaultOperations(input: {
           return refuse('notAttribute')
         }
         // A build em uso também ocupa um slot de decks (README 6.4).
-        if (decks.length + 2 > config.vaultDeckSlots) {
+        if (decks.length + 2 > capacity.deckSlots) {
           return refuse('deckSlotsFull')
         }
         slots = remaining
@@ -303,7 +295,7 @@ export function applyVaultOperations(input: {
         if (deck === undefined) return refuse('deckNotFound')
         let next: TSlots = slots
         for (const { cardId, copies } of deck) {
-          const added = addToSlots(next, cardId, copies, config.vaultCapacity)
+          const added = addToSlots(next, cardId, copies, capacity.vaultSlots)
           if (added === null) return refuse('vaultFull')
           next = added
         }
@@ -360,7 +352,7 @@ export function applyVaultOperations(input: {
           if (slots.some((slot) => slot.cardId === cardId)) continue
           const rest = (pool.get(cardId) ?? 0) - (used.get(cardId) ?? 0)
           if (rest <= 0) continue
-          const added = addToSlots(leftover, cardId, rest, config.vaultCapacity)
+          const added = addToSlots(leftover, cardId, rest, capacity.vaultSlots)
           if (added === null) return refuse('vaultFull')
           leftover = added
         }

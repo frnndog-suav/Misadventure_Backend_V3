@@ -96,6 +96,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 076 | T-61 | [Conteúdo, editor e laboratório do mercado](076-T-61-conteudo-editor-e-laboratorio-do-mercado.md) | concluída |
 | 077 | T-62 | [Estado dos mercados e save v9](077-T-62-estado-dos-mercados-e-save-v9.md) | concluída |
 | 078 | T-63 | [Ir ao Mercado: compras, venda e projeção](078-T-63-ir-ao-mercado.md) | aguardando revisão |
+| 079 | T-64 | [Serviços de expansão e capacidades efetivas](079-T-64-servicos-de-expansao.md) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

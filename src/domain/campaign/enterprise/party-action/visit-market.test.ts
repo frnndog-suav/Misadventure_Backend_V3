@@ -126,3 +126,46 @@ describe('parsePartyAction — visitMarket (REQ-140; D-118)', () => {
     ).toEqual([{ field: 'extra', reason: 'unknownKey' }])
   })
 })
+
+describe('parsePartyAction — buyExpansion (REQ-143; D-120)', () => {
+  it('REQ-143: as cinco expansões válidas → a operação, com o campo lido', () => {
+    const operations = [
+      'vaultSlots',
+      'deckSlots',
+      'tcgFolder',
+      'purse',
+      'vaultGold',
+    ].map((expansion) => ({ operation: 'buyExpansion', expansion }))
+
+    const result = parsePartyAction({ type: 'visitMarket', operations })
+
+    expect(result.isRight()).toBe(true)
+    if (result.isRight()) {
+      expect(result.value).toEqual({ type: 'visitMarket', operations })
+    }
+  })
+
+  it('CONTRATO FEAT-16: expansion fora das 5 → unknownOption; ausente → required; não texto → notString', () => {
+    expect(
+      issuesOf(withOperations({ operation: 'buyExpansion', expansion: 'gold' }))
+    ).toEqual([{ field: 'operations.0.expansion', reason: 'unknownOption' }])
+    expect(issuesOf(withOperations({ operation: 'buyExpansion' }))).toEqual([
+      { field: 'operations.0.expansion', reason: 'required' },
+    ])
+    expect(
+      issuesOf(withOperations({ operation: 'buyExpansion', expansion: 3 }))
+    ).toEqual([{ field: 'operations.0.expansion', reason: 'notString' }])
+  })
+
+  it('REQ-143: campo a mais em buyExpansion → unknownKey', () => {
+    expect(
+      issuesOf(
+        withOperations({
+          operation: 'buyExpansion',
+          expansion: 'purse',
+          quantity: 2,
+        })
+      )
+    ).toEqual([{ field: 'operations.0.quantity', reason: 'unknownKey' }])
+  })
+})

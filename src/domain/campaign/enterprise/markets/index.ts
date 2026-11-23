@@ -335,3 +335,24 @@ export const noExpansions = (): TExpansions => ({
   purse: 0,
   vaultGold: 0,
 })
+
+/** Capacidades efetivas do jogador: snapshot + expansões (REQ-143; D-120). */
+export type TCapacities = Readonly<Record<TMarketExpansion, number>>
+
+export function capacitiesOf(
+  config: TGameConfigValues,
+  expansions: TExpansions = noExpansions()
+): TCapacities {
+  return {
+    vaultSlots:
+      config.vaultCapacity + config.vaultExpansionSlots * expansions.vaultSlots,
+    deckSlots:
+      config.vaultDeckSlots +
+      config.deckSlotExpansionSlots * expansions.deckSlots,
+    tcgFolder:
+      config.tcgFolderCapacity +
+      config.tcgFolderExpansionSlots * expansions.tcgFolder,
+    purse: config.purseCapacity * 2 ** expansions.purse,
+    vaultGold: config.vaultGoldCapacity * 2 ** expansions.vaultGold,
+  }
+}

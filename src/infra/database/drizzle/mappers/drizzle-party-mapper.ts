@@ -17,7 +17,11 @@ import {
 } from '@/domain/campaign/enterprise/entities/party'
 import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
 import { DIRECTIONS } from '@/domain/campaign/enterprise/map-assembly'
-import { noExpansions } from '@/domain/campaign/enterprise/markets'
+import {
+  capacitiesOf,
+  MARKET_EXPANSIONS,
+  noExpansions,
+} from '@/domain/campaign/enterprise/markets'
 import { sortedByCardId } from '@/domain/campaign/enterprise/starting-player'
 import { emptyVault } from '@/domain/campaign/enterprise/vault'
 import type { TEventEncounter } from '@/domain/campaign/enterprise/random-event'
@@ -749,6 +753,12 @@ const marketVisitSchema = z.strictObject({
           quantity: marketQuantity,
           gold: marketGold,
         }),
+        z.strictObject({
+          operation: z.literal('buyExpansion'),
+          expansion: z.enum(MARKET_EXPANSIONS),
+          capacity: count,
+          gold: marketGold,
+        }),
       ])
     )
     .readonly(),
@@ -954,11 +964,7 @@ export class DrizzlePartyMapper {
             {
               characterName: m.characterName,
               kind: m.kind,
-              player: upgradePlayer(
-                m.player,
-                config.purseCapacity,
-                state.dimension
-              ),
+              player: upgradePlayer(m.player, config, state.dimension),
             },
             new UniqueEntityID(m.id)
           )
@@ -1231,13 +1237,14 @@ type TStoredPlayer = z.infer<typeof legacyPlayerSchema> &
 /**
  * D-70: antes da FEAT-09 não havia pasta; a build vai em ordem de cardId
  * (REQ-62). D-79: antes da FEAT-10, inventário vazio e nada equipado, e o
- * ouro limitado à `purseCapacity` (REQ-70). D-87: antes da FEAT-32, cofre vazio.
+ * ouro limitado à bolsa efetiva (REQ-70, REQ-143). D-87: antes da FEAT-32, cofre vazio.
  */
 function upgradePlayer(
   player: TStoredPlayer,
-  purseCapacity: number,
+  config: TGameConfigValues,
   dimension: Party['dimension']
 ): TPlayerState {
+  const expansions = player.expansions ?? noExpansions()
   const respawn = player.respawnZoneId
   return {
     ...player,
@@ -1245,7 +1252,7 @@ function upgradePlayer(
       respawn && dimension.map.zones.some(({ zoneId }) => zoneId === respawn)
         ? respawn
         : dimension.startingCityZoneId,
-    gold: Math.min(player.gold, purseCapacity),
+    gold: Math.min(player.gold, capacitiesOf(config, expansions).purse),
     build:
       player.tcgFolder === undefined
         ? sortedByCardId(player.build)
@@ -1256,7 +1263,7 @@ function upgradePlayer(
     vault: player.vault ?? emptyVault(),
     lastScavenge: upgradeScavenge(player.lastScavenge),
     statuses: player.statuses ?? [],
-    expansions: player.expansions ?? noExpansions(),
+    expansions,
   }
 }
 

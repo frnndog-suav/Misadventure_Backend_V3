@@ -10,7 +10,9 @@ import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/ga
 import type { TPlayerState } from '../entities/party-member'
 import { addToInventory } from '../inventory'
 import {
+  capacitiesOf,
   departSingle,
+  MARKET_EXPANSIONS,
   noExpansions,
   type TExpansions,
   type TMarketCandidate,
@@ -127,27 +129,6 @@ const baseSellPrice = (config: TGameConfigValues, card: TSellable): number =>
         10_000
     )
   )
-
-/** Capacidades efetivas do jogador: snapshot + expansões (REQ-143; D-120). */
-export type TCapacities = Readonly<Record<TMarketExpansion, number>>
-
-export function capacitiesOf(
-  config: TGameConfigValues,
-  expansions: TExpansions = noExpansions()
-): TCapacities {
-  return {
-    vaultSlots:
-      config.vaultCapacity + config.vaultExpansionSlots * expansions.vaultSlots,
-    deckSlots:
-      config.vaultDeckSlots +
-      config.deckSlotExpansionSlots * expansions.deckSlots,
-    tcgFolder:
-      config.tcgFolderCapacity +
-      config.tcgFolderExpansionSlots * expansions.tcgFolder,
-    purse: config.purseCapacity * 2 ** expansions.purse,
-    vaultGold: config.vaultGoldCapacity * 2 ** expansions.vaultGold,
-  }
-}
 
 export type TMarketService = Readonly<{
   expansion: TMarketExpansion
@@ -370,6 +351,13 @@ export type TMarketOperationResult =
       quantity: number
       gold: number
     }
+  | {
+      operation: 'buyExpansion'
+      expansion: TMarketExpansion
+      /** Capacidade depois da compra. */
+      capacity: number
+      gold: number
+    }
 
 /** Resultado do `visitMarket` aceito (REQ-140). */
 export type TMarketVisitResult = Readonly<{
@@ -430,8 +418,7 @@ export function applyMarketOperations(input: {
   const { config, cards, operations, zoneId, candidates, rng } = input
   let { state } = input
   let { inventory, tcgFolder, gold } = input.player
-  const purse = capacitiesOf(config, input.player.expansions).purse
-  const tcgCapacity = capacitiesOf(config, input.player.expansions).tcgFolder
+  let expansions = input.player.expansions ?? noExpansions()
   const marketIndex = state.markets.findIndex(
     (entry) => entry.zoneId === zoneId
   )
@@ -537,7 +524,10 @@ export function applyMarketOperations(input: {
         )
         if (gold < price) return refuse('notEnoughGold', cardId)
         if (card.type === 'attribute') {
-          if (folderSize(tcgFolder) + 1 > tcgCapacity) {
+          if (
+            folderSize(tcgFolder) + 1 >
+            capacitiesOf(config, expansions).tcgFolder
+          ) {
             return refuse('tcgFolderFull', cardId)
           }
           const existing = tcgFolder.find((entry) => entry.cardId === cardId)
@@ -603,6 +593,7 @@ export function applyMarketOperations(input: {
                 : []
           )
         }
+        const purse = capacitiesOf(config, expansions).purse
         const received = Math.min(proceeds, Math.max(0, purse - gold))
         goldLost += proceeds - received
         gold += received
@@ -615,6 +606,22 @@ export function applyMarketOperations(input: {
         })
         break
       }
+      case 'buyExpansion': {
+        const { expansion } = operation
+        const service = servicesOf(config, expansions)[
+          MARKET_EXPANSIONS.indexOf(expansion)
+        ]
+        if (gold < service.price) return refuse('notEnoughGold')
+        gold -= service.price
+        expansions = { ...expansions, [expansion]: expansions[expansion] + 1 }
+        results.push({
+          operation: 'buyExpansion',
+          expansion,
+          capacity: service.capacity,
+          gold: -service.price,
+        })
+        break
+      }
       default: {
         const _exhaustive: never = operation
         return _exhaustive
@@ -623,7 +630,7 @@ export function applyMarketOperations(input: {
   }
 
   return right({
-    player: { ...input.player, inventory, tcgFolder, gold },
+    player: { ...input.player, inventory, tcgFolder, gold, expansions },
     state,
     result: { zoneId, results, goldLost },
   })

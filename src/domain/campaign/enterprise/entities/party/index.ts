@@ -82,6 +82,7 @@ import {
   type TMarketView,
 } from '../../market-trade'
 import {
+  capacitiesOf,
   decayMarkets,
   drawMarkets,
   marketZonesOf,
@@ -2128,7 +2129,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
               abilityEffectDuration(ability, effect),
               card.id,
               `${state.turn.id}:${action.equipmentSlot}:${ability.id}:${usage?.uses ?? 0}:${effectIndex}`,
-              this.config.purseCapacity,
+              capacitiesOf(this.config, changed.expansions).purse,
               effectIndex
             ),
           changed
@@ -2279,7 +2280,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             effect,
             origin.cardId,
             option.effectId,
-            this.config.purseCapacity,
+            capacitiesOf(this.config, changed.expansions).purse,
             origin.effectIndex
           ),
         }
@@ -2386,7 +2387,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         abilityEffectDuration(ability, effect),
         card.id,
         `${statusId}:ability:${effectIndex}`,
-        this.config.purseCapacity,
+        capacitiesOf(this.config, changed.expansions).purse,
         effectIndex
       )
     })
@@ -2569,7 +2570,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       },
       cardId,
       effectId,
-      this.config.purseCapacity,
+      capacitiesOf(this.config, player.expansions).purse,
       effectIndex
     )
   }
@@ -3734,7 +3735,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
               player = {
                 ...player,
                 gold: Math.min(
-                  this.config.purseCapacity,
+                  capacitiesOf(this.config, player.expansions).purse,
                   player.gold + drawn.amount
                 ),
               }
@@ -3845,7 +3846,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     if (card.type === 'attribute') {
       if (
         player.tcgFolder.reduce((sum, entry) => sum + entry.copies, 0) >=
-        this.config.tcgFolderCapacity
+        capacitiesOf(this.config, player.expansions).tcgFolder
       )
         return null
       const existing = player.tcgFolder.find(
@@ -4071,7 +4072,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const { player: changed } = applyActivations(
       player,
       activations,
-      this.props.config.purseCapacity
+      capacitiesOf(this.props.config, player.expansions).purse
     )
     const next = reconcileHand(player, changed)
     const { mark, text } = effect
@@ -4954,7 +4955,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       }))
     ).filter(({ copies }) => copies > 0)
     const folderSize = tcgFolder.reduce((sum, { copies }) => sum + copies, 0)
-    if (folderSize > config.tcgFolderCapacity) {
+    if (folderSize > capacitiesOf(config, player.expansions).tcgFolder) {
       return left('tcgFolderFull')
     }
 
@@ -5375,7 +5376,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         const { player: changed, applied } = applyActivations(
           prepared.value.player,
           effect.activation,
-          this.props.config.purseCapacity
+          capacitiesOf(this.props.config, prepared.value.player.expansions)
+            .purse
         )
         const { cardId, effectIndex } = operation
         const { duration, mark, text } = effect
@@ -5590,7 +5592,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         const { card, quantity } = grant
         if (card.type === 'attribute') {
           const folderSize = player.tcgFolder.reduce((s, e) => s + e.copies, 0)
-          if (folderSize + quantity > config.tcgFolderCapacity) {
+          if (
+            folderSize + quantity >
+            capacitiesOf(config, player.expansions).tcgFolder
+          ) {
             return left('tcgFolderFull')
           }
           const existing = player.tcgFolder.find((e) => e.cardId === card.id)
@@ -5613,7 +5618,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         break
       }
       case 'gold': {
-        const gold = Math.min(config.purseCapacity, player.gold + grant.amount)
+        const gold = Math.min(
+          capacitiesOf(config, player.expansions).purse,
+          player.gold + grant.amount
+        )
         const received = gold - player.gold
         next = { ...player, gold }
         event = {

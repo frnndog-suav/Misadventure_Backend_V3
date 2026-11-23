@@ -3,6 +3,7 @@ import {
   EQUIPMENT_SLOTS,
   type TEquipmentSlot,
 } from '@/domain/catalog/enterprise/value-objects/card'
+import { MARKET_EXPANSIONS, type TMarketExpansion } from '../markets'
 import type { TResolveRewardAction, TRewardDiscard } from '../rewards'
 import type { TQuestAction, TZoneQuestAction } from '../zone-quests'
 
@@ -86,7 +87,7 @@ export type TVaultOperation =
   | { operation: 'swapBuild'; deckIndex: number }
   | { operation: 'editBuild'; build: { cardId: string; copies: number }[] }
 
-/** Uma operação do Ir ao Mercado (README 24; REQ-140; D-118). `buyExpansion` entra na T-64. */
+/** Uma operação do Ir ao Mercado (README 24; REQ-140; D-118). */
 export type TMarketOperation =
   | { operation: 'buyStock'; cardId: string; quantity: number }
   | { operation: 'buyBooster'; cardId: string; quantity: number }
@@ -97,6 +98,7 @@ export type TMarketOperation =
       cardId: string
       quantity: number
     }
+  | { operation: 'buyExpansion'; expansion: TMarketExpansion }
 
 /** Intenção de jogo (CONTRATO §1.6). União por `type`; as FEATs 10+ acrescentam variantes. */
 export type TPartyAction =
@@ -1107,6 +1109,16 @@ function parseMarketOperation(
         return null
       }
       return { operation, source, cardId, quantity: count }
+    }
+    case 'buyExpansion': {
+      const named = text('expansion')
+      const expansion = MARKET_EXPANSIONS.find((entry) => entry === named)
+      if (named !== null && expansion === undefined) {
+        issues.push({ field: `${path}.expansion`, reason: 'unknownOption' })
+      }
+      extras(['expansion'])
+      if (issues.length > before || expansion === undefined) return null
+      return { operation, expansion }
     }
     default:
       issues.push({ field: `${path}.operation`, reason: 'unknownOperation' })

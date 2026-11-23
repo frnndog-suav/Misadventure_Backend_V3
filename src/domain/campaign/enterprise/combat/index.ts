@@ -16,6 +16,7 @@ import type {
 import { effectiveModifiers } from '../effective-modifiers'
 import type { TPaymentRefusal } from '../effect-payment'
 import type { TPlayerState } from '../entities/party-member'
+import { capacitiesOf } from '../markets'
 import {
   abilityEffectDuration,
   abilityEffectStatus,
@@ -1487,7 +1488,7 @@ function resolveEnemyAbilities(
           effect,
           state.card.id,
           `${state.turn.id}:${use}:${effectIndex}`,
-          config.purseCapacity,
+          capacitiesOf(config, player.snapshot.expansions).purse,
           effectIndex
         )
         if (changed.health < health) {
