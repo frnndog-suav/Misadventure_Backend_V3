@@ -52,8 +52,13 @@ export class PublishCardUseCase {
         card,
         card.id,
         await loadOtherDimensions(this.contentStore, card.collectionId),
-        card.type === 'dimension' || card.type === 'randomEvent'
+        card.type === 'dimension' ||
+          card.type === 'randomEvent' ||
+          card.type === 'zone'
           ? cardsOutside(allCards, card.collectionId)
+          : [],
+        card.type === 'item'
+          ? (await this.contentStore.listCollections()).map(({ id }) => id)
           : []
       ),
       ...rewardDeckPublicationIssues(card, statusById(allCards)),

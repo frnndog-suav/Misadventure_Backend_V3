@@ -70,8 +70,91 @@ export const QUEST_LIMITS = {
   lockSpecializationReinforcement: { min: 0, max: 200 },
 } satisfies Record<keyof typeof QUEST_DEFAULTS, { min: number; max: number }>
 
+/** REQ-137 (CONTRATO FEAT-16): mercado, vitrine, tesouros, boosters e expansões. */
+export const MARKET_DEFAULTS = {
+  singlesShowcaseSlots: 4,
+  singlesDecayMax: 3,
+  singlesPoolSize: 20,
+  marketFactorMinPercent: 80,
+  marketFactorMaxPercent: 120,
+  singlesStockCommon: 6,
+  singlesStockUncommon: 4,
+  singlesStockRare: 2,
+  singlesStockEpic: 1,
+  singlesStockLegendary: 1,
+  singlesPriceCommon: 5,
+  singlesPriceUncommon: 15,
+  singlesPriceRare: 45,
+  singlesPriceEpic: 130,
+  singlesPriceLegendary: 370,
+  scarcityStepPercent: 10,
+  treasureValueCommon: 10,
+  treasureValueUncommon: 25,
+  treasureValueRare: 60,
+  treasureValueEpic: 150,
+  treasureValueLegendary: 400,
+  boosterPrice: 30,
+  boosterCardCount: 8,
+  boosterSalePrice: 15,
+  boosterChanceCommon: 600,
+  boosterChanceUncommon: 250,
+  boosterChanceRare: 110,
+  boosterChanceEpic: 35,
+  boosterChanceLegendary: 5,
+  vaultExpansionSlots: 5,
+  vaultExpansionBasePrice: 50,
+  deckSlotExpansionSlots: 1,
+  deckSlotExpansionBasePrice: 100,
+  tcgFolderExpansionSlots: 10,
+  tcgFolderExpansionBasePrice: 60,
+  purseExpansionPricePercent: 50,
+  vaultGoldExpansionPricePercent: 25,
+}
+
+export const MARKET_LIMITS = {
+  singlesShowcaseSlots: { min: 1, max: 20 },
+  singlesDecayMax: { min: 0, max: 20 },
+  singlesPoolSize: { min: 1, max: 1000 },
+  marketFactorMinPercent: { min: 1, max: 1000 },
+  marketFactorMaxPercent: { min: 1, max: 1000 },
+  singlesStockCommon: { min: 1, max: 100 },
+  singlesStockUncommon: { min: 1, max: 100 },
+  singlesStockRare: { min: 1, max: 100 },
+  singlesStockEpic: { min: 1, max: 100 },
+  singlesStockLegendary: { min: 1, max: 100 },
+  singlesPriceCommon: { min: 1, max: 1000000 },
+  singlesPriceUncommon: { min: 1, max: 1000000 },
+  singlesPriceRare: { min: 1, max: 1000000 },
+  singlesPriceEpic: { min: 1, max: 1000000 },
+  singlesPriceLegendary: { min: 1, max: 1000000 },
+  scarcityStepPercent: { min: 0, max: 1000 },
+  treasureValueCommon: { min: 1, max: 1000000 },
+  treasureValueUncommon: { min: 1, max: 1000000 },
+  treasureValueRare: { min: 1, max: 1000000 },
+  treasureValueEpic: { min: 1, max: 1000000 },
+  treasureValueLegendary: { min: 1, max: 1000000 },
+  boosterPrice: { min: 0, max: 1000000 },
+  boosterCardCount: { min: 1, max: 50 },
+  boosterSalePrice: { min: 1, max: 1000000 },
+  boosterChanceCommon: { min: 0, max: 1000 },
+  boosterChanceUncommon: { min: 0, max: 1000 },
+  boosterChanceRare: { min: 0, max: 1000 },
+  boosterChanceEpic: { min: 0, max: 1000 },
+  boosterChanceLegendary: { min: 0, max: 1000 },
+  vaultExpansionSlots: { min: 1, max: 1000 },
+  vaultExpansionBasePrice: { min: 0, max: 1000000 },
+  deckSlotExpansionSlots: { min: 1, max: 100 },
+  deckSlotExpansionBasePrice: { min: 0, max: 1000000 },
+  tcgFolderExpansionSlots: { min: 1, max: 1000 },
+  tcgFolderExpansionBasePrice: { min: 0, max: 1000000 },
+  purseExpansionPricePercent: { min: 0, max: 1000 },
+  vaultGoldExpansionPricePercent: { min: 0, max: 1000 },
+} satisfies Record<keyof typeof MARKET_DEFAULTS, { min: number; max: number }>
+
 export interface TGameConfigValues extends Record<
-  keyof typeof COMBAT_NUMERIC_DEFAULTS | keyof typeof QUEST_DEFAULTS,
+  | keyof typeof COMBAT_NUMERIC_DEFAULTS
+  | keyof typeof QUEST_DEFAULTS
+  | keyof typeof MARKET_DEFAULTS,
   number
 > {
   enemyAbilityPriorities: TEnemyAbilityPriorities
@@ -127,6 +210,7 @@ export interface TGameConfigLimit {
 
 export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
   ...QUEST_DEFAULTS,
+  ...MARKET_DEFAULTS,
   ...COMBAT_NUMERIC_DEFAULTS,
   enemyAbilityPriorities: {
     aggressive: ['highestPower'],
@@ -217,6 +301,7 @@ export const GAME_CONFIG_LIMITS: Readonly<
   recoverHealthPercent: { min: 0, max: 100 },
   ...KNOCKOUT_NUMERIC_LIMITS,
   ...QUEST_LIMITS,
+  ...MARKET_LIMITS,
   recoverVigorPercent: { min: 0, max: 100 },
   recoverHandSize: { min: 0, max: 200 },
   inventoryCapacity: { min: 0, max: 100 },

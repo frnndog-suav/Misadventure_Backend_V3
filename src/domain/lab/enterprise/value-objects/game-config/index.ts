@@ -14,12 +14,25 @@ import {
   type TReserveDeckEntry,
 } from './defaults'
 
+const BOOSTER_CHANCE_KEYS = [
+  'boosterChanceCommon',
+  'boosterChanceUncommon',
+  'boosterChanceRare',
+  'boosterChanceEpic',
+  'boosterChanceLegendary',
+] as const
+
 /** Motivos de CONTRATO FEAT-03 (`LabConfigInvalidDetails`). */
 export type TGameConfigIssue =
   | { field: null; reason: 'invalidBody' }
   | {
       field: string
-      reason: 'unknownKey' | 'notInteger' | 'outOfRange' | 'minAboveMax'
+      reason:
+        | 'unknownKey'
+        | 'notInteger'
+        | 'outOfRange'
+        | 'minAboveMax'
+        | 'sumMismatch'
     }
 
 /** Valores ajustáveis do Apêndice A em vigor (D-11). */
@@ -82,6 +95,18 @@ export class GameConfig extends ValueObject<TGameConfigValues> {
         { field: 'minPlayers', reason: 'minAboveMax' },
         { field: 'maxPlayers', reason: 'minAboveMax' }
       )
+    }
+    if (next.marketFactorMinPercent > next.marketFactorMaxPercent) {
+      issues.push(
+        { field: 'marketFactorMinPercent', reason: 'minAboveMax' },
+        { field: 'marketFactorMaxPercent', reason: 'minAboveMax' }
+      )
+    }
+    // REQ-137: as chances do booster somam 1000 (por mil).
+    if (BOOSTER_CHANCE_KEYS.reduce((sum, key) => sum + next[key], 0) !== 1000) {
+      for (const field of BOOSTER_CHANCE_KEYS) {
+        issues.push({ field, reason: 'sumMismatch' })
+      }
     }
 
     if (issues.length > 0) {

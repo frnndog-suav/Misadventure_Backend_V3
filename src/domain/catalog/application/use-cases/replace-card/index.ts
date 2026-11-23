@@ -16,6 +16,7 @@ import { ContentReferencedError } from '@/domain/catalog/application/use-cases/_
 import {
   buildCard,
   breaksQuestReferences,
+  isCitedInMarketStock,
   isCitedInRewardDeck,
   effectCitationPublicationIssues,
   combatDeckPublicationIssues,
@@ -87,9 +88,16 @@ export class ReplaceCardUseCase {
       isExecutableCombatEvent(current.card) &&
       card.type === 'combatEvent' &&
       !isExecutableCombatEvent(card)
+    // REQ-136: carta do estoque de mercado continua item com `stockPrice`.
+    const leavesStock =
+      current.card.type === 'item' &&
+      current.card.stockPrice !== null &&
+      (card.type !== 'item' || card.stockPrice === null)
     const allCards =
       card.type === 'dimension' ||
       card.type === 'randomEvent' ||
+      card.type === 'zone' ||
+      leavesStock ||
       leavesEventTypes ||
       losesCombatExecution ||
       current.status === 'published' ||
@@ -102,6 +110,11 @@ export class ReplaceCardUseCase {
         allCards.map((entry) => entry.card),
         new Set([cardId])
       )
+    const inMarketStock = () =>
+      isCitedInMarketStock(
+        allCards.map((entry) => entry.card),
+        new Set([cardId])
+      )
     const issues = [
       ...validateCandidate(
         collection,
@@ -109,8 +122,13 @@ export class ReplaceCardUseCase {
         card,
         cardId,
         await loadOtherDimensions(this.contentStore, collectionId),
-        card.type === 'dimension' || card.type === 'randomEvent'
+        card.type === 'dimension' ||
+          card.type === 'randomEvent' ||
+          card.type === 'zone'
           ? cardsOutside(allCards, collectionId)
+          : [],
+        card.type === 'item'
+          ? (await this.contentStore.listCollections()).map(({ id }) => id)
           : []
       ),
       ...(current.status === 'published'
@@ -155,6 +173,9 @@ export class ReplaceCardUseCase {
     ) {
       return left(new ContentReferencedError('rewardDeck'))
     }
+    if (!renamed && leavesStock && inMarketStock()) {
+      return left(new ContentReferencedError('marketStock'))
+    }
 
     if (renamed) {
       if (current.status === 'published') return left(new ContentLockedError())
@@ -167,6 +188,8 @@ export class ReplaceCardUseCase {
         return left(new ContentReferencedError())
       }
       if (cited()) return left(new ContentReferencedError('rewardDeck'))
+      if (inMarketStock())
+        return left(new ContentReferencedError('marketStock'))
       if (await this.contentStore.findEditorCard(card.id)) {
         return left(
           new ContentIdTakenError([{ path: 'slug', reason: 'idTaken' }])

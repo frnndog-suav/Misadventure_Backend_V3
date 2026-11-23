@@ -39,6 +39,7 @@ import {
   COMBAT_NUMERIC_LIMITS,
   GAME_CONFIG_DEFAULTS,
   KNOCKOUT_NUMERIC_LIMITS,
+  MARKET_LIMITS,
   QUEST_LIMITS,
   type TGameConfigKey,
   type TGameConfigValues,
@@ -90,6 +91,7 @@ const optionalNumericConfigLimits = {
   ...COMBAT_NUMERIC_LIMITS,
   ...KNOCKOUT_NUMERIC_LIMITS,
   ...QUEST_LIMITS,
+  ...MARKET_LIMITS,
 }
 type TOptionalNumericConfigKey = keyof typeof optionalNumericConfigLimits
 type TLegacyConfigKey = Exclude<

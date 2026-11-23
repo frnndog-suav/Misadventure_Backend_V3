@@ -93,6 +93,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 073 | FEAT-16 | [Planejamento do Mercado](073-FEAT-16-planejamento.md) | concluída |
 | 074 | FEAT-16 | [Contrato do Mercado proposto (BE): CONTRATO v0.79](074-FEAT-16-contrato-proposto.md) | concluída |
 | 075 | FEAT-16 | [Contrato do Mercado acordado: CONTRATO v0.80](075-FEAT-16-contrato-acordado.md) | concluída |
+| 076 | T-61 | [Conteúdo, editor e laboratório do mercado](076-T-61-conteudo-editor-e-laboratorio-do-mercado.md) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

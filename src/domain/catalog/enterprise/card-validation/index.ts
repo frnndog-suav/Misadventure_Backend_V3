@@ -57,7 +57,9 @@ export function sortByCardId<T extends { readonly id: string }>(
  * `releaseOrder` é único no catálogo todo (REQ-26); vão antes das da coleção
  * para a duplicata recair sobre a candidata.
  * `referenceCards` = as cartas das outras coleções, só para achar as citadas
- * em `rewardDecks` (REQ-82, D-91).
+ * em `rewardDecks` (REQ-82, D-91) e no estoque do mercado (REQ-136).
+ * `referenceCollectionIds` = os ids das outras coleções, só para o
+ * `boosterCollectionId` (REQ-136).
  */
 export function validateCandidate(
   collection: TContentCollection,
@@ -65,7 +67,8 @@ export function validateCandidate(
   candidate: TCard,
   replacedId?: string,
   otherDimensions: readonly TDimensionCard[] = [],
-  referenceCards: readonly TCard[] = []
+  referenceCards: readonly TCard[] = [],
+  referenceCollectionIds: readonly string[] = []
 ): TContentIssue[] {
   const issues: TContentIssue[] = []
 
@@ -88,6 +91,7 @@ export function validateCandidate(
     collections: [collection],
     cards: [...otherDimensions, ...cards],
     referenceCards,
+    referenceCollectionIds,
   })) {
     if (issue.cardId !== candidate.id) continue
     // `id` e `collectionId` saem do `slug` e da rota, não do corpo.
@@ -168,6 +172,18 @@ export function isCitedInRewardDeck(
       randomEventRewardCitations(card).some(({ cardId }) => cardIds.has(cardId))
     )
   })
+}
+
+/** REQ-136: alguma zona cita uma destas cartas no estoque do mercado? */
+export function isCitedInMarketStock(
+  cards: readonly TCard[],
+  cardIds: ReadonlySet<string>
+): boolean {
+  return cards.some(
+    (card) =>
+      card.type === 'zone' &&
+      (card.market?.stock.some((id) => cardIds.has(id)) ?? false)
+  )
 }
 
 /**

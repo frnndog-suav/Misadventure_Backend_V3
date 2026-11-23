@@ -52,6 +52,7 @@ describe('GET /lab/content/collections/:collectionId/export (e2e)', () => {
             attributeKind: 'basic',
             attributes: ['strength'],
             effects: [],
+            priceMultiplier: 1,
           },
         },
       ],

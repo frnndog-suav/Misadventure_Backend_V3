@@ -6,8 +6,22 @@
     "location": "Costa Cinzenta",
     "connectionArrows": 4,
     "arrowLayout": null,
-    "zoneActions": ["startEvent", "scavenge", "useVault", "saveRespawnPoint"],
-    "effects": []
+    "zoneActions": [
+      "startEvent",
+      "scavenge",
+      "useVault",
+      "visitMarket",
+      "saveRespawnPoint"
+    ],
+    "effects": [],
+    "market": {
+      "stock": [
+        "fixture.healing-potion",
+        "fixture.arrows",
+        "fixture.fishing-rod"
+      ],
+      "singles": true
+    }
   },
   {
     "id": "fixture.old-mine",

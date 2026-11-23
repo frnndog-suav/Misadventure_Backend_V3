@@ -65,6 +65,7 @@ describe('Ferramentas e decks de recompensas no catálogo e no editor (e2e)', ()
       'startEvent',
       'scavenge',
       'useVault',
+      'visitMarket',
       'saveRespawnPoint',
     ])
 

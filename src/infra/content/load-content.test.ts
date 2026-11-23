@@ -172,7 +172,7 @@ describe('loadContent', () => {
     }
   })
 
-  it('REQ-10/REQ-100: a fixture de teste carrega com as 24 cartas e as 2 classes do contrato', async () => {
+  it('REQ-10/REQ-100: a fixture de teste carrega com as 26 cartas e as 2 classes do contrato', async () => {
     const result = await loadContent('test/fixtures/content')
 
     expect(result.ok).toBe(true)
@@ -210,7 +210,9 @@ describe('loadContent', () => {
       result.content.cards.map(({ card: { id, type } }) => [id, type]).sort()
     ).toEqual([
       ['fixture.arcane-wand', 'equipment'],
+      ['fixture.arrows', 'item'],
       ['fixture.blade-of-dusk', 'equipment'],
+      ['fixture.booster', 'item'],
       ['fixture.dexterity-basic', 'attribute'],
       ['fixture.endurance-basic', 'attribute'],
       ['fixture.fishing-rod', 'item'],
@@ -257,6 +259,7 @@ describe('loadContent', () => {
       attributeKind: 'basic',
       attributes: ['strength'],
       effects: [],
+      priceMultiplier: 1,
     })
   })
 

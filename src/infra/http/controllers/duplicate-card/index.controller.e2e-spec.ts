@@ -31,6 +31,7 @@ describe('POST /lab/content/cards/:cardId/duplicate (e2e)', () => {
         attributeKind: 'basic',
         attributes: ['strength'],
         effects: [],
+        priceMultiplier: 1,
       },
     })
   })

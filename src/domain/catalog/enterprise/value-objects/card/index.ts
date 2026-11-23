@@ -265,6 +265,8 @@ export type TZoneCard = Readonly<{
   zoneActions: readonly TZoneAction[]
   questDeck?: readonly string[]
   effects: readonly TZoneEffect[]
+  /** REQ-136, D-114: presente se e só se `zoneActions` tem `visitMarket`. */
+  market: Readonly<{ stock: readonly string[]; singles: boolean }> | null
 }>
 
 export type TAttributeCard = Readonly<{
@@ -277,6 +279,8 @@ export type TAttributeCard = Readonly<{
   attributeKind: TAttributeKind
   attributes: readonly TAttribute[]
   effects: readonly TEffect[]
+  /** REQ-136: ajuste de preço, 0,8 a 1,5 com até 2 casas. */
+  priceMultiplier: number
 }>
 
 export type TEquipmentCard = Readonly<{
@@ -317,6 +321,14 @@ export type TItemCard = Readonly<{
   scavengeZoneTypes: readonly TZoneType[]
   /** D-86: `toolKind` da ferramenta que coleta esta carta. */
   scavengeTool: string | null
+  /** REQ-136: ajuste de preço, 0,8 a 1,5 com até 2 casas. */
+  priceMultiplier: number
+  /** REQ-136: só em consumível, material e ferramenta; `null` = fora do estoque. */
+  stockPrice: number | null
+  /** REQ-136: lote; maior que 1 só com `stockPrice`. */
+  stockQuantity: number
+  /** REQ-136: só em booster; a coleção que ele abre. */
+  boosterCollectionId: string | null
 }>
 
 export type TRandomEventRequirement = Readonly<{ id: string; text: string }> &

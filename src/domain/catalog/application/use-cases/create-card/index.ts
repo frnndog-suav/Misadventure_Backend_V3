@@ -56,8 +56,13 @@ export class CreateCardUseCase {
       card,
       undefined,
       await loadOtherDimensions(this.contentStore, collectionId),
-      card.type === 'dimension' || card.type === 'randomEvent'
+      card.type === 'dimension' ||
+        card.type === 'randomEvent' ||
+        card.type === 'zone'
         ? cardsOutside(await loadAllCards(this.contentStore), collectionId)
+        : [],
+      card.type === 'item'
+        ? (await this.contentStore.listCollections()).map(({ id }) => id)
         : []
     )
     if (issues.length > 0) return left(new ContentInvalidError(issues))

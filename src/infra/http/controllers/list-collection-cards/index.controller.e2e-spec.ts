@@ -13,6 +13,7 @@ const STRENGTH_BASIC = {
   attributeKind: 'basic',
   attributes: ['strength'],
   effects: [],
+  priceMultiplier: 1,
 }
 
 describe('GET /catalog/collections/:collectionId/cards (e2e)', () => {
@@ -39,7 +40,9 @@ describe('GET /catalog/collections/:collectionId/cards (e2e)', () => {
       ])
     ).toEqual([
       ['fixture.arcane-wand', 'equipment'],
+      ['fixture.arrows', 'item'],
       ['fixture.blade-of-dusk', 'equipment'],
+      ['fixture.booster', 'item'],
       ['fixture.dexterity-basic', 'attribute'],
       ['fixture.endurance-basic', 'attribute'],
       ['fixture.fishing-rod', 'item'],

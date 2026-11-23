@@ -18,6 +18,7 @@ import {
 } from '@/domain/catalog/application/use-cases/_shared/all-cards'
 import {
   buildCard,
+  isCitedInMarketStock,
   isCitedInRewardDeck,
   effectCitationPublicationIssues,
   combatDeckPublicationIssues,
@@ -121,7 +122,8 @@ export class ImportCollectionUseCase {
         body.cards,
         collection,
         issues,
-        outside.map(({ card }) => card)
+        outside.map(({ card }) => card),
+        (await this.contentStore.listCollections()).map(({ id }) => id)
       )
       const editorCards = [
         ...outside,
@@ -300,6 +302,17 @@ export class ImportCollectionUseCase {
     ) {
       return new ContentReferencedError('rewardDeck')
     }
+    // REQ-136: carta que some, ou deixa de ser item com `stockPrice`, e está
+    // no estoque do mercado de zona de outra coleção.
+    const leavingStock = new Set([
+      ...removed,
+      ...keptCards
+        .filter((card) => card.type !== 'item' || card.stockPrice === null)
+        .map((card) => card.id),
+    ])
+    if (isCitedInMarketStock(outsideCards, leavingStock)) {
+      return new ContentReferencedError('marketStock')
+    }
     if (
       breaksSpecializationReferences(
         otherClasses,
@@ -477,7 +490,8 @@ export class ImportCollectionUseCase {
     entries: readonly unknown[],
     collection: TCollectionInput | null,
     issues: TContentIssue[],
-    referenceCards: readonly TCard[]
+    referenceCards: readonly TCard[],
+    referenceCollectionIds: readonly string[]
   ): TParsedCard[] {
     const parsedCards: TParsedCard[] = []
     const seenIds = new Set<string>()
@@ -562,6 +576,7 @@ export class ImportCollectionUseCase {
         collections: [collection],
         cards: sortByCardId(parsedCards.map(({ card }) => card)),
         referenceCards,
+        referenceCollectionIds,
       })
       for (const issue of integrity) {
         if (issue.cardId === null) continue

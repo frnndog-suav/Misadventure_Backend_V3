@@ -8,7 +8,10 @@ import {
   cardsOutside,
   loadAllCards,
 } from '@/domain/catalog/application/use-cases/_shared/all-cards'
-import { isCitedInRewardDeck } from '@/domain/catalog/enterprise/card-validation'
+import {
+  isCitedInMarketStock,
+  isCitedInRewardDeck,
+} from '@/domain/catalog/enterprise/card-validation'
 import { breaksSpecializationReferences } from '@/domain/catalog/enterprise/class-validation'
 
 export type TDeleteCollectionUseCaseRequest = { collectionId: string }
@@ -71,6 +74,10 @@ export class DeleteCollectionUseCase {
     const allCards = await loadAllCards(this.contentStore)
     if (isCitedInRewardDeck(cardsOutside(allCards, collectionId), cardIds)) {
       return left(new ContentReferencedError('rewardDeck'))
+    }
+    // REQ-136: carta dela no estoque do mercado de zona de outra coleção.
+    if (isCitedInMarketStock(cardsOutside(allCards, collectionId), cardIds)) {
+      return left(new ContentReferencedError('marketStock'))
     }
     if (
       breaksSpecializationReferences(

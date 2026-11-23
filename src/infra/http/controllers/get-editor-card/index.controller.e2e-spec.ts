@@ -31,6 +31,7 @@ describe('GET /lab/content/cards/:cardId (e2e)', () => {
         attributeKind: 'basic',
         attributes: ['strength'],
         effects: [],
+        priceMultiplier: 1,
       },
     })
   })

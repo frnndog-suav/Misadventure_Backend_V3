@@ -5,6 +5,7 @@ import type {
   TClassDefinition,
   TCollection,
   TRewardDeck,
+  TZoneCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import {
   makeAttributeCard,
@@ -343,10 +344,10 @@ describe('checkCatalogIntegrity', () => {
       ).toEqual([issue('blocksShield', 'onlyForWeapons')])
     })
 
-    it('REQ-15: ajuste de preço fora de ×0,8 a ×1,5', () => {
+    it('REQ-15/REQ-136: ajuste de preço fora de ×0,8 a ×1,5', () => {
       for (const priceMultiplier of [0.79, 1.51, Number.NaN]) {
         expect(check([makeEquipmentCard({ priceMultiplier })])).toEqual([
-          issue('priceMultiplier', 'outOfRange'),
+          issue('priceMultiplier', 'priceMultiplierInvalid'),
         ])
       }
       for (const priceMultiplier of [0.8, 1.5]) {
@@ -1141,5 +1142,210 @@ describe('REQ-82: decks de recompensas na Carta de Dimensão (3.4, D-74)', () =>
       ['rewardDecks[0].cards[1].cardId', 'notARewardCard'],
       ['rewardDecks[0].cards[2].copies', 'outOfRange'],
     ])
+  })
+})
+
+describe('REQ-136 — conteúdo do mercado (README 3.4, 5.1, 5.2, 24; D-114)', () => {
+  const reasons = (cards: TCard[], collections?: TCollection[]) =>
+    check(cards, collections).map(({ cardId, field, reason }) => [
+      cardId,
+      field,
+      reason,
+    ])
+
+  it('REQ-136: ajuste de preço de 0,8 a 1,5 com até 2 casas em atributo, equipamento e item', () => {
+    const cards = (priceMultiplier: number) => [
+      makeAttributeCard({ priceMultiplier }),
+      makeEquipmentCard({ priceMultiplier }),
+      makeItemCard({ priceMultiplier }),
+    ]
+    for (const valid of [0.8, 1, 1.15, 1.2, 1.5]) {
+      expect(check(cards(valid))).toEqual([])
+    }
+    for (const invalid of [0.79, 1.51, 1.234, 0.805, Number.NaN]) {
+      expect(reasons(cards(invalid))).toEqual([
+        ['fixture.strength-basic', 'priceMultiplier', 'priceMultiplierInvalid'],
+        ['fixture.blade-of-dusk', 'priceMultiplier', 'priceMultiplierInvalid'],
+        ['fixture.healing-potion', 'priceMultiplier', 'priceMultiplierInvalid'],
+      ])
+    }
+  })
+
+  it('REQ-136: preço de estoque só em consumível, material e ferramenta, inteiro ≥ 1', () => {
+    for (const itemCategory of ['consumable', 'material'] as const) {
+      expect(check([makeItemCard({ itemCategory, stockPrice: 6 })])).toEqual([])
+    }
+    expect(
+      check([
+        makeItemCard({
+          itemCategory: 'tool',
+          effects: [],
+          toolKind: 'pickaxe',
+          scavengeZoneTypes: ['underground'],
+          stockPrice: 20,
+        }),
+      ])
+    ).toEqual([])
+    for (const itemCategory of [
+      'relic',
+      'treasure',
+      'document',
+      'booster',
+      'special',
+    ] as const) {
+      expect(
+        reasons([
+          makeItemCard({
+            itemCategory,
+            effects: [],
+            stockPrice: 20,
+            boosterCollectionId: itemCategory === 'booster' ? 'fixture' : null,
+          }),
+        ])
+      ).toEqual([
+        ['fixture.healing-potion', 'stockPrice', 'stockPriceNotAllowed'],
+      ])
+    }
+    for (const stockPrice of [0, -1, 2.5]) {
+      expect(reasons([makeItemCard({ stockPrice })])).toEqual([
+        ['fixture.healing-potion', 'stockPrice', 'outOfRange'],
+      ])
+    }
+  })
+
+  it('REQ-136: lote inteiro ≥ 1; maior que 1 só com preço de estoque', () => {
+    expect(check([makeItemCard({ stockPrice: 3, stockQuantity: 10 })])).toEqual(
+      []
+    )
+    expect(reasons([makeItemCard({ stockQuantity: 10 })])).toEqual([
+      [
+        'fixture.healing-potion',
+        'stockQuantity',
+        'stockQuantityRequiresStockPrice',
+      ],
+    ])
+    for (const stockQuantity of [0, 1.5]) {
+      expect(reasons([makeItemCard({ stockPrice: 3, stockQuantity })])).toEqual(
+        [['fixture.healing-potion', 'stockQuantity', 'outOfRange']]
+      )
+    }
+  })
+
+  it('REQ-136: booster, e só ele, indica uma coleção existente', () => {
+    const booster = (boosterCollectionId: string | null) =>
+      makeItemCard({
+        id: 'fixture.booster',
+        itemCategory: 'booster',
+        effects: [],
+        boosterCollectionId,
+      })
+    expect(check([booster('fixture')])).toEqual([])
+    expect(
+      check(
+        [booster('other')],
+        [makeCollection(), makeCollection({ id: 'other', name: 'Outra' })]
+      )
+    ).toEqual([])
+    for (const id of [null, 'missing']) {
+      expect(reasons([booster(id)])).toEqual([
+        ['fixture.booster', 'boosterCollectionId', 'boosterCollectionRequired'],
+      ])
+    }
+    expect(reasons([makeItemCard({ boosterCollectionId: 'fixture' })])).toEqual(
+      [
+        [
+          'fixture.healing-potion',
+          'boosterCollectionId',
+          'boosterCollectionNotAllowed',
+        ],
+      ]
+    )
+  })
+
+  it('REQ-136: booster de outra coleção é aceito no editor com as coleções de referência', () => {
+    const booster = makeItemCard({
+      id: 'fixture.booster',
+      itemCategory: 'booster',
+      effects: [],
+      boosterCollectionId: 'other',
+    })
+    expect(
+      checkCatalogIntegrity({
+        collections: [makeCollection()],
+        cards: [booster],
+        referenceCollectionIds: ['other'],
+      })
+    ).toEqual([])
+  })
+
+  describe('mercado da zona (README 3.4, Apêndice B O2)', () => {
+    const potion = makeItemCard({ stockPrice: 6 })
+    const harbor = (market: TZoneCard['market'], withAction = true) =>
+      makeUrbanZoneCard({
+        zoneActions: [
+          'startEvent',
+          'useVault',
+          ...(withAction ? (['visitMarket'] as const) : []),
+          'saveRespawnPoint',
+        ],
+        market,
+      })
+
+    it('REQ-136: presente se e só se a zona tem Ir ao Mercado', () => {
+      expect(
+        check([potion, harbor({ stock: [potion.id], singles: true })])
+      ).toEqual([])
+      expect(check([harbor({ stock: [], singles: false })])).toEqual([])
+      expect(reasons([harbor(null)])).toEqual([
+        ['fixture.gray-harbor', 'market', 'marketMismatch'],
+      ])
+      expect(reasons([harbor({ stock: [], singles: true }, false)])).toEqual([
+        ['fixture.gray-harbor', 'market', 'marketMismatch'],
+      ])
+    })
+
+    it('REQ-136: estoque só com itens com preço de estoque, sem repetição, de qualquer coleção', () => {
+      const relic = makeItemCard({
+        id: 'fixture.relic',
+        itemCategory: 'relic',
+        effects: [],
+      })
+      expect(
+        reasons([
+          potion,
+          relic,
+          makeAttributeCard(),
+          harbor({
+            stock: [
+              potion.id,
+              relic.id,
+              'fixture.nope',
+              potion.id,
+              'fixture.strength-basic',
+            ],
+            singles: false,
+          }),
+        ])
+      ).toEqual([
+        ['fixture.gray-harbor', 'market.stock.1', 'stockItemWithoutPrice'],
+        ['fixture.gray-harbor', 'market.stock.2', 'unknownCard'],
+        ['fixture.gray-harbor', 'market.stock.3', 'duplicateStockItem'],
+        ['fixture.gray-harbor', 'market.stock.4', 'stockItemWithoutPrice'],
+      ])
+
+      const foreign = makeItemCard({
+        id: 'other.arrows',
+        collectionId: 'other',
+        stockPrice: 3,
+        stockQuantity: 10,
+      })
+      expect(
+        checkCatalogIntegrity({
+          collections: [makeCollection()],
+          cards: [harbor({ stock: [foreign.id], singles: false })],
+          referenceCards: [foreign],
+        })
+      ).toEqual([])
+    })
   })
 })

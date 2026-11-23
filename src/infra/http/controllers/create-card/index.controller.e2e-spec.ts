@@ -40,6 +40,7 @@ describe('POST /lab/content/collections/:collectionId/cards (e2e)', () => {
         attributeKind: 'basic',
         attributes: ['strength'],
         effects: [],
+        priceMultiplier: 1,
       },
     })
     const catalog = await request(server).get(
@@ -301,6 +302,10 @@ describe('POST /lab/content/collections/:collectionId/cards (e2e)', () => {
         toolKind: null,
         scavengeZoneTypes: [],
         scavengeTool: null,
+        priceMultiplier: 1,
+        stockPrice: null,
+        stockQuantity: 1,
+        boosterCollectionId: null,
       },
     })
 

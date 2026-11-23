@@ -7,6 +7,7 @@ import { ContentReferencedError } from '@/domain/catalog/application/use-cases/_
 import { loadAllCards } from '@/domain/catalog/application/use-cases/_shared/all-cards'
 import {
   breaksQuestReferences,
+  isCitedInMarketStock,
   isCitedInRewardDeck,
 } from '@/domain/catalog/enterprise/card-validation'
 import { breaksSpecializationReferences } from '@/domain/catalog/enterprise/class-validation'
@@ -62,6 +63,15 @@ export class DeleteCardUseCase {
     }
     if (breaksQuestReferences(allCards, current)) {
       return left(new ContentReferencedError('quest'))
+    }
+    // REQ-136: no estoque do mercado de alguma zona.
+    if (
+      isCitedInMarketStock(
+        allCards.map(({ card }) => card),
+        new Set([cardId])
+      )
+    ) {
+      return left(new ContentReferencedError('marketStock'))
     }
     if (
       breaksSpecializationReferences(

@@ -131,6 +131,7 @@ describe('FileContentStore', () => {
         attributeKind: 'basic',
         attributes: ['dexterity'],
         effects: [],
+        priceMultiplier: 1,
         status: 'draft',
       },
       {
@@ -141,6 +142,7 @@ describe('FileContentStore', () => {
         attributeKind: 'basic',
         attributes: ['dexterity'],
         effects: [],
+        priceMultiplier: 1,
       },
       {
         id: 'fixture.endurance-basic',
@@ -150,6 +152,7 @@ describe('FileContentStore', () => {
         attributeKind: 'basic',
         attributes: ['endurance'],
         effects: [],
+        priceMultiplier: 1,
       },
       {
         id: 'fixture.strength-basic',
@@ -159,6 +162,7 @@ describe('FileContentStore', () => {
         attributeKind: 'basic',
         attributes: ['strength'],
         effects: [],
+        priceMultiplier: 1,
       },
     ])
     expect(await (await reopen()).findEditorCard(draft.id)).toEqual({
@@ -218,6 +222,8 @@ describe('FileContentStore', () => {
     expect(await exists('fixture/combatEvent.json')).toBe(false)
     const items = (await readJson('fixture/item.json')) as { id: string }[]
     expect(items.map((card) => card.id)).toEqual([
+      'fixture.arrows',
+      'fixture.booster',
       'fixture.fishing-rod',
       'fixture.healing-potion',
       'fixture.howling-wolves',

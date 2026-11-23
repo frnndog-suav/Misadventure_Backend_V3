@@ -223,7 +223,7 @@ Nenhum gatilho é executado na FEAT-11 (fora do escopo, D-95): todos os `entra` 
 | `handLimit` | `max: int ≥0` | "Tenha no máximo 5 cartas na mão." | 13.3 | a definir | entra |
 | `fleeTargetOverride` | `value: int ≥1` | "O valor de sucesso de fuga passa a ser 5." | 13.3 | FEAT-12 | entra |
 | `fleeTargetModifier` | `amount: int` **ou** `formula: minusHandCount` | "Aumente o valor de fuga em 4." / "Diminua o valor de fuga em quantidade igual às cartas na mão." | 13.3 | FEAT-12 | entra |
-| `marketShowcaseModifier` | `mode: add | set`; `value: int ≥0` | "A vitrine do mercado mostra +2 cartas para você (`mode: add`)." / "A vitrine mostra apenas 1 carta para você (`mode: set`)." | 13.3 | FEAT-16 | entra |
+| `marketShowcaseModifier` | `mode: add | set`; `value: int ≥0` | "A vitrine do mercado mostra +2 cartas para você (`mode: add`)." / "A vitrine mostra apenas 1 carta para você (`mode: set`)." | 13.3 | a definir | entra |
 
 ### Interação de dados
 

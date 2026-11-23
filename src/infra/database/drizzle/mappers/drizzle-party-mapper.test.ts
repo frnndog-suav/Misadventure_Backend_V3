@@ -70,6 +70,33 @@ describe('DrizzlePartyMapper', () => {
     })
   })
 
+  it('REQ-137: snapshot sem as chaves do mercado ganha os padrões', () => {
+    const party = usedRngParty()
+    const row = DrizzlePartyMapper.toDrizzle(party)
+    const defaults = {
+      singlesShowcaseSlots: 4,
+      marketFactorMinPercent: 80,
+      marketFactorMaxPercent: 120,
+      boosterChanceCommon: 600,
+      boosterChanceLegendary: 5,
+      vaultGoldExpansionPricePercent: 25,
+    }
+    const legacyConfig: Record<string, unknown> = { ...row.state.config }
+    for (const key of Object.keys(GAME_CONFIG_DEFAULTS)) {
+      if (key.match(/^(singles|market|scarcity|treasure|booster)|Expansion/))
+        delete legacyConfig[key]
+    }
+    expect(legacyConfig).not.toHaveProperty('singlesPoolSize')
+    const state = { ...row.state, config: legacyConfig }
+
+    const restored = DrizzlePartyMapper.toDomain({
+      ...row,
+      state: state as typeof row.state,
+    })
+
+    expect(restored.config).toMatchObject({ ...defaults, initialGold: 40 })
+  })
+
   it('REQ-123: preserva combate ativo, janela, avanço de habilidades e RNG no save', () => {
     const card = makeCombatEventCard({
       goodOutcome: { text: 'Vitória.', steps: [] },

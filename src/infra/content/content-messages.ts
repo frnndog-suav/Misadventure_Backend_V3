@@ -85,6 +85,16 @@ const CATALOG_MESSAGES: Record<TCatalogIssueReason, string> = {
     'Cite só categoria, etiqueta, tipo de zona, local ou nome exato de carta ou título de zona.',
   citedCardNotFound: 'A carta citada não existe no catálogo.',
   citedZoneNotFound: 'O título de zona citado não existe no catálogo.',
+  priceMultiplierInvalid:
+    'O ajuste de preço deve estar entre 0,8 e 1,5, com até 2 casas decimais.',
+  stockPriceNotAllowed:
+    'Só consumíveis, materiais e ferramentas têm preço de estoque.',
+  stockQuantityRequiresStockPrice: 'Lote maior que 1 exige preço de estoque.',
+  boosterCollectionRequired: 'Booster precisa de uma coleção existente.',
+  boosterCollectionNotAllowed: 'Só boosters indicam coleção.',
+  marketMismatch: 'Zona com Ir ao Mercado precisa do mercado, e só ela.',
+  stockItemWithoutPrice: 'O item do estoque precisa ter preço de estoque.',
+  duplicateStockItem: 'Item repetido no estoque.',
 }
 
 /** Relatório de REQ-11 (o arquivo e a carta já localizam o problema). */
@@ -202,6 +212,14 @@ export function contentIssueMessage(issue: TContentIssue): string {
     case 'citationNotAllowed':
     case 'citedCardNotFound':
     case 'citedZoneNotFound':
+    case 'priceMultiplierInvalid':
+    case 'stockPriceNotAllowed':
+    case 'stockQuantityRequiresStockPrice':
+    case 'boosterCollectionRequired':
+    case 'boosterCollectionNotAllowed':
+    case 'marketMismatch':
+    case 'stockItemWithoutPrice':
+    case 'duplicateStockItem':
       return CATALOG_MESSAGES[reason]
     default: {
       const _exhaustive: never = reason

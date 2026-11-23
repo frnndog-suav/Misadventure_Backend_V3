@@ -1,5 +1,32 @@
 [
   {
+    "id": "fixture.arrows",
+    "name": "Flechas",
+    "flavorText": null,
+    "rarity": "common",
+    "itemCategory": "consumable",
+    "tags": [],
+    "effects": [],
+    "toolKind": null,
+    "scavengeZoneTypes": [],
+    "scavengeTool": null,
+    "stockPrice": 3,
+    "stockQuantity": 10
+  },
+  {
+    "id": "fixture.booster",
+    "name": "Booster de Teste",
+    "flavorText": null,
+    "rarity": "common",
+    "itemCategory": "booster",
+    "tags": [],
+    "effects": [],
+    "toolKind": null,
+    "scavengeZoneTypes": [],
+    "scavengeTool": null,
+    "boosterCollectionId": "fixture"
+  },
+  {
     "id": "fixture.fishing-rod",
     "name": "Vara de Pesca",
     "flavorText": null,
@@ -9,7 +36,8 @@
     "effects": [],
     "toolKind": "fishing-rod",
     "scavengeZoneTypes": ["coastal", "fluvial", "lacustrine", "urban"],
-    "scavengeTool": null
+    "scavengeTool": null,
+    "stockPrice": 20
   },
   {
     "id": "fixture.healing-potion",
@@ -30,7 +58,8 @@
     ],
     "toolKind": null,
     "scavengeZoneTypes": [],
-    "scavengeTool": null
+    "scavengeTool": null,
+    "stockPrice": 6
   },
   {
     "id": "fixture.iron-ore",

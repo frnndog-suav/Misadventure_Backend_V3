@@ -64,6 +64,7 @@ export function makeZoneCard(override: Partial<TZoneCard> = {}): TZoneCard {
     arrowLayout: 'straight',
     zoneActions: ['startEvent', 'scavenge'],
     effects: [],
+    market: null,
     ...override,
   }
 }
@@ -101,6 +102,7 @@ export function makeAttributeCard(
     attributeKind: 'basic',
     attributes: ['strength'],
     effects: [],
+    priceMultiplier: 1,
     ...override,
   }
 }
@@ -145,6 +147,10 @@ export function makeItemCard(override: Partial<TItemCard> = {}): TItemCard {
     toolKind: null,
     scavengeZoneTypes: [],
     scavengeTool: null,
+    priceMultiplier: 1,
+    stockPrice: null,
+    stockQuantity: 1,
+    boosterCollectionId: null,
     ...override,
   }
 }

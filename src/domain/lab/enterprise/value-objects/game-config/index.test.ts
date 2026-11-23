@@ -326,4 +326,37 @@ describe('GameConfig', () => {
       { field: 'maxPlayers', reason: 'minAboveMax' },
     ])
   })
+
+  it('REQ-137: chances do booster que não somam 1000 → sumMismatch nas cinco', () => {
+    const result = GameConfig.withDefaults().applyPatch({
+      boosterChanceCommon: 700,
+    })
+    expect(result.value).toEqual(
+      [
+        'boosterChanceCommon',
+        'boosterChanceUncommon',
+        'boosterChanceRare',
+        'boosterChanceEpic',
+        'boosterChanceLegendary',
+      ].map((field) => ({ field, reason: 'sumMismatch' }))
+    )
+  })
+
+  it('REQ-137: fator mínimo acima do máximo → minAboveMax nas duas chaves', () => {
+    expect(
+      GameConfig.withDefaults().applyPatch({ marketFactorMinPercent: 130 })
+        .value
+    ).toEqual([
+      { field: 'marketFactorMinPercent', reason: 'minAboveMax' },
+      { field: 'marketFactorMaxPercent', reason: 'minAboveMax' },
+    ])
+    expect(
+      GameConfig.withDefaults()
+        .applyPatch({
+          marketFactorMinPercent: 115,
+          marketFactorMaxPercent: 115,
+        })
+        .isRight()
+    ).toBe(true)
+  })
 })

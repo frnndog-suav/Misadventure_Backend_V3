@@ -42,6 +42,10 @@ describe('GET /catalog/cards/:cardId (e2e)', () => {
       toolKind: null,
       scavengeZoneTypes: [],
       scavengeTool: null,
+      priceMultiplier: 1,
+      stockPrice: 6,
+      stockQuantity: 1,
+      boosterCollectionId: null,
     })
   })
 
@@ -61,6 +65,7 @@ describe('GET /catalog/cards/:cardId (e2e)', () => {
       attributeKind: 'basic',
       attributes: ['strength'],
       effects: [],
+      priceMultiplier: 1,
     })
   })
 

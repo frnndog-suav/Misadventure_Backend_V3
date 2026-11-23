@@ -205,6 +205,10 @@ const cardSchemas = {
     zoneActions: z.array(z.enum(ZONE_ACTIONS)),
     questDeck: z.array(text).default([]),
     effects: z.array(zoneEffectSchema),
+    market: z
+      .strictObject({ stock: z.array(text), singles: z.boolean() })
+      .nullable()
+      .default(null),
   }),
   attribute: z.strictObject({
     id,
@@ -214,6 +218,7 @@ const cardSchemas = {
     attributeKind: z.enum(ATTRIBUTE_KINDS),
     attributes: z.array(z.enum(ATTRIBUTES)),
     effects: z.array(effectSchema),
+    priceMultiplier: z.number().default(1),
   }),
   equipment: z.strictObject({
     id,
@@ -248,6 +253,10 @@ const cardSchemas = {
     toolKind: text.nullable(),
     scavengeZoneTypes: z.array(z.enum(ZONE_TYPES)),
     scavengeTool: text.nullable(),
+    priceMultiplier: z.number().default(1),
+    stockPrice: z.number().nullable().default(null),
+    stockQuantity: z.number().default(1),
+    boosterCollectionId: text.nullable().default(null),
   }),
   randomEvent: z.strictObject({
     id,

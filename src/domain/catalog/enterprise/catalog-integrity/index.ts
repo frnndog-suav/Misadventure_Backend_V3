@@ -83,6 +83,15 @@ export type TCatalogIssueReason =
   | 'unknownAbility'
   // REQ-99
   | TEffectIssueReason
+  // REQ-136
+  | 'priceMultiplierInvalid'
+  | 'stockPriceNotAllowed'
+  | 'stockQuantityRequiresStockPrice'
+  | 'boosterCollectionRequired'
+  | 'boosterCollectionNotAllowed'
+  | 'marketMismatch'
+  | 'stockItemWithoutPrice'
+  | 'duplicateStockItem'
 
 export type TCatalogIssue = {
   collectionId: string
@@ -110,6 +119,11 @@ export type TCatalogContent = {
    * `rewardDecks` (REQ-82, D-91); elas mesmas não são conferidas.
    */
   referenceCards?: readonly TCard[]
+  /**
+   * Coleções existentes além de `collections`, só para o
+   * `boosterCollectionId` (REQ-136); elas mesmas não são conferidas.
+   */
+  referenceCollectionIds?: readonly string[]
 }
 
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/
@@ -127,6 +141,7 @@ export function checkCatalogIntegrity({
   cards,
   classes = [],
   referenceCards = [],
+  referenceCollectionIds = [],
 }: TCatalogContent): TCatalogIssue[] {
   const issues: TCatalogIssue[] = []
 
@@ -152,6 +167,10 @@ export function checkCatalogIntegrity({
     collectionIds.add(collection.id)
   }
 
+  const knownCollectionIds = new Set([
+    ...collectionIds,
+    ...referenceCollectionIds,
+  ])
   const cardIds = new Set<string>()
   const zoneTitles = new Set<string>()
   const dimensionCollections = new Set<string>()
@@ -190,6 +209,7 @@ export function checkCatalogIntegrity({
         if (zoneTitles.has(titleKey)) report('title', 'duplicateTitle')
         zoneTitles.add(titleKey)
         checkZone(card, report)
+        checkMarket(card, cardsById, report)
         checkQuestDeck(card, cardsById, report)
         checkEffects(card, report)
         break
@@ -197,6 +217,7 @@ export function checkCatalogIntegrity({
       case 'attribute':
         checkAttribute(card, report)
         checkEffects(card, report)
+        checkPriceMultiplier(card.priceMultiplier, report)
         break
       case 'equipment':
         checkEquipment(card, report)
@@ -207,6 +228,7 @@ export function checkCatalogIntegrity({
         checkTool(card, report)
         checkKebab(card.scavengeTool, 'scavengeTool', report)
         checkEffects(card, report)
+        checkItemMarket(card, knownCollectionIds, report)
         break
       case 'randomEvent':
         checkRandomEvent(card, cardsById, report)
@@ -483,9 +505,7 @@ function checkEquipment(card: TEquipmentCard, report: TReport): void {
     report('blocksShield', 'onlyForWeapons')
   }
 
-  if (!(card.priceMultiplier >= 0.8 && card.priceMultiplier <= 1.5)) {
-    report('priceMultiplier', 'outOfRange')
-  }
+  checkPriceMultiplier(card.priceMultiplier, report)
 
   if (card.refinement) {
     if (!isIntegerBetween(card.refinement.maxLevel, 1, 10)) {
@@ -512,6 +532,78 @@ function checkTool(card: TItemCard, report: TReport): void {
     report('scavengeZoneTypes', 'scavengeZoneTypesRequired')
   }
   checkNoDuplicates(card.scavengeZoneTypes, 'scavengeZoneTypes', report)
+}
+
+/** REQ-136: 0,8 a 1,5 com até 2 casas (tolerância de ponto flutuante). */
+function checkPriceMultiplier(value: number, report: TReport): void {
+  const cents = value * 100
+  if (
+    !(value >= 0.8 && value <= 1.5) ||
+    Math.abs(Math.round(cents) - cents) >= 1e-9
+  ) {
+    report('priceMultiplier', 'priceMultiplierInvalid')
+  }
+}
+
+const STOCK_CATEGORIES: readonly TItemCard['itemCategory'][] = [
+  'consumable',
+  'material',
+  'tool',
+]
+
+/** README 5.2, 24 (REQ-136, D-114): estoque, lote e booster do item. */
+function checkItemMarket(
+  card: TItemCard,
+  collectionIds: ReadonlySet<string>,
+  report: TReport
+): void {
+  checkPriceMultiplier(card.priceMultiplier, report)
+
+  if (card.stockPrice !== null) {
+    if (!STOCK_CATEGORIES.includes(card.itemCategory)) {
+      report('stockPrice', 'stockPriceNotAllowed')
+    } else if (!isIntegerBetween(card.stockPrice, 1, Infinity)) {
+      report('stockPrice', 'outOfRange')
+    }
+  }
+
+  if (!isIntegerBetween(card.stockQuantity, 1, Infinity)) {
+    report('stockQuantity', 'outOfRange')
+  } else if (card.stockQuantity > 1 && card.stockPrice === null) {
+    report('stockQuantity', 'stockQuantityRequiresStockPrice')
+  }
+
+  if (card.itemCategory === 'booster') {
+    if (
+      card.boosterCollectionId === null ||
+      !collectionIds.has(card.boosterCollectionId)
+    ) {
+      report('boosterCollectionId', 'boosterCollectionRequired')
+    }
+  } else if (card.boosterCollectionId !== null) {
+    report('boosterCollectionId', 'boosterCollectionNotAllowed')
+  }
+}
+
+/** README 3.4 (REQ-136, D-114): o mercado da zona e o seu estoque. */
+function checkMarket(
+  card: TZoneCard,
+  cardsById: ReadonlyMap<string, TCard>,
+  report: TReport
+): void {
+  if ((card.market !== null) !== card.zoneActions.includes('visitMarket')) {
+    report('market', 'marketMismatch')
+  }
+  const seen = new Set<string>()
+  card.market?.stock.forEach((id, index) => {
+    const path = `market.stock.${index}`
+    const cited = cardsById.get(id)
+    if (!cited) report(path, 'unknownCard')
+    else if (cited.type !== 'item' || cited.stockPrice === null) {
+      report(path, 'stockItemWithoutPrice')
+    } else if (seen.has(id)) report(path, 'duplicateStockItem')
+    seen.add(id)
+  })
 }
 
 function checkKebab(value: string | null, field: string, report: TReport) {
