@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.69 · **Data:** 2026-11-23
+> **Versão da spec:** 0.70 · **Data:** 2026-11-23
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -751,6 +751,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.67 | 2026-11-23 | Checkboxes alinhados ao devlog: T-45 a T-48, T-51 a T-53 e T-55 a T-57 marcadas como concluídas, com a entrada do devlog de cada uma (054 a 057, 061 a 063, 067 a 069). Sem mudança de comportamento. |
 | 0.68 | 2026-11-23 | T-58 concluída: provação e mentor, D-112 e devlog 070. Sem mudança de contrato. |
 | 0.69 | 2026-11-23 | T-59 concluída: trava das especializações e modificadores pela primeira classe ativa ao salvar a build, D-113 e devlog 071. Sem mudança de contrato. |
+| 0.70 | 2026-11-23 | T-60 em andamento: preparador das campanhas da FEAT-15 entregue (devlog 072); aguarda verificações do autor. Sem mudança de contrato. |
 
 ## Apêndice A — Conteúdo de teste
 
