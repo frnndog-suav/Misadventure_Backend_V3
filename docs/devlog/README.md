@@ -89,7 +89,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 069 | T-57 | [Tentativas, contadores e entrega de zona](069-T-57-tentativas-contadores-e-entrega-de-zona.md) | concluída |
 | 070 | T-58 | [Provação e mentor](070-T-58-provacao-e-mentor.md) | concluída |
 | 071 | T-59 | [Ativação ao salvar a build](071-T-59-ativacao-ao-salvar-a-build.md) | concluída |
-| 072 | T-60 | [Campanhas da FEAT-15](072-T-60-campanhas-da-feat-15.md) | aguardando revisão |
+| 072 | T-60 | [Campanhas da FEAT-15](072-T-60-campanhas-da-feat-15.md) | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

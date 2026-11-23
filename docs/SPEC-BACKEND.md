@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.70 · **Data:** 2026-11-23
+> **Versão da spec:** 0.71 · **Data:** 2026-11-23
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -676,7 +676,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 - [x] **T-57 — Tentativas, contadores e entrega de zona (REQ-132, D-111).** Reusar os fluxos das FEATs 12–14, registrar a origem da tentativa e a conclusão, integrar progresso e pendências de recompensa. Cobrir reflexão fatal e o mesmo desfecho após entrega, GET e reabertura. Resolver a lacuna de Pico descrita no devlog 066 antes dos testes de conclusão que dependerem dela. Concluída no devlog 069.
 - [x] **T-58 — Provação e mentor (REQ-133, REQ-132, D-112).** Entregar elegibilidade, custos, contadores e concessões inativas. Cobrir limite geral, exclusividade da genérica, ouro sem restituição no abandono e finalização após cumprir metas. Aplicar a decisão sobre Pico da T-57. Concluída no devlog 070.
 - [x] **T-59 — Ativação ao salvar a build (REQ-134, D-113).** Integrar Ajustar deck e Usar cofre, benefícios da especialização e seleção dos modificadores base. Cobrir nenhuma, uma ou várias classes ativas, persistência e ativação do Cavaleiro da fixture. Concluída no devlog 071.
-- [ ] **T-60 — Campanhas e validação integrada (REQ-131 a REQ-135).** Preparar catálogo temporário e campanhas independentes com o padrão da T-54. Depois das verificações do backend pelo autor, registrar `implementado (BE)` e entregar URL da API, IDs das campanhas, ID da coleção de teste e ações com resultados esperados para os REQ-66 a REQ-70 do devlog 091, com MSW desligado. Registrar `validado` após o retorno integrado.
+- [x] **T-60 — Campanhas e validação integrada (REQ-131 a REQ-135).** Preparar catálogo temporário e campanhas independentes com o padrão da T-54. Depois das verificações do backend pelo autor, registrar `implementado (BE)` e entregar URL da API, IDs das campanhas, ID da coleção de teste e ações com resultados esperados para os REQ-66 a REQ-70 do devlog 091, com MSW desligado. Registrar `validado` após o retorno integrado.
 
 ## 8. Histórico
 
@@ -752,6 +752,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.68 | 2026-11-23 | T-58 concluída: provação e mentor, D-112 e devlog 070. Sem mudança de contrato. |
 | 0.69 | 2026-11-23 | T-59 concluída: trava das especializações e modificadores pela primeira classe ativa ao salvar a build, D-113 e devlog 071. Sem mudança de contrato. |
 | 0.70 | 2026-11-23 | T-60 em andamento: preparador das campanhas e e2e de missões (devlog 072); FEAT-15 `implementado (BE)` no CONTRATO v0.77. A T-60 fecha após o retorno integrado do frontend. |
+| 0.71 | 2026-11-23 | T-60 concluída: FEAT-15 `validado` (solo) no CONTRATO v0.78 após o retorno integrado do frontend (devlog FE 093). Sem mudança de comportamento. |
 
 ## Apêndice A — Conteúdo de teste
 

@@ -1,9 +1,9 @@
 # 072 — T-60 — Campanhas determinísticas da FEAT-15
 
 - Data — 2026-11-23
-- Status — aguardando revisão (preparador pronto; falta a verificação do autor com o backend no ar)
+- Status — concluída em 2026-11-23 (FEAT-15 validada no CONTRATO v0.78)
 - Spec — v0.70, T-60, REQ-131 a REQ-135
-- Contrato — v0.76, FEAT-15 acordada (sem alteração nesta etapa)
+- Contrato — v0.76 no roteiro, `implementado (BE)` na v0.77, `validado` na v0.78
 - Horas — a preencher pelo autor
 
 ## Objetivo
@@ -129,7 +129,14 @@ CONTRATO v0.77 marca a FEAT-15 como `implementado (BE)`, e ROADMAP v0.67 coloca 
 
 ## Pendências
 
-- Retorno integrado do frontend → `validado` e T-60 `[x]`.
-- Manter o backend da 3333 com o catálogo temporário enquanto o frontend valida.
+Nenhuma. Ver "Fechamento".
 
-Commits — `test/add feat-15 campaign preparer (t-60)` (primeira entrega) e `test/add feat-15 campaigns and quest e2e (t-60)`.
+## Fechamento (2026-11-23)
+
+Retorno do frontend (devlog FE 093): FEAT-15 `validado` no recorte solo, sem mudança de formato. As 13 campanhas da T-60 e os cenários de laboratório e editor passaram com chamadas HTTP contra o backend real (`http://localhost:3333`, health 0.77); as telas de missões, ficha, laboratório e editor passaram no Chrome com o MSW desligado.
+
+Observação: o save "T-60 — derrota" intacto (`1d4227f1`) terminou em vitória; a derrota foi conferida no save `0ed8c424`, do lote já usado. A derrota segue coberta pelo e2e de missões (três desfechos de combate).
+
+Aplicado: CONTRATO v0.78 (seção `validado`), ROADMAP v0.68 (FEAT-15 `validado` nas duas colunas), SPEC-BACKEND v0.71 (T-60 `[x]`), `src/infra/http/contract-version.ts` 0.77 → 0.78.
+
+Commits — `test/add feat-15 campaign preparer (t-60)`, `test/add feat-15 campaigns and quest e2e (t-60)` e, no fechamento, `docs/feat-15 validated (contract v0.78, roadmap v0.68)`.
