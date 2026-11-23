@@ -2,6 +2,9 @@
 //   node test/prepare-feat-15.cjs content              copia as fixtures para uma pasta temporária e acrescenta o conteúdo da T-60
 //   node test/prepare-feat-15.cjs campaigns [nomes]    cria as campanhas pela API e grava os pontos de partida no PostgreSQL de teste
 //   node test/prepare-feat-15.cjs snapshot <id>        lê a linha da campanha sem passar pela API
+// Script CommonJS do Node: globais e require declarados para o ESLint.
+/* global require, module, process, __dirname, console, fetch, URL */
+/* eslint-disable @typescript-eslint/no-require-imports */
 const assert = require('node:assert/strict')
 const { cp, mkdtemp, readFile, writeFile } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
@@ -14,7 +17,6 @@ const mine = 'fixture.old-mine'
 const potion = 'fixture.healing-potion'
 const pickaxe = 'fixture.pickaxe'
 const strength = 'fixture.strength-basic'
-const endurance = 'fixture.endurance-basic'
 const dexterity = 'fixture.dexterity-basic'
 const wisdom = 'fixture.wisdom-basic'
 const toll = 'fixture.t60-toll'
@@ -61,6 +63,12 @@ const grant = { type: 'grantReward', cardId: pickaxe, copies: 1 }
 async function prepareContent() {
   const root = await mkdtemp(join(tmpdir(), 'misadventures-feat-15-'))
   await cp(join(__dirname, 'fixtures', 'content'), root, { recursive: true })
+  await writeT60Content(root)
+  console.log(root)
+}
+
+/** Acrescenta o conteúdo da T-60 a uma cópia das fixtures (também usado pelo e2e). */
+async function writeT60Content(root) {
   const file = (name) => join(root, 'fixture', name + '.json')
   async function edit(name, update) {
     const cards = JSON.parse(
@@ -241,7 +249,6 @@ async function prepareContent() {
       cards: [{ cardId: toll, copies: 1 }],
     })
   })
-  console.log(root)
 }
 
 const knight = { playerClass: 'warrior', specializationId: 'knight' }
@@ -489,6 +496,19 @@ function assertProjection(party, scenario) {
   else assert.deepEqual(player.questBoard, [])
 }
 
+// O preparador precisa gravar no mesmo banco do backend em execução.
+// Ordem: DATABASE_URL do ambiente, depois `.env.test`, depois `.env`.
+function loadDatabaseUrl() {
+  config({ path: '.env.test', quiet: true })
+  config({ path: '.env', quiet: true })
+  assert(
+    process.env.DATABASE_URL,
+    'DATABASE_URL ausente: defina no ambiente, no .env.test ou no .env.'
+  )
+  const { host, pathname } = new URL(process.env.DATABASE_URL)
+  console.error(`Banco usado: ${host}${pathname}`)
+}
+
 async function prepareCampaigns(keys) {
   for (const key of keys)
     assert(
@@ -498,9 +518,8 @@ async function prepareCampaigns(keys) {
   const selected = keys.length
     ? scenarios.filter((scenario) => keys.includes(scenario.key))
     : scenarios
-  config({ path: '.env.test', quiet: true })
+  loadDatabaseUrl()
   const base = process.env.FEAT15_API_URL ?? 'http://localhost:3333'
-  assert(process.env.DATABASE_URL, 'Informe a DATABASE_URL de teste.')
   async function api(path, body) {
     const response = await fetch(
       new URL(path, base),
@@ -587,8 +606,7 @@ async function prepareCampaigns(keys) {
 
 async function readSnapshot(id) {
   assert(id, 'Informe o ID da campanha.')
-  config({ path: '.env.test', quiet: true })
-  assert(process.env.DATABASE_URL, 'Informe a DATABASE_URL de teste.')
+  loadDatabaseUrl()
   const db = new Client({ connectionString: process.env.DATABASE_URL })
   await db.connect()
   try {
@@ -645,7 +663,10 @@ async function main() {
   throw new Error('Use content, campaigns ou snapshot <id>.')
 }
 
-main().catch((error) => {
-  console.error(error.message)
-  process.exitCode = 1
-})
+module.exports = { writeT60Content, scenarios, seed }
+
+if (require.main === module)
+  main().catch((error) => {
+    console.error(error.message)
+    process.exitCode = 1
+  })
