@@ -34,7 +34,7 @@ docker compose up -d postgres   # o autor
 npm run test:e2e
 ```
 
-Unitários: 107 arquivos, 1470 testes verdes. O e2e **não foi executado** pelo agente (Docker é do autor).
+Unitários: 107 arquivos, 1470 testes verdes. E2e rodado pelo autor em 2026-11-23: 52 arquivos, 266 testes verdes, depois de dois ajustes só nos testes: o e2e do mercado esperava `saveRespawnPoint` num grupo ainda fora de sessão, e o `toEqual` da criação (REQ-31) não tinha os campos novos `market` e `lastMarketVisit`.
 
 ## Problemas
 
