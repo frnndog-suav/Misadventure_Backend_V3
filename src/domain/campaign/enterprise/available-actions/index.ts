@@ -31,7 +31,9 @@ export function availableActions(
   canUseAbility = party.adventureAbilityOptions().length > 0,
   combat = party.combat,
   inUrbanZone = false,
-  questChoices: readonly TZoneQuestChoice[] = []
+  questChoices: readonly TZoneQuestChoice[] = [],
+  /** Os ids do inventário do membro que são boosters (REQ-144; `openBooster`). */
+  boosterCardIds: ReadonlySet<string> = new Set()
 ): TPartyActionType[] {
   const { turn } = party
   const choice = party.triggeredEffectChoice
@@ -80,8 +82,9 @@ export function availableActions(
     member &&
     (activatableEffects.length > 0 ||
       canUseAbility ||
-      member.player.inventory.some((slot) =>
-        equipmentCardIds.has(slot.cardId)
+      member.player.inventory.some(
+        (slot) =>
+          equipmentCardIds.has(slot.cardId) || boosterCardIds.has(slot.cardId)
       ) ||
       Object.values(member.player.equipment).some((cardId) => cardId !== null))
   ) {

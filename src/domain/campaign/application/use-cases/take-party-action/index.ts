@@ -321,6 +321,8 @@ export class TakePartyActionUseCase {
             )
           }
           prepared = party.prepare(action, catalog, at, this.ids)
+        } else if (action.operation === 'openBooster') {
+          prepared = party.prepare(action, catalog, at, this.ids)
         } else {
           prepared = party.prepare(action, catalog, at)
         }
@@ -537,6 +539,7 @@ export class TakePartyActionUseCase {
         entry.type === 'card' ? [entry.cardId] : []
       ),
       ...party.pendingRewards.map(({ cardId }) => cardId),
+      ...(party.boosterQueue?.remaining ?? []),
       ...(
         party.questRewardDelivery?.steps ??
         (quest?.type === 'zoneQuest' ? quest.rewards : [])
@@ -635,7 +638,37 @@ export class TakePartyActionUseCase {
       const card = await this.cardCatalog.findCard(cardId)
       if (card) cards.push(card)
     }
+    if (operation.operation === 'openBooster') {
+      await this.addBoosterCollections(cards)
+    }
     return cards
+  }
+
+  /**
+   * REQ-144: o sorteio do booster usa as cartas publicadas da coleção dele; o
+   * catálogo do agregado recebe essas cartas junto do booster.
+   */
+  private async addBoosterCollections(
+    cards: TCard[],
+    boosters: readonly TCard[] = cards
+  ): Promise<void> {
+    const collectionIds = new Set(
+      boosters.flatMap((card) =>
+        card.type === 'item' &&
+        card.itemCategory === 'booster' &&
+        card.boosterCollectionId !== null
+          ? [card.boosterCollectionId]
+          : []
+      )
+    )
+    const known = new Set(cards.map(({ id }) => id))
+    for (const collectionId of collectionIds) {
+      for (const card of await this.cardCatalog.listCards(collectionId)) {
+        if (known.has(card.id)) continue
+        known.add(card.id)
+        cards.push(card)
+      }
+    }
   }
 
   /**
@@ -750,6 +783,7 @@ export class TakePartyActionUseCase {
         case 'store':
         case 'take':
         case 'discard':
+        case 'openBooster':
           cardIds.add(operation.cardId)
           break
         case 'saveDeck':
@@ -782,6 +816,15 @@ export class TakePartyActionUseCase {
       const card = await this.cardCatalog.findCard(cardId)
       if (card) cards.push(card)
     }
+    const opened = new Set(
+      operations.flatMap((operation) =>
+        operation.operation === 'openBooster' ? [operation.cardId] : []
+      )
+    )
+    await this.addBoosterCollections(
+      cards,
+      cards.filter(({ id }) => opened.has(id))
+    )
     const classes: TClassDefinition[] = []
     for (const { playerClass } of player?.playerClasses ?? []) {
       const definition = await this.cardCatalog.findClass(playerClass)

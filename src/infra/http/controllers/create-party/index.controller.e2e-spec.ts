@@ -144,6 +144,7 @@ describe('POST /parties (e2e)', () => {
             // FEAT-16 (REQ-140): o fator e a vitrine são sorteados; os valores ficam no e2e do mercado.
             market: expect.objectContaining({ zoneId: 'fixture.gray-harbor' }),
             lastMarketVisit: null,
+            lastBoosterOpening: null,
             statuses: [],
             activatableEffects: [],
           },

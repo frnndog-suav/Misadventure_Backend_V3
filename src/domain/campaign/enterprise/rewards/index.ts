@@ -19,6 +19,7 @@ export type TPendingReward = {
     | { type: 'combatEvent'; combatId: string }
     | { type: 'quest'; questId: string; questCardId: string }
     | { type: 'scavenge' }
+    | { type: 'booster'; boosterCardId: string }
   destination: 'inventory' | 'tcgFolder'
   discardOptions: { cardId: string; maxCopies: number }[]
   decisionDeadlineAt: null

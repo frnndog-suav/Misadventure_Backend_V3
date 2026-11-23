@@ -1,10 +1,17 @@
 import { type Either, left, right } from '@/core/error/either'
+import type { SeededRng } from '@/core/rng/seeded-rng'
 import type {
   TCard,
   TStarterDeckEntry,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
+import {
+  boosterCandidatesOf,
+  drawBoosterCards,
+  isBooster,
+  type TBoosterOpeningResult,
+} from '../booster'
 import type { TPlayerState } from '../entities/party-member'
 import { addToInventory, type TInventorySlot } from '../inventory'
 import { capacitiesOf } from '../markets'
@@ -43,6 +50,8 @@ export type TVaultRefusalReason =
   | 'notOwned'
   | 'copyLimitExceeded'
   | 'buildBelowMinimum'
+  | 'notBooster'
+  | 'boosterEmpty'
 
 export type TVaultRefusal = Readonly<{
   reason: TVaultRefusalReason
@@ -61,6 +70,8 @@ export type TVaultOutcome = Readonly<{
   limbo: readonly TLimboEntry[]
   /** `swapBuild` ou `editBuild` no lote: o fim do lote refaz o deck (README 4.4; REQ-87). */
   buildChanged: boolean
+  /** A última abertura de booster do lote (REQ-144); `null` sem `openBooster`. */
+  lastBoosterOpening: TBoosterOpeningResult | null
 }>
 
 type TSlots = readonly TInventorySlot[]
@@ -137,13 +148,16 @@ export function applyVaultOperations(input: {
   config: TGameConfigValues
   cards: readonly TCard[]
   operations: readonly TVaultOperation[]
+  /** Só o `openBooster` usa o RNG; quem chama descarta o estado dele numa recusa. */
+  rng: Pick<SeededRng, 'nextInt'>
 }): Either<TVaultRefusal, TVaultOutcome> {
-  const { config, cards, operations } = input
+  const { config, cards, operations, rng } = input
   const capacity = capacitiesOf(config, input.player.expansions)
   let { inventory, tcgFolder, gold, build } = input.player
   let { slots, decks, gold: vaultGold } = input.player.vault
   const limbo: TLimboEntry[] = []
   let buildChanged = false
+  let lastBoosterOpening: TBoosterOpeningResult | null = null
 
   const cardOf = (cardId: string) => cards.find((c) => c.id === cardId)
   const isAttribute = (cardId: string) => cardOf(cardId)?.type === 'attribute'
@@ -268,6 +282,38 @@ export function applyVaultOperations(input: {
         limbo.push({ cardId, quantity })
         break
       }
+      case 'openBooster': {
+        const { cardId } = operation
+        const removed = removeFromSlots(slots, cardId, 1)
+        if (removed === null) return refuse('notInVault')
+        const booster = cardOf(cardId)
+        if (!isBooster(booster)) return refuse('notBooster')
+        if (capacity.vaultSlots - slots.length < config.boosterCardCount) {
+          return refuse('vaultFull')
+        }
+        const drawn = drawBoosterCards(
+          boosterCandidatesOf(cards, booster.boosterCollectionId),
+          config,
+          rng
+        )
+        if (drawn === null) return refuse('boosterEmpty')
+        slots = removed
+        for (const drawnId of drawn) {
+          const added = addToSlots(slots, drawnId, 1, capacity.vaultSlots)
+          if (added === null) return refuse('vaultFull')
+          slots = added
+        }
+        limbo.push({ cardId, quantity: 1 })
+        lastBoosterOpening = {
+          boosterCardId: cardId,
+          via: 'useVault',
+          cards: drawn.map((drawnId) => ({
+            cardId: drawnId,
+            destination: 'vault',
+          })),
+        }
+        break
+      }
       case 'saveDeck': {
         const { cards: deckCards } = operation
         let remaining = slots
@@ -379,5 +425,6 @@ export function applyVaultOperations(input: {
     },
     limbo,
     buildChanged,
+    lastBoosterOpening,
   })
 }

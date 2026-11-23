@@ -988,6 +988,71 @@ describe('DrizzlePartyMapper', () => {
     ).toBeUndefined()
   })
 
+  it('REQ-144: ida e volta preserva lastBoosterOpening, a entrega pendente do booster e a fila; save sem eles lê undefined', () => {
+    const lastBoosterOpening = {
+      boosterCardId: 'fixture.booster',
+      via: 'prepare' as const,
+      cards: [
+        { cardId: 'fixture.focus', destination: 'tcgFolder' as const },
+        { cardId: 'fixture.short-sword', destination: 'inventory' as const },
+        { cardId: 'fixture.short-sword', destination: 'pending' as const },
+        { cardId: 'fixture.short-sword', destination: 'vault' as const },
+      ],
+    }
+    const withBooster = makeParty({
+      status: 'inSession',
+      members: [
+        PartyMember.create(
+          {
+            characterName: 'Lia',
+            kind: 'human',
+            player: makePlayerState({ lastBoosterOpening }),
+          },
+          new UniqueEntityID('member-1')
+        ),
+      ],
+      pendingReward: {
+        id: 'reward-1',
+        memberId: 'member-1',
+        cardId: 'fixture.short-sword',
+        origin: { type: 'fixed' },
+        source: { type: 'booster', boosterCardId: 'fixture.booster' },
+        destination: 'inventory',
+        discardOptions: [{ cardId: 'fixture.pickaxe', maxCopies: 1 }],
+        decisionDeadlineAt: null,
+      },
+      boosterQueue: {
+        boosterCardId: 'fixture.booster',
+        remaining: ['fixture.short-sword', 'fixture.short-sword'],
+      },
+    })
+    const without = makeParty({ status: 'inSession' })
+    const toRow = (party: Party) =>
+      ({
+        ...JSON.parse(JSON.stringify(DrizzlePartyMapper.toDrizzle(party))),
+        createdAt: party.createdAt,
+        savedAt: party.savedAt,
+      }) as TPartyRow
+
+    const restored = DrizzlePartyMapper.toDomain(toRow(withBooster))
+    expect(restored.members[0].player.lastBoosterOpening).toEqual(
+      lastBoosterOpening
+    )
+    expect(restored.pendingRewards[0].source).toEqual({
+      type: 'booster',
+      boosterCardId: 'fixture.booster',
+    })
+    expect(restored.boosterQueue).toEqual({
+      boosterCardId: 'fixture.booster',
+      remaining: ['fixture.short-sword', 'fixture.short-sword'],
+    })
+    expect(DrizzlePartyMapper.toDrizzle(restored).state.schemaVersion).toBe(9)
+
+    const plain = DrizzlePartyMapper.toDomain(toRow(without))
+    expect(plain.members[0].player.lastBoosterOpening).toBeUndefined()
+    expect(plain.boosterQueue).toBeUndefined()
+  })
+
   /** Linha como era gravada antes da FEAT-16: sem `expansions` nos jogadores. */
   function rowBeforeMarkets(
     party: ReturnType<typeof usedRngParty>,

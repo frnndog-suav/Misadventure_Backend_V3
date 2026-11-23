@@ -73,6 +73,7 @@ function snapshot(party: Party): Party {
       ...structuredClone(party.combatSnapshot()),
       pendingReward: structuredClone(party.pendingRewards[0]),
       questRewardDelivery: structuredClone(party.questRewardDelivery),
+      boosterQueue: structuredClone(party.boosterQueue),
       questAttempt: structuredClone(party.questAttempt),
       rewardSequence: party.rewardSequence,
       turnOrder: [...party.turnOrder],

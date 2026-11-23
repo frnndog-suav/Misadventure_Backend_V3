@@ -417,10 +417,27 @@ const pendingReward = z.strictObject({
     z.strictObject({ type: z.literal('randomEvent'), encounterId: id }),
     z.strictObject({ type: z.literal('combatEvent'), combatId: id }),
     z.strictObject({ type: z.literal('quest'), questId: id, questCardId: id }),
+    z.strictObject({ type: z.literal('booster'), boosterCardId: id }),
   ]),
   destination: z.enum(['inventory', 'tcgFolder']),
   discardOptions: z.array(z.strictObject({ cardId: id, maxCopies: copies })),
   decisionDeadlineAt: z.null(),
+})
+const boosterQueue = z.strictObject({
+  boosterCardId: id,
+  remaining: z.array(id).min(1),
+})
+const boosterOpeningSchema = z.strictObject({
+  boosterCardId: id,
+  via: z.enum(['prepare', 'useVault']),
+  cards: z
+    .array(
+      z.strictObject({
+        cardId: id,
+        destination: z.enum(['tcgFolder', 'inventory', 'vault', 'pending']),
+      })
+    )
+    .readonly(),
 })
 const questRewardDelivery = z.strictObject({
   zoneType,
@@ -859,6 +876,7 @@ const stateSchema = z
     v8State.extend({
       schemaVersion: z.literal(SCHEMA_VERSION),
       questRewardDelivery: questRewardDelivery.optional(),
+      boosterQueue: boosterQueue.optional(),
       questAttempt: z
         .strictObject({
           encounterId: id,
@@ -872,6 +890,7 @@ const stateSchema = z
         playerSchema.extend({
           expansions: expansionsSchema.optional(),
           lastMarketVisit: marketVisitSchema.nullable().optional(),
+          lastBoosterOpening: boosterOpeningSchema.nullable().optional(),
           down: z.boolean().optional(),
           skipNextTurn: z.boolean().optional(),
           lastKnockout: z
@@ -991,6 +1010,7 @@ export class DrizzlePartyMapper {
               combat: state.combat as TPartyProps['combat'],
               questRewardDelivery:
                 state.questRewardDelivery as TPartyProps['questRewardDelivery'],
+              boosterQueue: state.boosterQueue,
               questAttempt: state.questAttempt,
               combatZone: state.combatZone,
               lastCombatResult: state.lastCombatResult,
@@ -1068,6 +1088,9 @@ export class DrizzlePartyMapper {
             }),
             ...(m.player.lastMarketVisit !== undefined && {
               lastMarketVisit: m.player.lastMarketVisit,
+            }),
+            ...(m.player.lastBoosterOpening !== undefined && {
+              lastBoosterOpening: m.player.lastBoosterOpening,
             }),
             deck: [...m.player.deck],
             hand: [...m.player.hand],
@@ -1169,6 +1192,9 @@ export class DrizzlePartyMapper {
             party.questRewardDelivery
           ),
         }),
+        ...(party.boosterQueue && {
+          boosterQueue: boosterQueue.parse(party.boosterQueue),
+        }),
         ...(party.rewardSequence > 0 && {
           rewardSequence: party.rewardSequence,
         }),
@@ -1231,6 +1257,7 @@ type TStoredPlayer = z.infer<typeof legacyPlayerSchema> &
       | 'lastKnockout'
       | 'expansions'
       | 'lastMarketVisit'
+      | 'lastBoosterOpening'
     >
   >
 

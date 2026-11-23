@@ -159,7 +159,17 @@ import {
   type TPartyRewardDeck,
 } from '../../scavenge'
 import { rollTurnOrder } from '../../turn-order'
-import { applyVaultOperations, type TVaultRefusal } from '../../vault'
+import {
+  applyVaultOperations,
+  removeFromInventory,
+  type TVaultRefusal,
+} from '../../vault'
+import {
+  boosterCandidatesOf,
+  drawBoosterCards,
+  isBooster,
+  placeBoosterInPrepare,
+} from '../../booster'
 import { maxHealthOf, PartyMember, type TPlayerState } from '../party-member'
 
 /** Limites de CONTRATO FEAT-05 (`CreatePartyRequest`, D-30). */
@@ -210,6 +220,9 @@ export type TPrepareRefusal =
         | 'shieldBlocked'
         | 'inventoryFull'
         | 'slotEmpty'
+        | 'notBooster'
+        | 'tcgFolderFull'
+        | 'boosterEmpty'
     }
 
 /** Por que o Usar cofre foi recusado (REQ-88; D-82). */
@@ -346,6 +359,10 @@ export type TCombatResult = {
 }
 
 type OutcomeCursor = { nextStep: number; nextCopy?: number }
+export type BoosterQueue = {
+  boosterCardId: string
+  remaining: readonly string[]
+}
 type QuestRewardDelivery = {
   steps: readonly TRandomEventOutcomeStep[]
   zoneType: TEventDeck['zoneType']
@@ -385,6 +402,8 @@ export interface TPartyProps {
   triggeredEffectSequence?: number
   pendingReward?: TPendingReward | null
   questRewardDelivery?: QuestRewardDelivery
+  /** Cartas do booster ainda à espera da entrega pendente, na ordem do sorteio (D-128). */
+  boosterQueue?: BoosterQueue
   questAttempt?: TZoneQuestAttempt
   rewardSequence?: number
   /** Ids de membro, do 1º ao último (REQ-33). */
@@ -498,6 +517,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 
   get questRewardDelivery(): QuestRewardDelivery | undefined {
     return this.props.questRewardDelivery
+  }
+
+  get boosterQueue(): BoosterQueue | undefined {
+    return this.props.boosterQueue
   }
 
   get rewardSequence(): number {
@@ -4030,6 +4053,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           delivery: action.choice === 'keep' ? 'inventory' : 'left',
         },
       })
+    } else if (source.type === 'booster') {
+      this.replaceActor(index, player)
+      this.openNextBoosterReward(index, source, cards, ids)
     } else if (source.type === 'combatEvent') {
       this.finishCombatOutcome(index, player, cards, ids)
     } else if (source.type === 'quest' && delivery) {
@@ -4053,6 +4079,37 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       }
     }
     return right(undefined)
+  }
+
+  /** Abre a próxima entrega pendente da fila do booster; a carta que o catálogo não tem é pulada (D-128). */
+  private openNextBoosterReward(
+    index: number,
+    source: Extract<TPendingReward['source'], { type: 'booster' }>,
+    cards: ReadonlyMap<string, TCard>,
+    ids: IdGenerator | undefined
+  ): void {
+    const [next, ...rest] = this.props.boosterQueue?.remaining ?? []
+    this.props.boosterQueue =
+      rest.length > 0
+        ? { boosterCardId: source.boosterCardId, remaining: rest }
+        : undefined
+    if (next === undefined) return
+    const card = cards.get(next)
+    if (
+      card?.type !== 'attribute' &&
+      card?.type !== 'equipment' &&
+      card?.type !== 'item'
+    ) {
+      this.openNextBoosterReward(index, source, cards, ids)
+      return
+    }
+    this.openReward(
+      this.props.members[index].player,
+      card,
+      { type: 'fixed' },
+      source,
+      ids
+    )
   }
 
   private applyEventOutcomeEffect(
@@ -4144,6 +4201,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       ...this.pendingRewards.flatMap(({ source }) =>
         source.type === 'quest' ? [source.questCardId] : []
       ),
+      ...(this.props.boosterQueue?.remaining ?? []),
       ...(this.questRewardDelivery?.steps.flatMap((step) =>
         step.type === 'grantReward' || step.type === 'searchReward'
           ? [step.cardId]
@@ -5019,23 +5077,28 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const { config } = this.props
     const index = this.actorIndex()
     const actor = this.props.members[index]
+    const rng = SeededRng.fromState(this.props.rngState)
     const applied = applyVaultOperations({
       player: actor.player,
       config,
       cards: catalog.cards,
       operations,
+      rng,
     })
     if (applied.isLeft()) return left(applied.value)
-    const { player: changed, limbo, buildChanged } = applied.value
+    const { limbo, buildChanged, lastBoosterOpening } = applied.value
+    const changed =
+      lastBoosterOpening === null
+        ? applied.value.player
+        : { ...applied.value.player, lastBoosterOpening }
 
     let next = changed
     let rebuilt: ReturnType<typeof rebuildPlayerDeck> | null = null
     if (buildChanged) {
-      const rng = SeededRng.fromState(this.props.rngState)
       rebuilt = rebuildPlayerDeck(changed, changed.build, catalog, config, rng)
       next = { ...changed, ...rebuilt }
-      this.props.rngState = rng.state()
     }
+    this.props.rngState = rng.state()
 
     this.spendActionPoint()
     this.replaceActor(index, next)
@@ -5332,9 +5395,13 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     ids: IdGenerator
   ): Either<TPrepareRefusal, void>
   prepare(
-    operation: Extract<TPrepareOperation, { operation: 'equip' | 'unequip' }>,
+    operation: Extract<
+      TPrepareOperation,
+      { operation: 'equip' | 'unequip' | 'openBooster' }
+    >,
     catalog: { cards: readonly TCard[] },
-    at: Date
+    at: Date,
+    ids?: IdGenerator
   ): Either<TPrepareRefusal, void>
   prepare(
     operation: Exclude<TPrepareOperation, { operation: 'useAbility' }>,
@@ -5537,6 +5604,81 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           slot: card.slot,
           ...base,
         })
+        return right(undefined)
+      }
+      case 'openBooster': {
+        const { cardId } = operation
+        const position = player.inventory.findIndex(
+          (entry) => entry.cardId === cardId
+        )
+        if (position < 0) return left({ reason: 'notInInventory' })
+        const booster = catalog.cards.find((c) => c.id === cardId)
+        if (!isBooster(booster)) return left({ reason: 'notBooster' })
+        const capacities = capacitiesOf(this.props.config, player.expansions)
+        const folderUsed = player.tcgFolder.reduce(
+          (sum, entry) => sum + entry.copies,
+          0
+        )
+        if (
+          capacities.tcgFolder - folderUsed <
+          this.props.config.boosterCardCount
+        )
+          return left({ reason: 'tcgFolderFull' })
+
+        const rng = SeededRng.fromState(this.props.rngState)
+        const drawn = drawBoosterCards(
+          boosterCandidatesOf(catalog.cards, booster.boosterCollectionId),
+          this.props.config,
+          rng
+        )
+        if (drawn === null) return left({ reason: 'boosterEmpty' })
+
+        // A embalagem sai antes: o slot dela já vale para as cartas (README 6.5).
+        const emptied = removeFromInventory(player.inventory, cardId, 1)
+        const placed = placeBoosterInPrepare({
+          player: { ...player, inventory: emptied ?? player.inventory },
+          cards: catalog.cards,
+          drawn,
+          inventoryCapacity: capacity,
+        })
+        const source = { type: 'booster', boosterCardId: cardId } as const
+        const pendingIds = drawn.filter(
+          (_, i) => placed.destinations[i] === 'pending'
+        )
+        const opened: TPlayerState = {
+          ...placed.player,
+          lastBoosterOpening: {
+            boosterCardId: cardId,
+            via: 'prepare',
+            cards: drawn.map((drawnId, i) => ({
+              cardId: drawnId,
+              destination: placed.destinations[i],
+            })),
+          },
+        }
+
+        this.props.rngState = rng.state()
+        this.props.savedAt = at
+        this.replaceActor(index, opened)
+        this.addDomainEvent({
+          type: 'SentToLimbo',
+          cardId,
+          quantity: 1,
+          from: 'inventory',
+          ...base,
+        })
+        if (pendingIds.length > 0) {
+          this.props.boosterQueue = {
+            boosterCardId: cardId,
+            remaining: pendingIds,
+          }
+          this.openNextBoosterReward(
+            index,
+            source,
+            new Map(catalog.cards.map((card) => [card.id, card])),
+            ids
+          )
+        }
         return right(undefined)
       }
       case 'unequip': {

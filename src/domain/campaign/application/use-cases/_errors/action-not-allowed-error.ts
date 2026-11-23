@@ -52,6 +52,8 @@ export type TActionNotAllowedReason =
   | 'notEnoughPeak'
   | 'paymentInvalid'
   | 'minimumNotMet'
+  | 'notBooster'
+  | 'boosterEmpty'
   | TMarketRefusalReason
 
 export class ActionNotAllowedError extends DomainError {

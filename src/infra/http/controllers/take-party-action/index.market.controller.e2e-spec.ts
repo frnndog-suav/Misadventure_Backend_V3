@@ -50,6 +50,12 @@ type TPlayer = {
     results: Record<string, unknown>[]
     goldLost: number
   } | null
+  lastBoosterOpening: {
+    boosterCardId: string
+    via: string
+    cards: { cardId: string; destination: string }[]
+  } | null
+  vault: { slots: { cardId: string; quantity: number }[] }
 }
 
 type TParty = {
@@ -500,5 +506,80 @@ describe('Ir ao Mercado (e2e)', () => {
     expect(await fields(visitMarket({ operation: 'haggle' }))).toEqual([
       { field: 'operations.0.operation', reason: 'unknownOperation' },
     ])
+  })
+
+  // CONTRATO v0.80, FEAT-16 (T-65): abrir booster (REQ-144). O sorteio exato
+  // fica nos testes de unidade; aqui as 8 cartas vêm da coleção da fixture.
+  it('REQ-144: Preparar — abre o booster, 8 cartas para a pasta ou o inventário, de graça, e a embalagem sai', async () => {
+    const party = await startedParty()
+    await give(party, BO)
+    expect(player(await get(party.id)).availableActions).toContain('prepare')
+
+    const opened = await act(party.id, {
+      type: 'prepare',
+      operation: 'openBooster',
+      cardId: BO,
+    })
+
+    expect(opened.status).toBe(200)
+    const p = player(opened.body)
+    expect(p.inventory.find(({ cardId }) => cardId === BO)).toBeUndefined()
+    expect(p.lastBoosterOpening?.boosterCardId).toBe(BO)
+    expect(p.lastBoosterOpening?.via).toBe('prepare')
+    expect(p.lastBoosterOpening?.cards).toHaveLength(8)
+    for (const { destination } of p.lastBoosterOpening?.cards ?? []) {
+      expect(['tcgFolder', 'inventory', 'pending']).toContain(destination)
+    }
+    expect(opened.body.turn.actionPoints).toBe(party.turn.actionPoints)
+  })
+
+  it('REQ-144: Preparar — 23 cartas na pasta → 409 tcgFolderFull; carta que não é booster → 409 notBooster; sem a carta → 409 notInInventory', async () => {
+    const party = await startedParty()
+    await give(party, BO)
+    await give(party, STR, 23)
+    await give(party, P)
+
+    const full = await act(party.id, {
+      type: 'prepare',
+      operation: 'openBooster',
+      cardId: BO,
+    })
+    const notBooster = await act(party.id, {
+      type: 'prepare',
+      operation: 'openBooster',
+      cardId: P,
+    })
+    const missing = await act(party.id, {
+      type: 'prepare',
+      operation: 'openBooster',
+      cardId: C,
+    })
+
+    expect(full.status).toBe(409)
+    expect(full.body).toEqual(notAllowed({ reason: 'tcgFolderFull' }))
+    expect(notBooster.body).toEqual(notAllowed({ reason: 'notBooster' }))
+    expect(missing.body).toEqual(notAllowed({ reason: 'notInInventory' }))
+  })
+
+  it('REQ-144: Usar cofre — store e openBooster no lote, 8 cartas no cofre, 1 PA', async () => {
+    const party = await startedParty()
+    await give(party, BO)
+
+    const opened = await act(party.id, {
+      type: 'useVault',
+      operations: [
+        { operation: 'store', cardId: BO, quantity: 1 },
+        { operation: 'openBooster', cardId: BO },
+      ],
+    })
+
+    expect(opened.status).toBe(200)
+    const p = player(opened.body)
+    expect(p.lastBoosterOpening?.via).toBe('useVault')
+    expect(p.lastBoosterOpening?.cards).toHaveLength(8)
+    expect(p.vault.slots.reduce((sum, { quantity }) => sum + quantity, 0)).toBe(
+      8
+    )
+    expect(opened.body.turn.actionPoints).toBe(party.turn.actionPoints - 1)
   })
 })

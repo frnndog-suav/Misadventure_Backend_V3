@@ -28,6 +28,10 @@ import type {
 } from '@/domain/campaign/enterprise/market-trade'
 import type { TPlayerStatus } from '@/domain/campaign/enterprise/player-status'
 import { findMarketBoosters } from '@/domain/campaign/application/market-catalog'
+import {
+  isBooster,
+  type TBoosterOpeningResult,
+} from '@/domain/campaign/enterprise/booster'
 import { availableActions } from '@/domain/campaign/enterprise/available-actions'
 import { connectedZones } from '@/domain/campaign/enterprise/connected-zones'
 import { effectiveModifiers } from '@/domain/campaign/enterprise/effective-modifiers'
@@ -122,6 +126,8 @@ export interface TPlayerStateHttp {
   /** FEAT-16 (REQ-143). Contagem de cada expansão comprada; as capacidades acima já são as efetivas. */
   expansions: Record<TMarketExpansion, number>
   lastMarketVisit: TMarketVisitResult | null
+  /** FEAT-16 (REQ-144). */
+  lastBoosterOpening: TBoosterOpeningResult | null
   lastScavenge:
     | (NonNullable<TPlayerState['lastScavenge']> & {
         delivery: NonNullable<
@@ -197,6 +203,11 @@ function playerToHTTP(
     player.inventory
       .map(({ cardId }) => cardId)
       .filter((cardId) => cards.get(cardId)?.type === 'equipment')
+  )
+  const boosterCardIds = new Set(
+    player.inventory
+      .map(({ cardId }) => cardId)
+      .filter((cardId) => isBooster(cards.get(cardId)))
   )
   // Zona e Carta de Dimensão lidas no catálogo (D-81, D-92, D-93).
   const zoneCard = cards.get(player.zoneId)
@@ -281,7 +292,8 @@ function playerToHTTP(
       usableAbilities.length > 0,
       party.describeCombat(cards),
       zone?.zoneType === 'urban',
-      quests.questChoices
+      quests.questChoices,
+      boosterCardIds
     ),
     build: copiesToHTTP(player.build),
     buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),
@@ -322,6 +334,7 @@ function playerToHTTP(
     market: party.describeMarket(member, cards),
     expansions: { ...expansions },
     lastMarketVisit: player.lastMarketVisit ?? null,
+    lastBoosterOpening: player.lastBoosterOpening ?? null,
     lastScavenge:
       player.lastScavenge === null
         ? null

@@ -19,6 +19,7 @@ export type TRecoverOption = (typeof RECOVER_OPTIONS)[number]
 export type TPrepareOperation =
   | { operation: 'equip'; cardId: string }
   | { operation: 'unequip'; slot: TEquipmentSlot }
+  | { operation: 'openBooster'; cardId: string }
   | TActivateOperation
   | ({ operation: 'useAbility' } & TAbilityIntent)
 
@@ -86,6 +87,7 @@ export type TVaultOperation =
   | { operation: 'unpackDeck'; deckIndex: number }
   | { operation: 'swapBuild'; deckIndex: number }
   | { operation: 'editBuild'; build: { cardId: string; copies: number }[] }
+  | { operation: 'openBooster'; cardId: string }
 
 /** Uma operação do Ir ao Mercado (README 24; REQ-140; D-118). */
 export type TMarketOperation =
@@ -701,7 +703,8 @@ function parsePrepare(
         ? right({ type: 'prepare', operation, ...intent })
         : left(issues)
     }
-    case 'equip': {
+    case 'equip':
+    case 'openBooster': {
       const { cardId } = body
       if (cardId === undefined) {
         issues.push({ field: 'cardId', reason: 'required' })
@@ -935,6 +938,12 @@ function parseVaultOperation(
     issues.push(...extraKeys(entry, ['operation', ...allowed], `${path}.`))
 
   switch (operation) {
+    case 'openBooster': {
+      const cardId = text('cardId')
+      extras(['cardId'])
+      if (issues.length > before || cardId === null) return null
+      return { operation, cardId }
+    }
     case 'store':
     case 'take':
     case 'discard': {

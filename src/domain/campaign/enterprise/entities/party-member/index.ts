@@ -8,6 +8,7 @@ import {
   type TStarterDeckEntry,
 } from '@/domain/catalog/enterprise/value-objects/card'
 
+import type { TBoosterOpeningResult } from '../../booster'
 import type { TInventorySlot } from '../../inventory'
 import type { TMarketVisitResult } from '../../market-trade'
 import type { TExpansions } from '../../markets'
@@ -67,6 +68,8 @@ export type TPlayerState = Readonly<{
   expansions?: TExpansions
   /** Resultado do último Ir ao Mercado aceito (REQ-140); ausente/`null` até o primeiro. */
   lastMarketVisit?: TMarketVisitResult | null
+  /** Resultado do último `openBooster` aceito (REQ-144); ausente/`null` até o primeiro. */
+  lastBoosterOpening?: TBoosterOpeningResult | null
   /** Resultado do último Vasculhar aceito (REQ-96); `null` até o primeiro. */
   lastScavenge: Readonly<{
     cardId: string
