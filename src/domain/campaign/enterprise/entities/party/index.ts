@@ -3,7 +3,10 @@ import { type Either, left, right } from '@/core/error/either'
 import { AggregateRoot } from '@/core/pattern/aggregate-root'
 import type { IdGenerator } from '@/core/ports/id-generator'
 import { type RngState, SeededRng } from '@/core/rng/seeded-rng'
-import { isClassActive } from '@/domain/catalog/enterprise/class-lock'
+import {
+  isClassActive,
+  isSpecializationActive,
+} from '@/domain/catalog/enterprise/class-lock'
 import {
   combatExecutionFields,
   isExecutableCombatEvent,
@@ -5533,7 +5536,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 /**
  * README 4.4 passos 1 a 4 (REQ-65, REQ-87): a build nova, embaralhada pelo RNG,
  * vira o deck; a mão volta com o mesmo tamanho que tinha, o descarte esvazia; a
- * trava de cada classe e os modificadores (da 1ª classe, REQ-34) são refeitos.
+ * trava de cada classe e especialização e os modificadores (da 1ª classe
+ * ativa, REQ-134) são refeitos.
  * A carta ou a classe que o catálogo não tem: sem trava recalculada.
  */
 function rebuildPlayerDeck(
@@ -5547,7 +5551,12 @@ function rebuildPlayerDeck(
   rng: SeededRng
 ): Pick<
   TPlayerState,
-  'playerClasses' | 'deck' | 'hand' | 'discard' | 'modifiers'
+  | 'playerClasses'
+  | 'specializations'
+  | 'deck'
+  | 'hand'
+  | 'discard'
+  | 'modifiers'
 > {
   const shuffled = shuffle(
     newBuild.flatMap(({ cardId, copies }) =>
@@ -5577,16 +5586,52 @@ function rebuildPlayerDeck(
       }),
     }
   })
-  // Os modificadores seguem a 1ª classe, como na preparação (REQ-34).
-  const firstDefinition = catalog.classes.find(
-    (c) => c.playerClass === player.playerClasses[0]?.playerClass
+  // Cada especialização usa a própria trava (README 8.2; REQ-134). Sem a
+  // classe ou a opção no catálogo, a trava fica como estava.
+  const specializations = player.specializations?.map((entry) => {
+    const definition = catalog.classes.find(
+      (c) => c.playerClass === entry.playerClass
+    )
+    const option = definition?.specializations?.find(
+      ({ id }) => id === entry.specializationId
+    )
+    if (!definition || !option) return entry
+    return {
+      ...entry,
+      deckLockMet: isSpecializationActive({
+        build: lockEntries,
+        essentialAttributes: definition.essentialAttributes,
+        reinforcedAttributes: option.reinforcedAttributes,
+        additionalAttributes: option.additionalAttributes,
+        lockOneEssential: config.lockOneEssential,
+        lockTwoEssentials: config.lockTwoEssentials,
+        lockSpecializationAdditional: config.lockSpecializationAdditional,
+        lockSpecializationReinforcement: config.lockSpecializationReinforcement,
+      }),
+    }
+  })
+  // Os modificadores seguem a classe ativa mais antiga (README 8.4; REQ-134);
+  // nenhuma ativa: os padrões. A classe sem definição no catálogo não muda nada.
+  const firstActive = playerClasses.find(({ deckLockMet }) => deckLockMet)
+  const activeDefinition = catalog.classes.find(
+    (c) => c.playerClass === firstActive?.playerClass
   )
-  const modifiers = firstDefinition
-    ? playerClasses[0].deckLockMet
-      ? { ...firstDefinition.baseModifiers }
-      : defaultModifiers(config)
-    : player.modifiers
-  return { playerClasses, deck, hand, discard: [], modifiers }
+  const knowsEveryClass = playerClasses.every(({ playerClass }) =>
+    catalog.classes.some((c) => c.playerClass === playerClass)
+  )
+  const modifiers = activeDefinition
+    ? { ...activeDefinition.baseModifiers }
+    : knowsEveryClass
+      ? defaultModifiers(config)
+      : player.modifiers
+  return {
+    playerClasses,
+    ...(specializations && { specializations }),
+    deck,
+    hand,
+    discard: [],
+    modifiers,
+  }
 }
 
 /** REQ-35: `unknownClass` quando o texto não tem classe publicada. */

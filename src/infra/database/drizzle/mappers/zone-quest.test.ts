@@ -10,6 +10,7 @@ import type { TPartyProps } from '@/domain/campaign/enterprise/entities/party'
 import type { TPlayerState } from '@/domain/campaign/enterprise/entities/party-member'
 import type {
   TCard,
+  TAttribute,
   TClassDefinition,
   TZoneQuestCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
@@ -1712,5 +1713,320 @@ describe('T-58 â€” provaÃ§Ã£o e mentor: bordas', () => {
       ])
       await game.act({ type: 'endTurn' })
     }
+  })
+})
+
+describe('T-59 — ativação ao salvar a build', () => {
+  const card = (name: TAttribute) =>
+    makeAttributeCard({
+      id: `fixture.${name}-basic`,
+      name,
+      attributes: [name],
+    })
+  const [strength, endurance, wisdom, dexterity, luck] = (
+    ['strength', 'endurance', 'wisdom', 'dexterity', 'luck'] as const
+  ).map(card)
+  const entry = (cardId: string, copies: number) => ({ cardId, copies })
+  const mods = (attack: number) => ({
+    attack,
+    defense: 4,
+    accuracy: 50,
+    evasion: 15,
+    celerity: 8,
+    piercing: 0,
+    reflection: 0,
+  })
+  const defaults = {
+    attack: 5,
+    defense: 3,
+    accuracy: 50,
+    evasion: 20,
+    celerity: 10,
+    piercing: 0,
+    reflection: 0,
+  }
+  const warrior = makeClassDefinition({
+    essentialAttributes: ['strength', 'endurance'],
+    baseModifiers: mods(6),
+    specializations: [
+      {
+        id: 'knight',
+        name: 'Cavaleiro',
+        additionalAttributes: ['wisdom'],
+        reinforcedAttributes: ['endurance'],
+        effects: [],
+      },
+    ],
+  })
+  const rogue = makeClassDefinition({
+    playerClass: 'rogue',
+    name: 'Ladino',
+    essentialAttributes: ['dexterity'],
+    baseModifiers: mods(5),
+    specializations: [
+      {
+        id: 'shadow',
+        name: 'Sombra',
+        additionalAttributes: ['luck'],
+        reinforcedAttributes: ['dexterity'],
+        effects: [],
+      },
+    ],
+  })
+  const warriorEntry = (deckLockMet: boolean) =>
+    ({ playerClass: 'warrior', deckLockMet }) as const
+  const rogueEntry = (deckLockMet: boolean) =>
+    ({ playerClass: 'rogue', deckLockMet }) as const
+  const knight = (deckLockMet: boolean) =>
+    ({
+      playerClass: 'warrior',
+      specializationId: 'knight',
+      deckLockMet,
+    }) as const
+  const shadow = (deckLockMet: boolean) =>
+    ({
+      playerClass: 'rogue',
+      specializationId: 'shadow',
+      deckLockMet,
+    }) as const
+
+  function begin(player: Partial<TPlayerState>) {
+    return setup([a, b], 3, false, undefined, {
+      player: { peak: 30, modifiers: defaults, ...player },
+      config: { tcgFolderCapacity: 100 },
+      classes: [warrior, rogue],
+      cards: [strength, endurance, wisdom, dexterity, luck],
+    })
+  }
+
+  async function reload(game: Awaited<ReturnType<typeof setup>>) {
+    const restored = DrizzlePartyMapper.toDomain(
+      DrizzlePartyMapper.toDrizzle(await game.stored())
+    )
+    await game.repository.save(restored)
+    return restored.members[0].player
+  }
+
+  const knightPlayer = {
+    playerClasses: [warriorEntry(false)],
+    specializations: [knight(false)],
+    build: [entry(endurance.id, 30), entry(strength.id, 30)],
+    tcgFolder: [entry(wisdom.id, 6), entry(strength.id, 30)],
+  }
+
+  it('REQ-134: Ajustar deck ativa a classe e a especialização e persiste; antes disso a trava segue falsa', async () => {
+    const game = await begin(knightPlayer)
+    const projected = (deckLockMet: boolean) => [
+      { classId: 'warrior', specializationId: 'knight', deckLockMet },
+    ]
+    expect((await game.project(await game.stored())).specializations).toEqual(
+      projected(false)
+    )
+    const saved = await game.act({
+      type: 'adjustDeck',
+      build: [
+        entry(endurance.id, 14),
+        entry(strength.id, 40),
+        entry(wisdom.id, 6),
+      ],
+    })
+    expect(saved.turn.actionPoints).toBe(2)
+    const reloaded = await reload(game)
+    expect(reloaded.playerClasses).toEqual([warriorEntry(true)])
+    expect(reloaded.specializations).toEqual([knight(true)])
+    expect((await game.project(saved)).specializations).toEqual(projected(true))
+  })
+
+  it.each([
+    {
+      name: 'falta uma carta do reforço',
+      build: [
+        entry(endurance.id, 13),
+        entry(strength.id, 41),
+        entry(wisdom.id, 6),
+      ],
+    },
+    {
+      name: 'falta uma carta do adicional',
+      build: [
+        entry(endurance.id, 14),
+        entry(strength.id, 41),
+        entry(wisdom.id, 5),
+      ],
+    },
+  ])(
+    'REQ-134: a especialização segue inativa quando $name, com a classe ativa',
+    async ({ build }) => {
+      const game = await begin(knightPlayer)
+      await game.act({ type: 'adjustDeck', build })
+      const player = (await game.stored()).members[0].player
+      expect(player.playerClasses).toEqual([warriorEntry(true)])
+      expect(player.specializations).toEqual([knight(false)])
+    }
+  )
+
+  it('REQ-134: Usar cofre ativa a especialização ao salvar a build', async () => {
+    const game = await begin({
+      ...knightPlayer,
+      tcgFolder: [],
+      vault: {
+        slots: [
+          { cardId: wisdom.id, quantity: 6 },
+          { cardId: strength.id, quantity: 30 },
+        ],
+        decks: [],
+        gold: 0,
+      },
+    })
+    const saved = await game.act({
+      type: 'useVault',
+      operations: [
+        {
+          operation: 'editBuild',
+          build: [
+            entry(endurance.id, 14),
+            entry(strength.id, 40),
+            entry(wisdom.id, 6),
+          ],
+        },
+      ],
+    })
+    expect(saved.turn.actionPoints).toBe(2)
+    const reloaded = await reload(game)
+    expect(reloaded.playerClasses).toEqual([warriorEntry(true)])
+    expect(reloaded.specializations).toEqual([knight(true)])
+  })
+
+  describe('modificadores base', () => {
+    const owned = {
+      playerClasses: [warriorEntry(false), rogueEntry(false)],
+      build: [
+        entry(endurance.id, 20),
+        entry(strength.id, 20),
+        entry(dexterity.id, 20),
+      ],
+      tcgFolder: [entry(endurance.id, 20), entry(luck.id, 20)],
+    }
+    const saveBuild = async (build: ReturnType<typeof entry>[]) => {
+      const game = await begin(owned)
+      await game.act({ type: 'adjustDeck', build })
+      return { game, player: await reload(game) }
+    }
+
+    it('REQ-134: com várias classes ativas, vale a primeira adquirida', async () => {
+      const { player } = await saveBuild([
+        entry(endurance.id, 20),
+        entry(strength.id, 20),
+        entry(dexterity.id, 20),
+      ])
+      expect(player.playerClasses).toEqual([
+        warriorEntry(true),
+        rogueEntry(true),
+      ])
+      expect(player.modifiers).toEqual(mods(6))
+    })
+
+    it('REQ-134: só a segunda classe ativa usa os modificadores dela', async () => {
+      const { player } = await saveBuild([
+        entry(dexterity.id, 20),
+        entry(endurance.id, 20),
+        entry(luck.id, 20),
+      ])
+      expect(player.playerClasses).toEqual([
+        warriorEntry(false),
+        rogueEntry(true),
+      ])
+      expect(player.modifiers).toEqual(mods(5))
+    })
+
+    it('REQ-134: nenhuma classe ativa usa os padrões e a capacidade de inventário não muda', async () => {
+      const game = await begin(owned)
+      const capacity = (await game.stored()).config.inventoryCapacity
+      await game.act({
+        type: 'adjustDeck',
+        build: [entry(endurance.id, 40), entry(luck.id, 20)],
+      })
+      const player = await reload(game)
+      expect(player.playerClasses).toEqual([
+        warriorEntry(false),
+        rogueEntry(false),
+      ])
+      expect(player.modifiers).toEqual(defaults)
+      expect((await game.stored()).config.inventoryCapacity).toBe(capacity)
+      expect((await game.project(await game.stored())).inventoryCapacity).toBe(
+        capacity
+      )
+    })
+  })
+
+  it('REQ-134: cada especialização é checada contra a própria trava e a ordem de aquisição é preservada', async () => {
+    const game = await begin({
+      playerClasses: [rogueEntry(false), warriorEntry(false)],
+      specializations: [knight(false), shadow(false)],
+      build: [
+        entry(endurance.id, 20),
+        entry(strength.id, 20),
+        entry(dexterity.id, 20),
+      ],
+      tcgFolder: [entry(wisdom.id, 6), entry(endurance.id, 20)],
+    })
+    await game.act({
+      type: 'adjustDeck',
+      build: [
+        entry(endurance.id, 34),
+        entry(strength.id, 10),
+        entry(dexterity.id, 10),
+        entry(wisdom.id, 6),
+      ],
+    })
+    const player = await reload(game)
+    expect(player.playerClasses).toEqual([
+      rogueEntry(false),
+      warriorEntry(true),
+    ])
+    expect(player.specializations).toEqual([knight(true), shadow(false)])
+    expect(player.modifiers).toEqual(mods(6))
+  })
+
+  it('REQ-134: classe ou especialização ausente do catálogo mantém a trava e os modificadores atuais', async () => {
+    const mage = { playerClass: 'mage', deckLockMet: true } as const
+    const ghost = { ...knight(true), specializationId: 'ghost' }
+    const seer = {
+      playerClass: 'mage',
+      specializationId: 'seer',
+      deckLockMet: true,
+    } as const
+    const game = await begin({
+      ...knightPlayer,
+      playerClasses: [warriorEntry(true), mage],
+      specializations: [ghost, seer],
+      modifiers: mods(9),
+    })
+    await game.act({
+      type: 'adjustDeck',
+      build: [entry(endurance.id, 9), entry(strength.id, 51)],
+    })
+    const player = await reload(game)
+    expect(player.playerClasses).toEqual([warriorEntry(false), mage])
+    expect(player.specializations).toEqual([ghost, seer])
+    expect(player.modifiers).toEqual(mods(9))
+  })
+
+  it('REQ-134: save sem especializações segue sem a chave depois de salvar a build', async () => {
+    const game = await begin({
+      playerClasses: [warriorEntry(false)],
+      build: [entry(endurance.id, 30), entry(strength.id, 30)],
+      tcgFolder: [],
+    })
+    expect('specializations' in (await game.stored()).members[0].player).toBe(
+      false
+    )
+    await game.act({
+      type: 'adjustDeck',
+      build: [entry(endurance.id, 30), entry(strength.id, 30)],
+    })
+    expect('specializations' in (await game.stored()).members[0].player).toBe(
+      false
+    )
   })
 })

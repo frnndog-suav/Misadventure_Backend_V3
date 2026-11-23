@@ -37,3 +37,52 @@ export function isClassActive({
     return count >= required
   })
 }
+
+export type TSpecializationLockInput = TClassLockInput &
+  Readonly<{
+    reinforcedAttributes: readonly TAttribute[]
+    additionalAttributes: readonly TAttribute[]
+    lockSpecializationAdditional: number
+    lockSpecializationReinforcement: number
+  }>
+
+/**
+ * Trava da especialização (README 8.2; REQ-134). Inclui a trava completa da
+ * classe: cada essencial exige o mínimo da classe, somado ao reforço se o
+ * atributo for reforçado; cada adicional exige o mínimo de adicionais.
+ */
+export function isSpecializationActive({
+  build,
+  essentialAttributes,
+  reinforcedAttributes,
+  additionalAttributes,
+  lockOneEssential,
+  lockTwoEssentials,
+  lockSpecializationAdditional,
+  lockSpecializationReinforcement,
+}: TSpecializationLockInput): boolean {
+  if (essentialAttributes.length === 0) return false
+
+  const classMinimum =
+    essentialAttributes.length === 1 ? lockOneEssential : lockTwoEssentials
+  const count = (attribute: TAttribute) =>
+    build.reduce(
+      (sum, { card, copies }) =>
+        card.attributes.includes(attribute) ? sum + copies : sum,
+      0
+    )
+
+  return (
+    essentialAttributes.every(
+      (attribute) =>
+        count(attribute) >=
+        classMinimum +
+          (reinforcedAttributes.includes(attribute)
+            ? lockSpecializationReinforcement
+            : 0)
+    ) &&
+    additionalAttributes.every(
+      (attribute) => count(attribute) >= lockSpecializationAdditional
+    )
+  )
+}
