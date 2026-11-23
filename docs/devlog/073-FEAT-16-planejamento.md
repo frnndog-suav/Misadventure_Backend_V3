@@ -1,7 +1,7 @@
 # 073 — FEAT-16 — Planejamento do Mercado no backend
 
 - Data — 2026-11-23
-- Status — aguardando revisão
+- Status — concluída
 - Spec — v0.72, REQ-136 a REQ-144, D-114 a D-122 e T-61 a T-66
 - Contrato — v0.78 (sem seção FEAT-16 ainda; a propor com `/contrato FEAT-16`)
 - Horas — 1,75 (auto)
