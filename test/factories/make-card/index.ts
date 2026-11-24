@@ -65,6 +65,7 @@ export function makeZoneCard(override: Partial<TZoneCard> = {}): TZoneCard {
     zoneActions: ['startEvent', 'scavenge'],
     effects: [],
     market: null,
+    blacksmith: null,
     ...override,
   }
 }
@@ -125,7 +126,7 @@ export function makeEquipmentCard(
     blocksShield: false,
     abilities: [],
     effects: [],
-    refinement: { maxLevel: 10, materials: { text: '1 minério de ferro' } },
+    refinement: null,
     enchantment: null,
     priceMultiplier: 1.2,
     scavengeTool: null,
@@ -151,6 +152,7 @@ export function makeItemCard(override: Partial<TItemCard> = {}): TItemCard {
     stockPrice: null,
     stockQuantity: 1,
     boosterCollectionId: null,
+    recipe: null,
     ...override,
   }
 }

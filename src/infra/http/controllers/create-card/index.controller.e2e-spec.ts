@@ -306,6 +306,7 @@ describe('POST /lab/content/collections/:collectionId/cards (e2e)', () => {
         stockPrice: null,
         stockQuantity: 1,
         boosterCollectionId: null,
+        recipe: null,
       },
     })
 

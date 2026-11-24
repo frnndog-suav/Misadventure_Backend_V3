@@ -10,10 +10,23 @@
       "startEvent",
       "scavenge",
       "useVault",
+      "visitBlacksmith",
       "visitMarket",
       "saveRespawnPoint"
     ],
     "effects": [],
+    "blacksmith": {
+      "enchantments": [
+        {
+          "id": "ember-edge",
+          "name": "Fio de Brasa",
+          "kind": "element",
+          "element": "fire",
+          "bonusPercent": 10,
+          "materials": [{ "cardId": "fixture.ember-shard", "quantity": 1 }]
+        }
+      ]
+    },
     "market": {
       "stock": [
         "fixture.healing-potion",

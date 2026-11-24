@@ -18,10 +18,12 @@ import {
 } from '@/domain/catalog/application/use-cases/_shared/all-cards'
 import {
   buildCard,
+  isCitedInBlacksmith,
   isCitedInMarketStock,
   isCitedInRewardDeck,
   effectCitationPublicationIssues,
   combatDeckPublicationIssues,
+  refinementPublicationIssues,
   rewardDeckPublicationIssues,
   questPublicationIssues,
   sortByCardId,
@@ -141,6 +143,7 @@ export class ImportCollectionUseCase {
         for (const issue of [
           ...rewardDeckPublicationIssues(card, statuses),
           ...questPublicationIssues(card, editorCards),
+          ...refinementPublicationIssues(card),
           ...combatDeckPublicationIssues(card, knownCards),
           ...effectCitationPublicationIssues(card, knownCards),
         ]) {
@@ -312,6 +315,20 @@ export class ImportCollectionUseCase {
     ])
     if (isCitedInMarketStock(outsideCards, leavingStock)) {
       return new ContentReferencedError('marketStock')
+    }
+    // REQ-145: carta que some ou deixa de ser material/equipamento e é usada por conteúdo de outra coleção.
+    const leavingBlacksmith = new Set([
+      ...removed,
+      ...keptCards
+        .filter((card) =>
+          card.type === 'item'
+            ? card.itemCategory !== 'material'
+            : card.type !== 'equipment'
+        )
+        .map((card) => card.id),
+    ])
+    if (isCitedInBlacksmith(outsideCards, leavingBlacksmith)) {
+      return new ContentReferencedError('blacksmith')
     }
     if (
       breaksSpecializationReferences(

@@ -11,6 +11,7 @@ import { ContentIdTakenError } from '@/domain/catalog/application/use-cases/_err
 import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_errors/content-invalid-error'
 import {
   buildCard,
+  citesOtherCards,
   validateCandidate,
 } from '@/domain/catalog/enterprise/card-validation'
 import type { TEditorCard } from '@/domain/catalog/enterprise/value-objects/content'
@@ -56,9 +57,7 @@ export class CreateCardUseCase {
       card,
       undefined,
       await loadOtherDimensions(this.contentStore, collectionId),
-      card.type === 'dimension' ||
-        card.type === 'randomEvent' ||
-        card.type === 'zone'
+      citesOtherCards(card)
         ? cardsOutside(await loadAllCards(this.contentStore), collectionId)
         : [],
       card.type === 'item'

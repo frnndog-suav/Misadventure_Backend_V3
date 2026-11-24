@@ -224,6 +224,7 @@ describe('FileContentStore', () => {
     expect(items.map((card) => card.id)).toEqual([
       'fixture.arrows',
       'fixture.booster',
+      'fixture.ember-shard',
       'fixture.fishing-rod',
       'fixture.healing-potion',
       'fixture.howling-wolves',
@@ -232,6 +233,7 @@ describe('FileContentStore', () => {
       'fixture.pickaxe',
       'fixture.silver-fish',
       'fixture.strength-tonic',
+      'fixture.sword-blueprint',
     ])
   })
 

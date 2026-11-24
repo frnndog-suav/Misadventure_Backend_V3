@@ -172,7 +172,7 @@ describe('loadContent', () => {
     }
   })
 
-  it('REQ-10/REQ-100: a fixture de teste carrega com as 26 cartas e as 2 classes do contrato', async () => {
+  it('REQ-10/REQ-100: a fixture de teste carrega com as 28 cartas e as 2 classes do contrato', async () => {
     const result = await loadContent('test/fixtures/content')
 
     expect(result.ok).toBe(true)
@@ -214,6 +214,7 @@ describe('loadContent', () => {
       ['fixture.blade-of-dusk', 'equipment'],
       ['fixture.booster', 'item'],
       ['fixture.dexterity-basic', 'attribute'],
+      ['fixture.ember-shard', 'item'],
       ['fixture.endurance-basic', 'attribute'],
       ['fixture.fishing-rod', 'item'],
       ['fixture.focus-amulet', 'equipment'],
@@ -232,6 +233,7 @@ describe('loadContent', () => {
       ['fixture.stone-bend', 'zone'],
       ['fixture.strength-basic', 'attribute'],
       ['fixture.strength-tonic', 'item'],
+      ['fixture.sword-blueprint', 'item'],
       ['fixture.test-dimension', 'dimension'],
       ['fixture.whispering-grove', 'zone'],
       ['fixture.wounded-traveler', 'randomEvent'],

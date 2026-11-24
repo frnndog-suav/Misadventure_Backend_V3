@@ -10,8 +10,10 @@ import { CardNotFoundError } from '@/domain/catalog/application/use-cases/_error
 import { CollectionNotFoundError } from '@/domain/catalog/application/use-cases/_errors/collection-not-found-error'
 import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_errors/content-invalid-error'
 import {
+  citesOtherCards,
   effectCitationPublicationIssues,
   combatDeckPublicationIssues,
+  refinementPublicationIssues,
   rewardDeckPublicationIssues,
   questPublicationIssues,
   validateCandidate,
@@ -52,17 +54,14 @@ export class PublishCardUseCase {
         card,
         card.id,
         await loadOtherDimensions(this.contentStore, card.collectionId),
-        card.type === 'dimension' ||
-          card.type === 'randomEvent' ||
-          card.type === 'zone'
-          ? cardsOutside(allCards, card.collectionId)
-          : [],
+        citesOtherCards(card) ? cardsOutside(allCards, card.collectionId) : [],
         card.type === 'item'
           ? (await this.contentStore.listCollections()).map(({ id }) => id)
           : []
       ),
       ...rewardDeckPublicationIssues(card, statusById(allCards)),
       ...questPublicationIssues(card, allCards),
+      ...refinementPublicationIssues(card),
       ...combatDeckPublicationIssues(
         card,
         allCards.map((entry) => entry.card)

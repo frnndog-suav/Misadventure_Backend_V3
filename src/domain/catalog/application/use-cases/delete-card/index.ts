@@ -7,6 +7,7 @@ import { ContentReferencedError } from '@/domain/catalog/application/use-cases/_
 import { loadAllCards } from '@/domain/catalog/application/use-cases/_shared/all-cards'
 import {
   breaksQuestReferences,
+  isCitedInBlacksmith,
   isCitedInMarketStock,
   isCitedInRewardDeck,
 } from '@/domain/catalog/enterprise/card-validation'
@@ -72,6 +73,15 @@ export class DeleteCardUseCase {
       )
     ) {
       return left(new ContentReferencedError('marketStock'))
+    }
+    // REQ-145: material, receita ou encantamento de outra carta.
+    if (
+      isCitedInBlacksmith(
+        allCards.map(({ card }) => card),
+        new Set([cardId])
+      )
+    ) {
+      return left(new ContentReferencedError('blacksmith'))
     }
     if (
       breaksSpecializationReferences(

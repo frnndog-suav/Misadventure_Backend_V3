@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { SeededRng } from '@/core/rng/seeded-rng'
-import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
+import {
+  BLACKSMITH_DEFAULTS,
+  GAME_CONFIG_DEFAULTS,
+} from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
 import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
 import { noExpansions } from '@/domain/campaign/enterprise/markets'
@@ -97,6 +100,25 @@ describe('DrizzlePartyMapper', () => {
     })
 
     expect(restored.config).toMatchObject({ ...defaults, initialGold: 40 })
+  })
+
+  it('REQ-146: snapshot sem as chaves do ferreiro ganha os padrões', () => {
+    const row = DrizzlePartyMapper.toDrizzle(usedRngParty())
+    const legacyConfig: Record<string, unknown> = { ...row.state.config }
+    for (const key of Object.keys(BLACKSMITH_DEFAULTS)) {
+      delete legacyConfig[key]
+    }
+    expect(legacyConfig).not.toHaveProperty('refineBonusPercent')
+
+    const restored = DrizzlePartyMapper.toDomain({
+      ...row,
+      state: { ...row.state, config: legacyConfig } as typeof row.state,
+    })
+
+    expect(restored.config).toMatchObject({
+      ...BLACKSMITH_DEFAULTS,
+      initialGold: 40,
+    })
   })
 
   it('REQ-123: preserva combate ativo, janela, avanço de habilidades e RNG no save', () => {

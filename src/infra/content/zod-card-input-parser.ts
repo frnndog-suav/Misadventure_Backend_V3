@@ -8,7 +8,7 @@ import {
   type TContentIssue,
 } from '@/domain/catalog/enterprise/value-objects/content'
 
-import { cardInputSchema } from './card-schemas'
+import { cardInputSchema, withLegacyBlacksmith } from './card-schemas'
 
 export const zodLocale = z.locales.ptBR().localeError
 
@@ -25,7 +25,10 @@ export class ZodCardInputParser extends CardInputParser {
   parse(raw: unknown): Either<TContentIssue[], TCardInput> {
     if (!isRecord(raw)) return left([{ path: '', reason: 'notAnObject' }])
 
-    const parsed = cardInputSchema.safeParse(raw, { error: zodLocale })
+    const parsed = cardInputSchema.safeParse(
+      raw.type === 'zone' ? withLegacyBlacksmith(raw) : raw,
+      { error: zodLocale }
+    )
     // O schema espelha `TCardInput` (sem `id`/`collectionId`, com `slug`).
     if (parsed.success) return right(parsed.data as TCardInput)
 

@@ -360,21 +360,29 @@ describe('checkCatalogIntegrity', () => {
         expect(
           check([
             makeEquipmentCard({
-              refinement: { maxLevel, materials: { text: '1 minério' } },
+              refinement: {
+                maxLevel,
+                materials: [{ cardId: 'fixture.iron-ore', quantity: 1 }],
+              },
+            }),
+            makeItemCard({
+              id: 'fixture.iron-ore',
+              itemCategory: 'material',
+              effects: [],
             }),
           ])
         ).toEqual([issue('refinement.maxLevel', 'outOfRange')])
       }
     })
 
-    it('REQ-15: refinável sem materiais de refino', () => {
+    it('REQ-15/D-135: refinável sem materiais de refino é aceito pela integridade', () => {
       expect(
         check([
           makeEquipmentCard({
-            refinement: { maxLevel: 5, materials: { text: '  ' } },
+            refinement: { maxLevel: 5, materials: [] },
           }),
         ])
-      ).toEqual([issue('refinement.materials', 'empty')])
+      ).toEqual([])
     })
 
     it('REQ-15: etiqueta repetida', () => {

@@ -9,6 +9,7 @@ import {
   loadAllCards,
 } from '@/domain/catalog/application/use-cases/_shared/all-cards'
 import {
+  isCitedInBlacksmith,
   isCitedInMarketStock,
   isCitedInRewardDeck,
 } from '@/domain/catalog/enterprise/card-validation'
@@ -78,6 +79,10 @@ export class DeleteCollectionUseCase {
     // REQ-136: carta dela no estoque do mercado de zona de outra coleção.
     if (isCitedInMarketStock(cardsOutside(allCards, collectionId), cardIds)) {
       return left(new ContentReferencedError('marketStock'))
+    }
+    // REQ-145: carta dela usada por conteúdo de outra coleção.
+    if (isCitedInBlacksmith(cardsOutside(allCards, collectionId), cardIds)) {
+      return left(new ContentReferencedError('blacksmith'))
     }
     if (
       breaksSpecializationReferences(

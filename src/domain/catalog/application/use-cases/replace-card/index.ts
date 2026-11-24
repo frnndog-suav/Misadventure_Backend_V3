@@ -16,10 +16,13 @@ import { ContentReferencedError } from '@/domain/catalog/application/use-cases/_
 import {
   buildCard,
   breaksQuestReferences,
+  citesOtherCards,
+  isCitedInBlacksmith,
   isCitedInMarketStock,
   isCitedInRewardDeck,
   effectCitationPublicationIssues,
   combatDeckPublicationIssues,
+  refinementPublicationIssues,
   rewardDeckPublicationIssues,
   questPublicationIssues,
   validateCandidate,
@@ -93,11 +96,16 @@ export class ReplaceCardUseCase {
       current.card.type === 'item' &&
       current.card.stockPrice !== null &&
       (card.type !== 'item' || card.stockPrice === null)
+    // REQ-145: material continua item material; o equipamento da receita continua equipamento.
+    const leavesBlacksmithRole =
+      (current.card.type === 'item' &&
+        current.card.itemCategory === 'material' &&
+        (card.type !== 'item' || card.itemCategory !== 'material')) ||
+      (current.card.type === 'equipment' && card.type !== 'equipment')
     const allCards =
-      card.type === 'dimension' ||
-      card.type === 'randomEvent' ||
-      card.type === 'zone' ||
+      citesOtherCards(card) ||
       leavesStock ||
+      leavesBlacksmithRole ||
       leavesEventTypes ||
       losesCombatExecution ||
       current.status === 'published' ||
@@ -115,6 +123,11 @@ export class ReplaceCardUseCase {
         allCards.map((entry) => entry.card),
         new Set([cardId])
       )
+    const inBlacksmith = () =>
+      isCitedInBlacksmith(
+        allCards.map((entry) => entry.card),
+        new Set([cardId])
+      )
     const issues = [
       ...validateCandidate(
         collection,
@@ -122,11 +135,7 @@ export class ReplaceCardUseCase {
         card,
         cardId,
         await loadOtherDimensions(this.contentStore, collectionId),
-        card.type === 'dimension' ||
-          card.type === 'randomEvent' ||
-          card.type === 'zone'
-          ? cardsOutside(allCards, collectionId)
-          : [],
+        citesOtherCards(card) ? cardsOutside(allCards, collectionId) : [],
         card.type === 'item'
           ? (await this.contentStore.listCollections()).map(({ id }) => id)
           : []
@@ -135,6 +144,7 @@ export class ReplaceCardUseCase {
         ? [
             ...rewardDeckPublicationIssues(card, statusById(allCards)),
             ...questPublicationIssues(card, allCards),
+            ...refinementPublicationIssues(card),
             ...combatDeckPublicationIssues(
               card,
               allCards.map((entry) => entry.card)
@@ -176,6 +186,9 @@ export class ReplaceCardUseCase {
     if (!renamed && leavesStock && inMarketStock()) {
       return left(new ContentReferencedError('marketStock'))
     }
+    if (!renamed && leavesBlacksmithRole && inBlacksmith()) {
+      return left(new ContentReferencedError('blacksmith'))
+    }
 
     if (renamed) {
       if (current.status === 'published') return left(new ContentLockedError())
@@ -190,6 +203,7 @@ export class ReplaceCardUseCase {
       if (cited()) return left(new ContentReferencedError('rewardDeck'))
       if (inMarketStock())
         return left(new ContentReferencedError('marketStock'))
+      if (inBlacksmith()) return left(new ContentReferencedError('blacksmith'))
       if (await this.contentStore.findEditorCard(card.id)) {
         return left(
           new ContentIdTakenError([{ path: 'slug', reason: 'idTaken' }])

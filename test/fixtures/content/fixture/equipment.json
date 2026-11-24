@@ -35,9 +35,9 @@
     "effects": [],
     "refinement": {
       "maxLevel": 3,
-      "materials": { "text": "1 Minério de Ferro por nível." }
+      "materials": [{ "cardId": "fixture.iron-ore", "quantity": 1 }]
     },
-    "enchantment": { "text": "Encantamento: causa dano sombrio extra." },
+    "enchantment": null,
     "priceMultiplier": 1,
     "scavengeTool": null
   },
@@ -173,8 +173,11 @@
     "blocksShield": false,
     "abilities": [],
     "effects": [],
-    "refinement": null,
-    "enchantment": null,
+    "refinement": {
+      "maxLevel": 10,
+      "materials": [{ "cardId": "fixture.iron-ore", "quantity": 1 }]
+    },
+    "enchantment": { "slots": [{ "kind": "element", "minRefinement": 2 }] },
     "priceMultiplier": 1.2,
     "scavengeTool": null
   }

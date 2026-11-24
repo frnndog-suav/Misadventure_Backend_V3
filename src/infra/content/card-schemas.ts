@@ -7,6 +7,7 @@ import {
   ATTRIBUTE_KINDS,
   ATTRIBUTES,
   ELEMENTS,
+  ENCHANTMENT_KINDS,
   ENEMY_ABILITY_PRIORITIES,
   ENEMY_BEHAVIORS,
   ENEMY_CATEGORIES,
@@ -74,6 +75,48 @@ const ability = z.unknown().transform((value, ctx) => {
     ctx.issues.push({ ...issue, input: undefined })
   return z.NEVER
 })
+
+/** D-129: material e quantidade (a faixa fica na integridade). */
+const materialRequirement = z.strictObject({
+  cardId: text,
+  quantity: z.number(),
+})
+/** Conteúdo legado: materiais em texto viram lista vazia (REQ-145). */
+const refinementMaterials = z.union([
+  z.array(materialRequirement),
+  ruleText.transform(() => []),
+])
+/** Conteúdo legado: encantamento em texto vira null (REQ-145). */
+const equipmentEnchantment = z.union([
+  z.strictObject({
+    slots: z.array(
+      z.strictObject({
+        kind: z.enum(ENCHANTMENT_KINDS),
+        minRefinement: z.number(),
+      })
+    ),
+  }),
+  ruleText.transform(() => null),
+])
+const blacksmithEnchantmentBase = {
+  id: text,
+  name: text,
+  materials: z.array(materialRequirement),
+}
+const blacksmithEnchantment = z.discriminatedUnion('kind', [
+  z.strictObject({
+    ...blacksmithEnchantmentBase,
+    kind: z.literal('element'),
+    element: z.enum(ELEMENTS),
+    bonusPercent: z.number(),
+  }),
+  z.strictObject({
+    ...blacksmithEnchantmentBase,
+    kind: z.literal('effect'),
+    effects: z.array(effectSchema),
+    abilities: z.array(ability),
+  }),
+])
 
 const eventRequirementBase = { id: text, text }
 export const eventRequirement = z.union([
@@ -209,6 +252,10 @@ const cardSchemas = {
       .strictObject({ stock: z.array(text), singles: z.boolean() })
       .nullable()
       .default(null),
+    blacksmith: z
+      .strictObject({ enchantments: z.array(blacksmithEnchantment) })
+      .nullable()
+      .default(null),
   }),
   attribute: z.strictObject({
     id,
@@ -236,9 +283,9 @@ const cardSchemas = {
     abilities: z.array(ability),
     effects: z.array(effectSchema),
     refinement: z
-      .strictObject({ maxLevel: z.number(), materials: ruleText })
+      .strictObject({ maxLevel: z.number(), materials: refinementMaterials })
       .nullable(),
-    enchantment: ruleText.nullable(),
+    enchantment: equipmentEnchantment.nullable(),
     priceMultiplier: z.number(),
     scavengeTool: text.nullable(),
   }),
@@ -257,6 +304,15 @@ const cardSchemas = {
     stockPrice: z.number().nullable().default(null),
     stockQuantity: z.number().default(1),
     boosterCollectionId: text.nullable().default(null),
+    recipe: z
+      .strictObject({
+        equipmentId: text,
+        materials: z.array(materialRequirement),
+        gold: z.number(),
+        consumed: z.boolean(),
+      })
+      .nullable()
+      .default(null),
   }),
   randomEvent: z.strictObject({
     id,
@@ -308,6 +364,24 @@ export const cardFileSchemas = {
   zoneQuest: cardSchemas.zoneQuest.extend({ status }),
   dimension: cardSchemas.dimension.extend({ status }),
 } satisfies Record<TCardType, z.ZodType>
+
+/**
+ * REQ-145: zona legada com `visitBlacksmith` e sem o campo `blacksmith` é
+ * lida com a lista vazia (só a ausência; `null` explícito continua inválido).
+ */
+export function withLegacyBlacksmith(raw: unknown): unknown {
+  if (
+    typeof raw !== 'object' ||
+    raw === null ||
+    Object.hasOwn(raw, 'blacksmith')
+  ) {
+    return raw
+  }
+  const zoneActions: unknown = (raw as Record<string, unknown>).zoneActions
+  return Array.isArray(zoneActions) && zoneActions.includes('visitBlacksmith')
+    ? { ...raw, blacksmith: { enchantments: [] } }
+    : raw
+}
 
 function inputKeys<T extends TCardType>(type: T) {
   return { type: z.literal(type), slug: z.string() }

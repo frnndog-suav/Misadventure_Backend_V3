@@ -174,6 +174,63 @@ export function isCitedInRewardDeck(
   })
 }
 
+/**
+ * Cartas que citam outras: para conferir a citação, a candidata vê também as
+ * cartas de outras coleções (REQ-82, REQ-136, REQ-145).
+ */
+export function citesOtherCards(card: TCard): boolean {
+  return (
+    card.type === 'dimension' ||
+    card.type === 'randomEvent' ||
+    card.type === 'zone' ||
+    card.type === 'equipment' ||
+    card.type === 'item'
+  )
+}
+
+/**
+ * REQ-145: alguma carta cita uma destas como material de refino, de receita ou
+ * de encantamento, ou como o equipamento que a receita cria?
+ */
+export function isCitedInBlacksmith(
+  cards: readonly TCard[],
+  cardIds: ReadonlySet<string>
+): boolean {
+  const cites = (list: readonly { cardId: string }[]) =>
+    list.some(({ cardId }) => cardIds.has(cardId))
+  return cards.some((card) => {
+    switch (card.type) {
+      case 'equipment':
+        return card.refinement !== null && cites(card.refinement.materials)
+      case 'item':
+        return (
+          card.recipe !== null &&
+          (cardIds.has(card.recipe.equipmentId) || cites(card.recipe.materials))
+        )
+      case 'zone':
+        return (
+          card.blacksmith?.enchantments.some(({ materials }) =>
+            cites(materials)
+          ) ?? false
+        )
+      default:
+        return false
+    }
+  })
+}
+
+/**
+ * REQ-145, D-135: equipamento refinável sem materiais (conteúdo legado) não
+ * publica.
+ */
+export function refinementPublicationIssues(card: TCard): TContentIssue[] {
+  return card.type === 'equipment' &&
+    card.refinement !== null &&
+    card.refinement.materials.length === 0
+    ? [{ path: 'refinement.materials', reason: 'refinementMaterialsRequired' }]
+    : []
+}
+
 /** REQ-136: alguma zona cita uma destas cartas no estoque do mercado? */
 export function isCitedInMarketStock(
   cards: readonly TCard[],

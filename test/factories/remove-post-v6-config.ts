@@ -1,4 +1,5 @@
 import {
+  BLACKSMITH_LIMITS,
   COMBAT_NUMERIC_LIMITS,
   KNOCKOUT_NUMERIC_LIMITS,
   MARKET_LIMITS,
@@ -12,6 +13,7 @@ export function removePostV6Config(config: Record<string, unknown>): void {
     ...KNOCKOUT_NUMERIC_LIMITS,
     ...QUEST_LIMITS,
     ...MARKET_LIMITS,
+    ...BLACKSMITH_LIMITS,
   }))
     delete config[key]
   delete config.enemyAbilityPriorities

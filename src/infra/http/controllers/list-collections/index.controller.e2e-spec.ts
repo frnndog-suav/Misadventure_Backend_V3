@@ -28,7 +28,7 @@ describe('GET /catalog/collections (e2e)', () => {
           zone: 4,
           attribute: 3,
           equipment: 7,
-          item: 9,
+          item: 11,
           randomEvent: 1,
           combatEvent: 1,
           zoneQuest: 0,

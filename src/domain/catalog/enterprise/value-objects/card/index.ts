@@ -252,6 +252,31 @@ export type TAbility =
 export const ARROW_LAYOUTS = ['straight', 'corner'] as const
 export type TArrowLayout = (typeof ARROW_LAYOUTS)[number]
 
+/** REQ-145, D-129: material e quantidade, sem repetir `cardId` na lista. */
+export type TMaterialRequirement = Readonly<{
+  cardId: string
+  quantity: number
+}>
+
+/** README 25.3: o encantamento é de elemento ou de efeito/habilidade. */
+export const ENCHANTMENT_KINDS = ['element', 'effect'] as const
+export type TEnchantmentKind = (typeof ENCHANTMENT_KINDS)[number]
+
+/** REQ-145 (README 3.4, 25.3): `id` único na zona. */
+export type TBlacksmithEnchantment = Readonly<{
+  id: string
+  name: string
+  materials: readonly TMaterialRequirement[]
+}> &
+  (
+    | Readonly<{ kind: 'element'; element: TElement; bonusPercent: number }>
+    | Readonly<{
+        kind: 'effect'
+        effects: readonly TEffect[]
+        abilities: readonly TAbility[]
+      }>
+  )
+
 export type TZoneCard = Readonly<{
   type: 'zone'
   id: string
@@ -267,6 +292,10 @@ export type TZoneCard = Readonly<{
   effects: readonly TZoneEffect[]
   /** REQ-136, D-114: presente se e só se `zoneActions` tem `visitMarket`. */
   market: Readonly<{ stock: readonly string[]; singles: boolean }> | null
+  /** REQ-145: presente se e só se `zoneActions` tem `visitBlacksmith`. */
+  blacksmith: Readonly<{
+    enchantments: readonly TBlacksmithEnchantment[]
+  }> | null
 }>
 
 export type TAttributeCard = Readonly<{
@@ -298,8 +327,18 @@ export type TEquipmentCard = Readonly<{
   blocksShield: boolean
   abilities: readonly TAbility[]
   effects: readonly TEffect[]
-  refinement: Readonly<{ maxLevel: number; materials: TRuleText }> | null
-  enchantment: TRuleText | null
+  /** REQ-145: 1 conjunto de `materials` por tentativa (README 25.2). */
+  refinement: Readonly<{
+    maxLevel: number
+    materials: readonly TMaterialRequirement[]
+  }> | null
+  /** REQ-145: slots por tipo, com refino mínimo (README 25.3). */
+  enchantment: Readonly<{
+    slots: readonly Readonly<{
+      kind: TEnchantmentKind
+      minRefinement: number
+    }>[]
+  }> | null
   priceMultiplier: number
   /** D-86: `toolKind` da ferramenta que coleta esta carta (README 12.6). */
   scavengeTool: string | null
@@ -329,6 +368,13 @@ export type TItemCard = Readonly<{
   stockQuantity: number
   /** REQ-136: só em booster; a coleção que ele abre. */
   boosterCollectionId: string | null
+  /** REQ-145: só em documento (README 5.2); senão `null`. */
+  recipe: Readonly<{
+    equipmentId: string
+    materials: readonly TMaterialRequirement[]
+    gold: number
+    consumed: boolean
+  }> | null
 }>
 
 export type TRandomEventRequirement = Readonly<{ id: string; text: string }> &

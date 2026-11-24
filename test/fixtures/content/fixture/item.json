@@ -27,6 +27,18 @@
     "boosterCollectionId": "fixture"
   },
   {
+    "id": "fixture.ember-shard",
+    "name": "Fragmento de Brasa",
+    "flavorText": null,
+    "rarity": "rare",
+    "itemCategory": "material",
+    "tags": [],
+    "effects": [],
+    "toolKind": null,
+    "scavengeZoneTypes": [],
+    "scavengeTool": null
+  },
+  {
     "id": "fixture.fishing-rod",
     "name": "Vara de Pesca",
     "flavorText": null,
@@ -143,5 +155,23 @@
     "toolKind": null,
     "scavengeZoneTypes": [],
     "scavengeTool": null
+  },
+  {
+    "id": "fixture.sword-blueprint",
+    "name": "Projeto: Espada Curta",
+    "flavorText": null,
+    "rarity": "uncommon",
+    "itemCategory": "document",
+    "tags": [],
+    "effects": [],
+    "toolKind": null,
+    "scavengeZoneTypes": [],
+    "scavengeTool": null,
+    "recipe": {
+      "equipmentId": "fixture.short-sword",
+      "materials": [{ "cardId": "fixture.iron-ore", "quantity": 2 }],
+      "gold": 15,
+      "consumed": false
+    }
   }
 ]

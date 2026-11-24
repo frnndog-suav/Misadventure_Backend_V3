@@ -18,6 +18,7 @@ import type {
 
 import {
   cardFileSchemas,
+  withLegacyBlacksmith,
   classFileSchema,
   collectionFileSchema,
 } from './card-schemas'
@@ -274,7 +275,10 @@ async function readCards(
 
   const cards: TEditorCard[] = []
   json.forEach((raw: unknown, index) => {
-    const parsed = cardFileSchemas[type].safeParse(raw, { error: zodLocale })
+    const parsed = cardFileSchemas[type].safeParse(
+      type === 'zone' ? withLegacyBlacksmith(raw) : raw,
+      { error: zodLocale }
+    )
     if (parsed.success) {
       // O schema de cada tipo espelha a variante de TCard sem os dois campos
       // derivados do caminho; a combinação é a variante daquele `type`.

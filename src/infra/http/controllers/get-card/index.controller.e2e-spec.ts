@@ -46,6 +46,7 @@ describe('GET /catalog/cards/:cardId (e2e)', () => {
       stockPrice: 6,
       stockQuantity: 1,
       boosterCollectionId: null,
+      recipe: null,
     })
   })
 

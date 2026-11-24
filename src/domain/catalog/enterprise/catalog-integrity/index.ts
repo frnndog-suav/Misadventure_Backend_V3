@@ -1,4 +1,10 @@
 import {
+  checkBlacksmith,
+  checkEquipmentForge,
+  checkRecipe,
+  type TBlacksmithIssueReason,
+} from '@/domain/catalog/enterprise/blacksmith-content'
+import {
   checkEffects,
   checkEnemyAbilityExecution,
   checkEventCost,
@@ -92,6 +98,8 @@ export type TCatalogIssueReason =
   | 'marketMismatch'
   | 'stockItemWithoutPrice'
   | 'duplicateStockItem'
+  // REQ-145
+  | TBlacksmithIssueReason
 
 export type TCatalogIssue = {
   collectionId: string
@@ -210,6 +218,16 @@ export function checkCatalogIntegrity({
         zoneTitles.add(titleKey)
         checkZone(card, report)
         checkMarket(card, cardsById, report)
+        checkBlacksmith(card, cardsById, report)
+        card.blacksmith?.enchantments.forEach((enchantment, index) => {
+          if (enchantment.kind === 'effect') {
+            checkAbilities(
+              enchantment.abilities,
+              `blacksmith.enchantments.${index}.abilities`,
+              report
+            )
+          }
+        })
         checkQuestDeck(card, cardsById, report)
         checkEffects(card, report)
         break
@@ -221,6 +239,7 @@ export function checkCatalogIntegrity({
         break
       case 'equipment':
         checkEquipment(card, report)
+        checkEquipmentForge(card, cardsById, report)
         checkEffects(card, report)
         break
       case 'item':
@@ -229,6 +248,7 @@ export function checkCatalogIntegrity({
         checkKebab(card.scavengeTool, 'scavengeTool', report)
         checkEffects(card, report)
         checkItemMarket(card, knownCollectionIds, report)
+        checkRecipe(card, cardsById, report)
         break
       case 'randomEvent':
         checkRandomEvent(card, cardsById, report)
@@ -506,15 +526,6 @@ function checkEquipment(card: TEquipmentCard, report: TReport): void {
   }
 
   checkPriceMultiplier(card.priceMultiplier, report)
-
-  if (card.refinement) {
-    if (!isIntegerBetween(card.refinement.maxLevel, 1, 10)) {
-      report('refinement.maxLevel', 'outOfRange')
-    }
-    if (card.refinement.materials.text.trim() === '') {
-      report('refinement.materials', 'empty')
-    }
-  }
 
   checkNoDuplicates(card.tags, 'tags', report)
   checkKebab(card.scavengeTool, 'scavengeTool', report)

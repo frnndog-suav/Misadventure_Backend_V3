@@ -95,6 +95,17 @@ const CATALOG_MESSAGES: Record<TCatalogIssueReason, string> = {
   marketMismatch: 'Zona com Ir ao Mercado precisa do mercado, e só ela.',
   stockItemWithoutPrice: 'O item do estoque precisa ter preço de estoque.',
   duplicateStockItem: 'Item repetido no estoque.',
+  refinementMaterialsRequired:
+    'Equipamento refinável precisa dos materiais de refino.',
+  materialNotMaterial: 'O material precisa ser um item da categoria material.',
+  duplicateMaterial: 'Material repetido.',
+  minRefinementAboveMax: 'O refino mínimo não pode passar do refino máximo.',
+  recipeNotAllowed: 'Só documentos têm receita.',
+  recipeEquipmentInvalid: 'A receita precisa criar um equipamento existente.',
+  blacksmithMismatch: 'Zona com Ir ao Ferreiro precisa do ferreiro, e só ela.',
+  duplicateEnchantment: 'Encantamento repetido nesta zona.',
+  enemyOnlyAbility:
+    'Habilidades exclusivas de inimigos não podem ser encantadas.',
 }
 
 /** Relatório de REQ-11 (o arquivo e a carta já localizam o problema). */
@@ -220,6 +231,15 @@ export function contentIssueMessage(issue: TContentIssue): string {
     case 'marketMismatch':
     case 'stockItemWithoutPrice':
     case 'duplicateStockItem':
+    case 'refinementMaterialsRequired':
+    case 'materialNotMaterial':
+    case 'duplicateMaterial':
+    case 'minRefinementAboveMax':
+    case 'recipeNotAllowed':
+    case 'recipeEquipmentInvalid':
+    case 'blacksmithMismatch':
+    case 'duplicateEnchantment':
+    case 'enemyOnlyAbility':
       return CATALOG_MESSAGES[reason]
     default: {
       const _exhaustive: never = reason

@@ -151,10 +151,59 @@ export const MARKET_LIMITS = {
   vaultGoldExpansionPricePercent: { min: 0, max: 1000 },
 } satisfies Record<keyof typeof MARKET_DEFAULTS, { min: number; max: number }>
 
+/** REQ-146 (CONTRATO FEAT-17): consertar, refinar, encantar, venda e Artífice. */
+export const BLACKSMITH_DEFAULTS = {
+  repairBaseGold: 5,
+  repairGoldPerLevel: 2,
+  repairMarkPercent: 12,
+  refineGoldPerLevel: 10,
+  refineThreshold1to3: 0,
+  refineThreshold4to6: 8,
+  refineThreshold7to9: 12,
+  refineThreshold10: 16,
+  refineBreakFromLevel: 7,
+  refineBonusPercent: 5,
+  enchantElementGold: 50,
+  enchantEffectGold: 100,
+  enchantElementThreshold: 10,
+  enchantEffectThreshold: 13,
+  saleRefinePercent: 8,
+  saleEnchantPercent: 20,
+  artificerRepairDiscountPercent: 50,
+  artificerMaxRefineLevel: 6,
+  artificerD20Bonus: 2,
+}
+
+export const BLACKSMITH_LIMITS = {
+  repairBaseGold: { min: 0, max: 1000000 },
+  repairGoldPerLevel: { min: 0, max: 1000000 },
+  repairMarkPercent: { min: 0, max: 100 },
+  refineGoldPerLevel: { min: 0, max: 1000000 },
+  refineThreshold1to3: { min: 0, max: 21 },
+  refineThreshold4to6: { min: 0, max: 21 },
+  refineThreshold7to9: { min: 0, max: 21 },
+  refineThreshold10: { min: 0, max: 21 },
+  refineBreakFromLevel: { min: 1, max: 11 },
+  refineBonusPercent: { min: 0, max: 1000 },
+  enchantElementGold: { min: 0, max: 1000000 },
+  enchantEffectGold: { min: 0, max: 1000000 },
+  enchantElementThreshold: { min: 0, max: 21 },
+  enchantEffectThreshold: { min: 0, max: 21 },
+  saleRefinePercent: { min: 0, max: 1000 },
+  saleEnchantPercent: { min: 0, max: 1000 },
+  artificerRepairDiscountPercent: { min: 0, max: 100 },
+  artificerMaxRefineLevel: { min: 0, max: 10 },
+  artificerD20Bonus: { min: 0, max: 20 },
+} satisfies Record<
+  keyof typeof BLACKSMITH_DEFAULTS,
+  { min: number; max: number }
+>
+
 export interface TGameConfigValues extends Record<
   | keyof typeof COMBAT_NUMERIC_DEFAULTS
   | keyof typeof QUEST_DEFAULTS
-  | keyof typeof MARKET_DEFAULTS,
+  | keyof typeof MARKET_DEFAULTS
+  | keyof typeof BLACKSMITH_DEFAULTS,
   number
 > {
   enemyAbilityPriorities: TEnemyAbilityPriorities
@@ -211,6 +260,7 @@ export interface TGameConfigLimit {
 export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
   ...QUEST_DEFAULTS,
   ...MARKET_DEFAULTS,
+  ...BLACKSMITH_DEFAULTS,
   ...COMBAT_NUMERIC_DEFAULTS,
   enemyAbilityPriorities: {
     aggressive: ['highestPower'],
@@ -302,6 +352,7 @@ export const GAME_CONFIG_LIMITS: Readonly<
   ...KNOCKOUT_NUMERIC_LIMITS,
   ...QUEST_LIMITS,
   ...MARKET_LIMITS,
+  ...BLACKSMITH_LIMITS,
   recoverVigorPercent: { min: 0, max: 100 },
   recoverHandSize: { min: 0, max: 200 },
   inventoryCapacity: { min: 0, max: 100 },
