@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.83 · **Data:** 2026-11-24
+> **Versão do contrato:** 0.85 · **Data:** 2026-11-24
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -3189,7 +3189,7 @@ Seja `G` criado com `{ "name": "Os Teimosos", "characterName": "Lia", "playerCla
 
 Só nos e2e do backend: sorteio exato do fator, do pool, da distribuição e da vitrine (`fixedRng`); decaimento no fim da rodada e na rodada do nocaute solo; saída do pool e novo pool; refazer a raridade sem elegíveis e `boosterEmpty`; entrega pendente com fonte `booster`; saves v2 a v8. Para a validação integrada (T-66), o backend entrega campanhas preparadas com a vitrine, os IDs e os resultados esperados.
 
-### FEAT-17 — Ferreiro e Oficina do Artífice — `proposto (BE)`
+### FEAT-17 — Ferreiro e Oficina do Artífice — `acordado`
 
 Regras: README 3.4 (a carta de zona lista os encantamentos do ferreiro), 5.1 (quebra e marca de reparo), 5.2 (Documentos), 8.2 (trava de classe), 8.8 (Ferreiro Arcano), 12.2 (Ir ao Ferreiro: todos os PA restantes; Oficina do Artífice: 1 PA), 16.1 (bônus de elemento), 24.2 (valorização na venda), 25 e Apêndice A (linhas "Artífice", "Ferreiro" e "Mercado"); Apêndice B 17, C4, C21, E26. Base no backend: SPEC-BACKEND REQ-145 a REQ-154, D-129 a D-134.
 
@@ -3200,13 +3200,14 @@ Regras: README 3.4 (a carta de zona lista os encantamentos do ferreiro), 5.1 (qu
 - **Ir ao Ferreiro e Oficina do Artífice são lotes**, como o Ir ao Mercado: um pedido com a lista de operações. O backend confere o lote inteiro **antes de rolar**, supondo que as operações anteriores dão certo. Se uma operação é recusada, nada muda (PA, ouro, cartas, RNG) e o erro diz qual (`operationIndex`). Aceito o lote, o backend executa em ordem e rola 1 D20 por teste. Uma falha não interrompe o lote, mas a operação que ficou impossível por causa dela volta `skipped`, sem custo (ex.: dois refinos seguidos e o 1º falhou).
 - **Ir ao Ferreiro gasta todos os PA restantes** (mínimo 1). A Oficina gasta 1 PA e pode ser repetida na mesma vez.
 - **Tudo chega pronto:** custos, limiares, bônus do Artífice e o que cada equipamento aceita vêm em `PlayerState.blacksmith`; o desfecho de cada operação (rolagem, sucesso, quebra, `skipped`) vem em `lastBlacksmithVisit`. Os modificadores efetivos e o valor de venda no mercado já incluem refino, encantamentos ligados e marcas de reparo. O frontend não calcula nada disso.
+- **Lote de vários níveis (v0.84, pedido do FE):** como Ir ao Ferreiro gasta todos os PA, o jogador monta num lote só vários refinos e o encantamento que o refino libera. Para isso a projeção traz **cada nível seguinte** (`refineSteps`) e **os encantamentos que só cabem depois de refinar** (`enchantOptions[].requiresRefinement`). O frontend nunca calcula custo, limiar, quebra nem requisito de slot: lê esses valores. O cobrado vem de `lastBlacksmithVisit`.
 - **Encantamento ligado/desligado:** cada encantamento aplicado traz `active`. Desligado (refino abaixo do requisito) não dá benefício nem valoriza a venda.
 
 **Mudanças em outras seções:**
 - **FEAT-03 (`validado`):** `GameConfigValues` ganha as 19 chaves abaixo.
 - **FEAT-04 (`validado`):** `EquipmentCard.refinement.materials` passa de `RuleText` para `MaterialRequirement[]`; `EquipmentCard.enchantment` passa de `RuleText` para `{ slots }`; `ItemCard` ganha `recipe`; `ZoneCard` ganha `blacksmith`. A `fixture` muda (abaixo). **Conteúdo legado:** materiais em texto viram `materials: []` (o equipamento continua refinável, mas não publica nem refina até ganhar materiais); `enchantment` em texto vira `null`.
 - **FEAT-10 e FEAT-32 (`validado`):** `PlayerState` ganha `equipmentStates`; `InventorySlot` e os slots do cofre ganham `equipmentState` (só em equipamento). No cofre, cópias com estado diferente do padrão ocupam slots próprios (não empilham com as de estado padrão). `effectiveModifiers` passa a incluir o refino e os encantamentos ligados; equipamento quebrado não conta (já valia no backend, agora visível).
-- **FEAT-16 (`validado`):** `MarketView.sellOffers` passa a listar **cada equipamento do inventário em sua própria entrada** (com `inventorySlotIndex`), já com o preço da REQ-154; `MarketOperation` `sell` de equipamento ganha `inventorySlotIndex` opcional (sem ele, vende primeiro as cópias de estado padrão).
+- **FEAT-16 (`validado`):** `MarketView.sellOffers` passa a listar **cada equipamento do inventário em sua própria entrada**, já com o preço da REQ-154 (tipo abaixo, v0.84); `MarketOperation` `sell` de equipamento ganha `inventorySlotIndex` opcional (sem ele, vende primeiro as cópias de estado padrão).
 - **FEAT-06 a FEAT-15 (`validado`):** `PartyAction` ganha `VisitBlacksmithAction` e `ArtificerWorkshopAction`; `availableActions` ganha `artificerWorkshop` e `visitBlacksmith` na ordem de `ZONE_ACTIONS` (`artificerWorkshop` depois de `abandonQuest`; `visitBlacksmith` antes de `visitMarket`); motivos novos em `ActionNotAllowedDetails`. Saves de antes desta versão continuam: estado padrão em todo equipamento, exceto `broken: true` no que já estava quebrado; `blacksmith` e `lastBlacksmithVisit` `null`. **Cenários antigos mudam:** Porto Cinzento ganha `visitBlacksmith`, então o `availableActions` esperado na cidade, com `actionPoints ≥ 1` e fora de escolha, ganha `visitBlacksmith` logo antes de `visitMarket`.
 - **FEAT-31 (`validado`):** o editor valida os campos novos (`CONTENT_INVALID`, `path` no campo); carta citada em `refinement.materials`, `recipe` ou `blacksmith` → `CONTENT_REFERENCED` ao excluir ou renomear.
 
@@ -3216,7 +3217,7 @@ Regras: README 3.4 (a carta de zona lista os encantamentos do ferreiro), 5.1 (qu
 |---|---|---|---|---|
 | POST | `/parties/:partyId/actions` (FEAT-07) | `VisitBlacksmithAction`, `ArtificerWorkshopAction` | `200` `Party` | os da FEAT-07 |
 
-Ordem das conferências: 404 → pedido malformado (400) → sem sessão (409 `PARTY_SESSION_NOT_ACTIVE`) → escolha aberta (`choicePending`) → em combate ou encontro (`eventActionBlock`) → `noActionPoints` → `zoneActionUnavailable` (`visitBlacksmith` fora de zona com ferreiro) ou `artificerInactive` (`artificerWorkshop` sem Artífice ativo) → regra da **primeira operação** que falha, simulando em ordem. Em cada operação:
+Ordem das conferências: 404 → pedido malformado (400) → sem sessão (409 `PARTY_SESSION_NOT_ACTIVE`) → escolha aberta (`choicePending`, FEAT-12) → em combate (`combatInProgress`, FEAT-13) → `noActionPoints` → `zoneActionUnavailable` (`visitBlacksmith` fora de zona com ferreiro) ou `artificerInactive` (`artificerWorkshop` sem Artífice ativo) → regra da **primeira operação** que falha, simulando em ordem. *(v0.84, pedido do FE: a v0.83 citava `eventActionBlock`, motivo que não existe no contrato; encontro aberto é `choicePending`, como nas FEATs 12 e 16.)* Em cada operação:
 - alvo: `equipmentNotFound` (slot vazio, índice inexistente ou a carta ali não é equipamento).
 - `repair`: `notBroken` → `notEnoughGold`.
 - `refine`: `equipmentBroken` → `notRefinable` → `refinementMaterialsMissing` (equipamento sem materiais definidos) → `refineLevelMax` → `refineLevelTooHigh` (só na Oficina: acima de `artificerMaxRefineLevel`) → `materialsMissing` → `notEnoughGold`.
@@ -3340,10 +3341,18 @@ interface ServiceView {
     state: EquipmentState
     /** `null` = não quebrado. */
     repair: { gold: number } | null
-    /** `null` = não refinável aqui (não refinável, quebrado, no máximo, sem materiais ou acima do teto da Oficina). */
-    refine: { targetLevel: number; materials: MaterialRequirement[]; gold: number; threshold: number; d20Bonus: number; breaksOnFailure: boolean } | null
-    /** Ids de `enchantments` que cabem neste equipamento agora; `replaceRequired` = precisa de `replaceIndex`; `extra` = só cabe como encantamento extra. Sempre `[]` na Oficina. */
-    enchantOptions: { enchantmentId: string; replaceRequired: boolean; extra: boolean }[]
+    /**
+     * v0.84 (pedido do FE; substitui `refine`). Cada nível seguinte, do refino atual + 1 até `refinement.maxLevel`
+     * (na Oficina, até `artificerMaxRefineLevel`), em ordem crescente. `[]` = não refinável aqui (não refinável,
+     * quebrado, no máximo, sem materiais ou no teto da Oficina). Valores supondo os níveis anteriores alcançados.
+     */
+    refineSteps: { targetLevel: number; materials: MaterialRequirement[]; gold: number; threshold: number; d20Bonus: number; breaksOnFailure: boolean }[]
+    /**
+     * Ids de `enchantments` que cabem neste equipamento; `replaceRequired` = precisa de `replaceIndex`; `extra` = só cabe como
+     * encantamento extra. v0.84 (pedido do FE): `requiresRefinement` = refino mínimo para caber (0 = cabe agora); inclui os que só
+     * cabem depois de refinar até um nível de `refineSteps`. Sempre `[]` na Oficina.
+     */
+    enchantOptions: { enchantmentId: string; replaceRequired: boolean; extra: boolean; requiresRefinement: number }[]
   }[]
 }
 // threshold 0 = sem rolagem (sucesso automático). d20Bonus = artificerD20Bonus com Artífice ativo, senão 0.
@@ -3362,6 +3371,16 @@ type BlacksmithOperationResult =
   | { operation: 'enchant'; target: EquipmentTarget; cardId: string; enchantmentId: string; gold: number; roll: number | null; threshold: number; success: boolean; replaced: AppliedEnchantment | null; skipped: boolean }
   | { operation: 'craft'; recipeCardId: string; equipmentId: string; gold: number; inventorySlotIndex: number; skipped: boolean }
 // `roll`: o D20 sem o bônus; `null` = sem rolagem. `skipped: true` → gold 0, success false, nada mudou.
+
+/** FEAT-16, alterado (v0.84, pedido do FE). */
+interface MarketView {
+  // … demais campos da FEAT-16 …
+  /**
+   * Equipamento do inventário: uma entrada por cópia, com `inventorySlotIndex` (índice do slot) e `equipmentState`
+   * (o estado dessa cópia); `owned: 1`, `lotSize: 1`. Demais cartas: como na FEAT-16, sem os dois campos.
+   */
+  sellOffers: { source: 'inventory' | 'tcgFolder'; cardId: string; owned: number; lotSize: number; price: number; inventorySlotIndex?: number; equipmentState?: EquipmentState }[]
+}
 
 type PartyAction = /* … das FEATs 07 a 16 … */ | VisitBlacksmithAction | ArtificerWorkshopAction
 
@@ -3387,6 +3406,7 @@ type BlacksmithOperation =
   | { operation: 'craft'; inventorySlotIndex: number }
 // `inventorySlotIndex` e `replaceIndex`: inteiro ≥ 0. `slot` fora de EquipmentSlot e `location` desconhecida → `unknownOption`.
 // O `inventorySlotIndex` de cada operação vale para o inventário **antes do lote**; o backend acompanha as mudanças de posição.
+// v0.84/v0.85 (pedido do FE, confirmado pelo BE): por isso, um equipamento criado por `craft` não pode ser alvo de outra operação do mesmo lote (o índice aponta para o inventário de antes do lote; um índice sem slot ali → `equipmentNotFound`).
 
 interface ActionNotAllowedDetails {
   reason: /* … motivos existentes … */
@@ -3406,7 +3426,7 @@ interface ActionNotAllowedDetails {
     | 'replaceIndexInvalid'
     | 'recipeMissing'
     | 'materialsMissing'
-  // reusados: notEnoughGold, inventoryFull, notInInventory, choicePending, eventActionBlock, noActionPoints, zoneActionUnavailable
+  // reusados: notEnoughGold, inventoryFull, notInInventory, choicePending, combatInProgress, noActionPoints, zoneActionUnavailable
   cardId?: string
   operationIndex?: number
 }
@@ -3462,11 +3482,11 @@ Seja `G` criado com `{ "name": "Os Teimosos", "characterName": "Lia", "playerCla
 
 | Cenário | Requisição e recorte esperado |
 |---|---|
-| Estado inicial | `equipmentStates.weapon = { "refinement": 0, "enchantments": [], "repairMarks": 0, "broken": false }`, `lastBlacksmithVisit: null`, `availableActions` com `visitBlacksmith` logo antes de `visitMarket` e sem `artificerWorkshop`. `blacksmith.zoneId: "fixture.gray-harbor"`, `blacksmith.workshop: null`, `blacksmith.enchantments = [{ "enchantment": <ember-edge>, "gold": 50, "threshold": 0 }]`, `blacksmith.blacksmith.equipment[0]` com `target = { "location": "equipment", "slot": "weapon" }`, `repair: null`, `refine = { "targetLevel": 1, "materials": [{ "cardId": O, "quantity": 1 }], "gold": 10, "threshold": 0, "d20Bonus": 0, "breaksOnFailure": false }`, `enchantOptions: []` (refino 0 < 2). |
-| Lote com falha e quebra | `{ "type": "visitBlacksmith", "operations": [refine weapon, refine weapon, enchant weapon "ember-edge", refine weapon, refine weapon] }` → 200. `results`: três refinos com `success: true` e `roll: null` (−10, −20, −30), o encantamento com `success: true`, `roll: null` e −50 (a validação supôs o refino +2). O 4º refino: `targetLevel: 4`, `threshold: 21`, `success: false`, `broke: true`, −40. O 5º: `skipped: true`, `gold: 0`. Depois: `gold: 150`, 0 `O` e 0 `E` no inventário, `actionPoints: 0`, `actionPointsSpent: 3`, `equipmentStates.weapon` com `refinement: 3`, `broken: true` e 1 encantamento com `slotIndex: 0` e `active: false` (quebrado). |
+| Estado inicial | `equipmentStates.weapon = { "refinement": 0, "enchantments": [], "repairMarks": 0, "broken": false }`, `lastBlacksmithVisit: null`, `availableActions` com `visitBlacksmith` logo antes de `visitMarket` e sem `artificerWorkshop`. `blacksmith.zoneId: "fixture.gray-harbor"`, `blacksmith.workshop: null`, `blacksmith.enchantments = [{ "enchantment": <ember-edge>, "gold": 50, "threshold": 0 }]`, `blacksmith.blacksmith.equipment[0]` com `target = { "location": "equipment", "slot": "weapon" }`, `repair: null`, `refineSteps` com 10 itens (`targetLevel` 1 a 10), o 1º `{ "targetLevel": 1, "materials": [{ "cardId": O, "quantity": 1 }], "gold": 10, "threshold": 0, "d20Bonus": 0, "breaksOnFailure": false }` e o 4º `{ "targetLevel": 4, …, "gold": 40, "threshold": 21, "d20Bonus": 0, "breaksOnFailure": true }`; `enchantOptions = [{ "enchantmentId": "ember-edge", "replaceRequired": false, "extra": false, "requiresRefinement": 2 }]`. |
+| Lote com falha e quebra | `{ "type": "visitBlacksmith", "operations": [refine weapon, refine weapon, enchant weapon "ember-edge", refine weapon, refine weapon] }` → 200. `results`: dois refinos com `success: true` e `roll: null` (−10, −20), o encantamento com `success: true`, `roll: null` e −50 (a validação supôs o refino +2), o 3º refino com `success: true` e −30. O 4º refino: `targetLevel: 4`, `threshold: 21`, `success: false`, `broke: true`, −40. O 5º: `skipped: true`, `gold: 0`. Depois: `gold: 150`, 0 `O` e 0 `E` no inventário, `actionPoints: 0`, `actionPointsSpent: 3`, `equipmentStates.weapon` com `refinement: 3`, `broken: true` e 1 encantamento com `slotIndex: 0` e `active: false` (quebrado). |
 | Lote recusado | Na vez seguinte (3 PA, `gold: 150`), `[{ repair weapon }, { repair weapon }]` → 409 `{ "reason": "notBroken", "operationIndex": 1 }` (a validação supõe o 1º conserto); GET mostra o mesmo `gold`, os mesmos PA e `broken: true`. `[{ refine weapon }]` → 409 `{ "reason": "equipmentBroken", "operationIndex": 0 }`. |
 | Consertar | `[{ "operation": "repair", "target": { "location": "equipment", "slot": "weapon" } }]` → 200, `gold: 139` (5 + 2 × 3), `equipmentStates.weapon` com `broken: false`, `repairMarks: 1`, encantamento `active: true`, `actionPoints: 0`. |
-| Venda valorizada | Na vez seguinte, `prepare` desequipa `W` e o jogador vai ao mercado: `market.sellOffers` traz `W` com `inventorySlotIndex` dele e `price: 3` (⌊3 × (1 + 0,24 + 0,20) × 0,88⌋ = ⌊3,80⌋). O `InventorySlot` de `W` traz o mesmo `equipmentState`. |
+| Venda valorizada | Na vez seguinte, `prepare` desequipa `W` e o jogador vai ao mercado: `market.sellOffers` traz `W` com `inventorySlotIndex` dele, o mesmo `equipmentState` do `InventorySlot`, `owned: 1`, `lotSize: 1` e `price: 3` (⌊3 × (1 + 0,24 + 0,20) × 0,88⌋ = ⌊3,80⌋). |
 | Criar | Com `B` e 2 `O` no inventário (doação) e `gold: 139`, `[{ "operation": "craft", "inventorySlotIndex": <B> }]` → 200, `gold: 124`, `O` some, `B` continua, um `W` novo no fim do inventário com o estado padrão. Sem `O` → 409 `materialsMissing`; `craft` apontando para `W` → 409 `recipeMissing`. |
 | Oficina sem Artífice | `{ "type": "artificerWorkshop", "operations": [{ "operation": "repair", "target": { "location": "equipment", "slot": "weapon" } }] }` → 409 `artificerInactive`. |
 | Fora do ferreiro | Depois de `move` para fora de Porto Cinzento: `blacksmith: null`, sem `visitBlacksmith`, e o POST → 409 `zoneActionUnavailable`. |
@@ -3584,8 +3604,10 @@ Só nos e2e do backend: rolagens exatas com `fixedRng` (limiares padrão, +2 do 
 | 0.76 | 2026-11-22 | BE | FEAT-15 `acordado` após o aceite documental do frontend para o Pico de conclusão da v0.75. A cobertura unitária da entrega final de zona passou na T-57. |
 | 0.77 | 2026-11-23 | BE | FEAT-15 `implementado (BE)` (SPEC-BACKEND T-55 a T-60). Cenários cobertos pelo e2e `take-party-action/index.quests.controller.e2e-spec.ts` e conferidos contra o backend real em campanhas determinísticas (devlog 072). Sem mudança de formato. Dados de teste: no catálogo temporário da T-60, "Porto" é `Porto Cinzento` (`fixture.gray-harbor`), `fixture.howling-wolves` faz o papel de `fixture.road-ambush`, e o Cavaleiro e o Mago existem só nesse catálogo. O `/health` volta a anunciar a versão atual. |
 | 0.78 | 2026-11-23 | FE | FEAT-15 `validado` (solo): as 13 campanhas da T-60 e os cenários de laboratório e editor passaram com chamadas HTTP contra o backend real (`http://localhost:3333`, health 0.77), e as telas de missões, ficha, laboratório e editor passaram no Chrome com o MSW desligado (devlog FE 093). Sem mudança de formato. A derrota foi conferida no save `derrota` já usado pelo backend, porque o save intacto terminou em vitória. |
-| 0.79 | 2026-11-23 | BE | FEAT-16 proposta (`proposto (BE)`): `VisitMarketAction` (lote de 1 a 50 `MarketOperation`: `buyStock`, `buyBooster`, `buySingle`, `sell`, `buyExpansion`); `openBooster` em `PrepareAction` e `VaultOperation`; `PlayerState.market` (`MarketView`), `expansions`, `lastMarketVisit`, `lastBoosterOpening` e capacidades efetivas; `visitMarket` em `availableActions`; fonte `booster` em `PendingReward`; `priceMultiplier` em atributo e item, `stockPrice`, `stockQuantity`, `boosterCollectionId` e `ZoneCard.market` (altera FEAT-04/31); 37 chaves no laboratório e motivo `sumMismatch` (altera FEAT-03); 8 motivos novos em `ActionNotAllowedDetails`; `fixture` com mercado no Porto Cinzento, `fixture.arrows` e `fixture.booster`; glossário §2.17. Sem rota nem código de erro novos.
+| 0.79 | 2026-11-23 | BE | FEAT-16 proposta (`proposto (BE)`): `VisitMarketAction` (lote de 1 a 50 `MarketOperation`: `buyStock`, `buyBooster`, `buySingle`, `sell`, `buyExpansion`); `openBooster` em `PrepareAction` e `VaultOperation`; `PlayerState.market` (`MarketView`), `expansions`, `lastMarketVisit`, `lastBoosterOpening` e capacidades efetivas; `visitMarket` em `availableActions`; fonte `booster` em `PendingReward`; `priceMultiplier` em atributo e item, `stockPrice`, `stockQuantity`, `boosterCollectionId` e `ZoneCard.market` (altera FEAT-04/31); 37 chaves no laboratório e motivo `sumMismatch` (altera FEAT-03); 8 motivos novos em `ActionNotAllowedDetails`; `fixture` com mercado no Porto Cinzento, `fixture.arrows` e `fixture.booster`; glossário §2.17. Sem rota nem código de erro novos. |
 | 0.80 | 2026-11-23 | FE | FEAT-16 `acordado` sem mudanças: preços, capacidades, ofertas de venda, destino de cada single e resultados chegam prontos; o frontend só exibe, monta o lote e envia. Decisão do FE para o lote: cada slot da vitrine entra no máximo uma vez por lote; o preço exibido antes de confirmar é o da projeção, e o cobrado vem de `lastMarketVisit` (a escassez pode subir o preço de outra cópia da mesma carta dentro do lote). O FE alinha schemas, fixtures do MSW (inclusive `visitMarket` no `availableActions` da cidade), laboratório e editor nas tarefas da FEAT-16. |
 | 0.81 | 2026-11-23 | BE | FEAT-16 `implementado (BE)` (SPEC-BACKEND T-61 a T-66). Cenários cobertos pelos e2e `take-party-action/index.market.controller.e2e-spec.ts`, `replace-card/index.market.controller.e2e-spec.ts` e `update-lab-config/index.market.controller.e2e-spec.ts`, e conferidos contra o backend real em 11 campanhas determinísticas (devlog 081). Sem mudança de formato. Dados de teste: o catálogo temporário da T-66 acrescenta `fixture.t66-outpost` (Posto da Fronteira, mercado sem singles); nas campanhas o fator é 100 e a vitrine do Porto é fixa. O `/health` volta a anunciar a versão atual (estava em 0.78). |
 | 0.82 | 2026-11-24 | BE | FEAT-16 `validado`: o frontend rodou a T-74 contra o backend real (`http://localhost:3333`, health 0.81) com as 11 campanhas da T-66, MSW desligado. Sem mudança de formato. |
 | 0.83 | 2026-11-24 | BE | FEAT-17 `proposto (BE)` (SPEC-BACKEND v0.81, REQ-145 a REQ-154): estado por cópia de equipamento, `visitBlacksmith` e `artificerWorkshop` em lote validado antes de rolar, projeção `blacksmith`, `lastBlacksmithVisit`, 19 chaves do laboratório, materiais/encantamentos/receita/ferreiro estruturados no conteúdo, venda valorizada. Muda FEAT-03, 04, 06–16, 31 e 32 (detalhes na seção). |
+| 0.84 | 2026-11-24 | FE | FEAT-17 → `proposto (FE)`, pedidos de mudança (princípio "o backend decide"): (1) `ServiceView.equipment[].refine` vira `refineSteps` (cada nível seguinte até o máximo ou o teto da Oficina, com materiais, ouro, limiar, bônus e quebra), para o jogador montar vários refinos num lote só sem o frontend calcular custo nem limiar; (2) `enchantOptions[].requiresRefinement`, com os encantamentos que só cabem depois de refinar; (3) `eventActionBlock`, que não existe no contrato, sai da ordem das conferências em favor de `choicePending`/`combatInProgress`; (4) tipo de `MarketView.sellOffers` escrito, com `inventorySlotIndex?` e `equipmentState?` em equipamento; (5) a confirmar: equipamento criado por `craft` não é alvo de outra operação do mesmo lote. Cenários "Estado inicial", "Lote com falha e quebra" (ordem dos resultados alinhada ao lote enviado) e "Venda valorizada" atualizados. O resto aceito sem mudanças. |
+| 0.85 | 2026-11-24 | BE | FEAT-17 `acordado`: os cinco pedidos da v0.84 aceitos sem mudança (`refineSteps`, `requiresRefinement`, `choicePending`/`combatInProgress` no lugar de `eventActionBlock`, tipo de `sellOffers`, `craft` sem alvo no mesmo lote, agora confirmado). Devolvidas ao glossário §2.7 as duas linhas da v0.83 (estado do equipamento; receita, lista do ferreiro e encantamento extra), que a cópia do FE não trazia. |
