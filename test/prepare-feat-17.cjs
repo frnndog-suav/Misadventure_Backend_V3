@@ -155,6 +155,7 @@ const applied = (enchantment, slotIndex) => ({
 
 // `zone`: zona inicial. `playerClass`: classe ao criar. `weapon`: estado da arma em uso (Espada Curta).
 // `arcaneSmith`: concede o Ferreiro Arcano com a trava cumprida. `legacy`: sem mercados sorteados (fator 100).
+// `seed`: último número do estado do RNG (padrão 10).
 const scenarios = [
   {
     key: 'ferreiro',
@@ -204,7 +205,9 @@ const scenarios = [
     arcaneSmith: true,
     gold: 300,
     weapon: state(0),
-    inventory: [stack(shard, 2)],
+    inventory: [stack(shard, 2), stack(ore, 2)],
+    // 1º D20 = 15: passa no limiar 13 da Runa da Guarda (retorno do FE na T-73).
+    seed: 14,
   },
   {
     key: 'venda',
@@ -222,7 +225,7 @@ const scenarios = [
 
 function seed(saved, scenario) {
   const { player } = saved.members[0]
-  saved.rngState = [0, 0, 0, 10]
+  saved.rngState = [0, 0, 0, scenario.seed ?? 10]
   saved.turn.round = 6
   saved.turn.actionPoints = 3
   saved.dimension.map = {

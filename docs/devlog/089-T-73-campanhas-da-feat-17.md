@@ -100,6 +100,7 @@ O `/health` deve mostrar `contractVersion` 0.86. O preparador imprime uma linha 
 - Arquivos: `src/domain/campaign/enterprise/blacksmith/index.ts` e `index.test.ts`, `src/infra/database/drizzle/mappers/drizzle-party-mapper.ts` e `.test.ts`, `index.blacksmith.controller.e2e-spec.ts`.
 - As 7 campanhas foram geradas de novo.
 - 2º retorno (2026-11-24): a correção passou e as 7 campanhas bateram por HTTP. Para a conferência das telas no navegador (MSW desligado), 3ª geração: ferreiro `345d1d9c-aa52-4860-bd8e-048638548aaf`, quebra-mais-6 `c044ac05-ba84-464e-9c84-ede529288078`, substituir `92676001-6c70-44b4-8064-516a00e92b6a`, conserto-receita `e442177e-5fc4-4217-9469-49b2b6b8a952`, oficina `e92c7324-ed26-4139-85f3-0567a650dec4`, ferreiro-arcano `5f35a6b8-7662-4368-b723-6ab61ee92a64`, venda `69620f85-f238-41b4-925d-10d22e857d4c`.
+- 3º retorno (2026-11-24): a `ferreiro-arcano` não tinha Minério, então o extra da Runa da Guarda só podia ser recusado (`materialsMissing`). O preparador ganhou `seed` por campanha; a `ferreiro-arcano` passou a ter 2 Minérios e semente `[0,0,0,14]` (1º D20 = 15). Nova: `91e01620-b2c1-4ff0-90ef-3b226811fcc9`. Resultado conferido numa cópia: enchant weapon guard-rune `extra: true` → 200, roll 15 ≥ 13, −100, ouro 200, 0 PA, guard-rune com `slotIndex: null` e `active: true`, os Minérios somem; na vez seguinte, outro extra → 409 `enchantSlotUnavailable`. O cenário "Lote com falha e quebra" leva **5** operações, sem nenhuma `skipped` (D-139 g).
 
 ## Checks
 
