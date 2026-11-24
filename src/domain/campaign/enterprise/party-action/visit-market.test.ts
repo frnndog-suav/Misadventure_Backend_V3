@@ -89,6 +89,32 @@ describe('parsePartyAction — visitMarket (REQ-140; D-118)', () => {
     ).toEqual([{ field: 'operations.0.source', reason: 'unknownOption' }])
   })
 
+  it('REQ-154: sell aceita inventorySlotIndex opcional (inteiro ≥ 0)', () => {
+    const operation = {
+      operation: 'sell',
+      source: 'inventory',
+      cardId: P,
+      quantity: 1,
+      inventorySlotIndex: 2,
+    }
+    const result = parsePartyAction({
+      type: 'visitMarket',
+      operations: [operation],
+    })
+    expect(result.isRight() && result.value).toEqual({
+      type: 'visitMarket',
+      operations: [operation],
+    })
+    expect(
+      issuesOf(withOperations({ ...operation, inventorySlotIndex: -1 }))
+    ).toEqual([
+      {
+        field: 'operations.0.inventorySlotIndex',
+        reason: 'notNonNegativeInteger',
+      },
+    ])
+  })
+
   it('CONTRATO FEAT-16: operation desconhecida → unknownOperation; ausente → required', () => {
     expect(issuesOf(withOperations({ operation: 'haggle' }))).toEqual([
       { field: 'operations.0.operation', reason: 'unknownOperation' },

@@ -2,12 +2,18 @@ import { type Either, left, right } from '@/core/error/either'
 import type { SeededRng } from '@/core/rng/seeded-rng'
 import type {
   TCard,
+  TEquipmentCard,
   TItemCard,
   TRarity,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
 import type { TPlayerState } from '../entities/party-member'
+import {
+  activeEnchantments,
+  DEFAULT_EQUIPMENT_STATE,
+  type TEquipmentState,
+} from '../equipment-state'
 import { addToInventory } from '../inventory'
 import {
   capacitiesOf,
@@ -21,7 +27,7 @@ import {
 } from '../markets'
 import type { TMarketOperation } from '../party-action'
 import { sortedByCardId } from '../starting-player'
-import { removeFromInventory } from '../vault'
+import { pickFromSlots } from '../vault'
 
 /**
  * Preços e operações do Ir ao Mercado (README 24; REQ-140 a REQ-142; D-118,
@@ -90,11 +96,13 @@ export function singlePrice(
  * Venda (REQ-142): ouro por lote e tamanho do lote, ou `null` se a carta não é
  * vendável. Carta de estoque: ⌊50% × `stockPrice`⌋ por `stockQuantity` cópias;
  * tesouro: valor da raridade; booster: `boosterSalePrice`; demais:
- * ⌊50% × base × `priceMultiplier`⌋. Mínimo 1 por lote.
+ * ⌊50% × base × `priceMultiplier`⌋. Mínimo 1 por lote. Equipamento: com o
+ * estado da cópia (REQ-154; ausente = padrão).
  */
 export function sellValue(
   config: TGameConfigValues,
-  card: TCard
+  card: TCard,
+  equipmentState: TEquipmentState = DEFAULT_EQUIPMENT_STATE
 ): { price: number; lotSize: number } | null {
   switch (card.type) {
     case 'item':
@@ -112,11 +120,46 @@ export function sellValue(
       }
       return { price: baseSellPrice(config, card), lotSize: 1 }
     case 'attribute':
-    case 'equipment':
       return { price: baseSellPrice(config, card), lotSize: 1 }
+    case 'equipment':
+      return {
+        price: equipmentSellPrice(config, card, equipmentState),
+        lotSize: 1,
+      }
     default:
       return null
   }
+}
+
+/**
+ * REQ-154: quebrado → 0; senão ⌊50% × base × `priceMultiplier` × (1 + refino ×
+ * `saleRefinePercent` + encantamentos ligados × `saleEnchantPercent`) ×
+ * max(0, 1 − marcas × `repairMarkPercent`)⌋, com mínimo 1 só se o fator de
+ * reparo for > 0. Tudo em inteiros (percentuais e centésimos).
+ */
+function equipmentSellPrice(
+  config: TGameConfigValues,
+  card: TEquipmentCard,
+  state: TEquipmentState
+): number {
+  if (state.broken) return 0
+  const repair = Math.max(0, 100 - config.repairMarkPercent * state.repairMarks)
+  if (repair === 0) return 0
+  const growth =
+    100 +
+    config.saleRefinePercent * state.refinement +
+    config.saleEnchantPercent * activeEnchantments(card, state).length
+  return Math.max(
+    1,
+    Math.floor(
+      (singleBasePrice(config, card.rarity) *
+        multiplierCents(card.priceMultiplier) *
+        50 *
+        growth *
+        repair) /
+        100_000_000
+    )
+  )
 }
 
 const baseSellPrice = (config: TGameConfigValues, card: TSellable): number =>
@@ -198,12 +241,16 @@ export type TSellOffer = Readonly<{
   owned: number
   lotSize: number
   price: number
+  /** REQ-154: só em equipamento do inventário (uma oferta por cópia). */
+  inventorySlotIndex?: number
+  equipmentState?: TEquipmentState
 }>
 
 /**
- * O que o jogador pode vender agora (REQ-142): inventário na ordem dos slots,
- * agregado por carta, e depois a pasta de TCG. Só entra o que dá ao menos um
- * lote.
+ * O que o jogador pode vender agora (REQ-142, REQ-154): inventário na ordem
+ * dos slots, agregado por carta (equipamento: uma oferta por cópia, com o
+ * índice do slot, o estado e o preço dela), e depois a pasta de TCG. Só entra
+ * o que dá ao menos um lote.
  */
 export function sellOffersOf(
   config: TGameConfigValues,
@@ -225,7 +272,25 @@ export function sellOffersOf(
     if (value === null || amount < value.lotSize) return
     offers.push({ source, cardId, owned: amount, ...value })
   }
-  for (const [cardId, amount] of owned) push('inventory', cardId, amount)
+  const listed = new Set<string>()
+  for (const [index, slot] of player.inventory.entries()) {
+    const card = cards.get(slot.cardId)
+    if (card?.type === 'equipment') {
+      const equipmentState = slot.equipmentState ?? DEFAULT_EQUIPMENT_STATE
+      offers.push({
+        source: 'inventory',
+        cardId: slot.cardId,
+        owned: 1,
+        lotSize: 1,
+        price: equipmentSellPrice(config, card, equipmentState),
+        inventorySlotIndex: index,
+        equipmentState,
+      })
+    } else if (!listed.has(slot.cardId)) {
+      listed.add(slot.cardId)
+      push('inventory', slot.cardId, owned.get(slot.cardId) ?? 0)
+    }
+  }
   for (const { cardId, copies } of player.tcgFolder) {
     push('tcgFolder', cardId, copies)
   }
@@ -429,6 +494,39 @@ export function applyMarketOperations(input: {
   )
   const results: TMarketOperationResult[] = []
   let goldLost = 0
+  /** D-141: índice de cada slot no inventário de antes do lote (`null` = entrou no lote). */
+  let origins: (number | null)[] = inventory.map((_, index) => index)
+  /** Compras só acrescentam slots no fim ou empilham num existente (`addToInventory`); nunca inserem no meio. */
+  const grow = (next: TPlayerState['inventory']) => {
+    origins = [
+      ...origins,
+      ...Array.from(
+        { length: next.length - inventory.length },
+        (): number | null => null
+      ),
+    ]
+    inventory = next
+  }
+
+  /** Venda: o ouro acima da bolsa é perdido (REQ-142). */
+  const credit = (
+    proceeds: number,
+    source: 'inventory' | 'tcgFolder',
+    cardId: string,
+    quantity: number
+  ) => {
+    const purse = capacitiesOf(config, expansions).purse
+    const received = Math.min(proceeds, Math.max(0, purse - gold))
+    goldLost += proceeds - received
+    gold += received
+    results.push({
+      operation: 'sell',
+      source,
+      cardId,
+      quantity,
+      gold: proceeds,
+    })
+  }
 
   for (const [operationIndex, operation] of operations.entries()) {
     const refuse = (
@@ -463,7 +561,7 @@ export function applyMarketOperations(input: {
           config.inventoryCapacity
         )
         if (added === null) return refuse('inventoryFull', cardId)
-        inventory = added
+        grow(added)
         gold -= total
         results.push({
           operation: 'buyStock',
@@ -489,7 +587,7 @@ export function applyMarketOperations(input: {
           config.inventoryCapacity
         )
         if (added === null) return refuse('inventoryFull', cardId)
-        inventory = added
+        grow(added)
         gold -= total
         results.push({
           operation: 'buyBooster',
@@ -543,7 +641,7 @@ export function applyMarketOperations(input: {
             config.inventoryCapacity
           )
           if (added === null) return refuse('inventoryFull', cardId)
-          inventory = added
+          grow(added)
         }
         gold -= price
         state = departSingle(
@@ -564,9 +662,32 @@ export function applyMarketOperations(input: {
         break
       }
       case 'sell': {
-        const { source, cardId, quantity } = operation
+        const { source, cardId, quantity, inventorySlotIndex } = operation
         const notOwned =
           source === 'inventory' ? 'notInInventory' : 'notInTcgFolder'
+        if (inventorySlotIndex !== undefined) {
+          const current = origins.indexOf(inventorySlotIndex)
+          const card = cards.get(cardId)
+          const slot = inventory[current]
+          if (
+            source !== 'inventory' ||
+            quantity !== 1 ||
+            current < 0 ||
+            slot.cardId !== cardId ||
+            card?.type !== 'equipment'
+          ) {
+            return refuse('notInInventory', cardId)
+          }
+          const proceeds = equipmentSellPrice(
+            config,
+            card,
+            slot.equipmentState ?? DEFAULT_EQUIPMENT_STATE
+          )
+          inventory = inventory.filter((_, index) => index !== current)
+          origins = origins.filter((_, index) => index !== current)
+          credit(proceeds, source, cardId, quantity)
+          break
+        }
         const owned =
           source === 'inventory'
             ? inventory
@@ -579,11 +700,28 @@ export function applyMarketOperations(input: {
         if (quantity % value.lotSize !== 0) {
           return refuse('notLotMultiple', cardId)
         }
-        const proceeds = value.price * (quantity / value.lotSize)
+        let proceeds = value.price * (quantity / value.lotSize)
         if (source === 'inventory') {
-          const removed = removeFromInventory(inventory, cardId, quantity)
-          if (removed === null) return refuse(notOwned, cardId)
-          inventory = removed
+          const picked = pickFromSlots(inventory, cardId, quantity)
+          if (picked === null) return refuse(notOwned, cardId)
+          if (card?.type === 'equipment') {
+            proceeds = picked.picked.reduce(
+              (sum, slot) =>
+                sum +
+                slot.quantity *
+                  equipmentSellPrice(
+                    config,
+                    card,
+                    slot.equipmentState ?? DEFAULT_EQUIPMENT_STATE
+                  ),
+              0
+            )
+          }
+          origins = origins.filter(
+            (_, index) =>
+              inventory[index].quantity > (picked.taken.get(index) ?? 0)
+          )
+          inventory = picked.rest
         } else {
           tcgFolder = tcgFolder.flatMap((entry) =>
             entry.cardId !== cardId
@@ -593,17 +731,7 @@ export function applyMarketOperations(input: {
                 : []
           )
         }
-        const purse = capacitiesOf(config, expansions).purse
-        const received = Math.min(proceeds, Math.max(0, purse - gold))
-        goldLost += proceeds - received
-        gold += received
-        results.push({
-          operation: 'sell',
-          source,
-          cardId,
-          quantity,
-          gold: proceeds,
-        })
+        credit(proceeds, source, cardId, quantity)
         break
       }
       case 'buyExpansion': {

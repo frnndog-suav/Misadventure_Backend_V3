@@ -123,7 +123,12 @@ export function pickFromSlots(
   slots: TSlots,
   cardId: string,
   quantity: number
-): { rest: TSlots; picked: TSlots } | null {
+): {
+  rest: TSlots
+  picked: TSlots
+  /** Quanto saiu de cada slot, pelo índice em `slots`. */
+  taken: ReadonlyMap<number, number>
+} | null {
   const order = slots
     .flatMap((slot, i) => (slot.cardId === cardId ? [i] : []))
     .sort(
@@ -151,6 +156,7 @@ export function pickFromSlots(
     picked: order.flatMap((i) =>
       taken.has(i) ? [{ ...slots[i], quantity: taken.get(i) ?? 0 }] : []
     ),
+    taken,
   }
 }
 

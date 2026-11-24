@@ -428,6 +428,62 @@ describe('Ir ao Ferreiro (e2e)', () => {
       repairMarks: 0,
       broken: true,
     })
+
+    // CONTRATO FEAT-17 (Consertar e Venda valorizada; REQ-154, D-141)
+    await act(party.id, { type: 'endTurn' }).expect(200)
+    const repaired = await act(
+      party.id,
+      visit({ operation: 'repair', target: weapon })
+    ).expect(200)
+    expect(player(repaired.body).gold).toBe(139)
+    await act(party.id, { type: 'endTurn' }).expect(200)
+    const unequipped = await act(party.id, {
+      type: 'prepare',
+      operation: 'unequip',
+      slot: 'weapon',
+    }).expect(200)
+    const seller = player(unequipped.body) as TPlayer & {
+      market: { sellOffers: Record<string, unknown>[] } | null
+    }
+    const slot = seller.inventory.findIndex(({ cardId }) => cardId === W)
+    expect(seller.market?.sellOffers).toContainEqual({
+      source: 'inventory',
+      cardId: W,
+      owned: 1,
+      lotSize: 1,
+      price: 3,
+      inventorySlotIndex: slot,
+      equipmentState: seller.inventory[slot].equipmentState,
+    })
+    const sold = await act(party.id, {
+      type: 'visitMarket',
+      operations: [
+        {
+          operation: 'sell',
+          source: 'inventory',
+          cardId: W,
+          quantity: 1,
+          inventorySlotIndex: slot,
+        },
+      ],
+    }).expect(200)
+    expect(player(sold.body).gold).toBe(142)
+    expect(player(sold.body).inventory).toEqual([])
+    const again = await act(party.id, {
+      type: 'visitMarket',
+      operations: [
+        {
+          operation: 'sell',
+          source: 'inventory',
+          cardId: W,
+          quantity: 1,
+          inventorySlotIndex: slot,
+        },
+      ],
+    }).expect(409)
+    expect(again.body).toEqual(
+      notAllowed({ reason: 'notInInventory', cardId: W, operationIndex: 0 })
+    )
   })
 
   it('CONTRATO FEAT-17: alvo inexistente → equipmentNotFound; encantar sem o refino do slot → enchantSlotUnavailable; forma inválida → 400', async () => {

@@ -99,6 +99,8 @@ export type TMarketOperation =
       source: 'inventory' | 'tcgFolder'
       cardId: string
       quantity: number
+      /** REQ-154, D-141: a cópia de equipamento desse slot do inventário de antes do lote. */
+      inventorySlotIndex?: number
     }
   | { operation: 'buyExpansion'; expansion: TMarketExpansion }
 
@@ -1134,7 +1136,19 @@ function parseMarketOperation(
       }
       const cardId = text('cardId')
       const count = quantity()
-      extras(['source', 'cardId', 'quantity'])
+      const slotIndex = entry.inventorySlotIndex
+      if (
+        slotIndex !== undefined &&
+        (typeof slotIndex !== 'number' ||
+          !Number.isInteger(slotIndex) ||
+          slotIndex < 0)
+      ) {
+        issues.push({
+          field: `${path}.inventorySlotIndex`,
+          reason: 'notNonNegativeInteger',
+        })
+      }
+      extras(['source', 'cardId', 'quantity', 'inventorySlotIndex'])
       if (
         issues.length > before ||
         (source !== 'inventory' && source !== 'tcgFolder') ||
@@ -1143,7 +1157,13 @@ function parseMarketOperation(
       ) {
         return null
       }
-      return { operation, source, cardId, quantity: count }
+      return {
+        operation,
+        source,
+        cardId,
+        quantity: count,
+        ...(typeof slotIndex === 'number' && { inventorySlotIndex: slotIndex }),
+      }
     }
     case 'buyExpansion': {
       const named = text('expansion')

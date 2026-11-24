@@ -11,6 +11,7 @@ import {
 } from '../../../../../test/factories/make-card'
 import { makePlayerState } from '../../../../../test/factories/make-party'
 
+import type { TPlayerState } from '../entities/party-member'
 import type { TMarketOperation } from '../party-action'
 import { capacitiesOf, noExpansions, type TMarketsState } from '../markets'
 import {
@@ -211,7 +212,7 @@ describe('boosters e ofertas de venda (REQ-140)', () => {
     expect(marketBoosters(ALL, null)).toEqual([])
   })
 
-  it('REQ-142: ofertas do inventário (agregado, na ordem dos slots) e depois da pasta; lote incompleto não entra', () => {
+  it('REQ-142, REQ-154: ofertas do inventário (agregado, na ordem dos slots; equipamento por cópia) e depois da pasta; lote incompleto não entra', () => {
     const offers = sellOffersOf(
       config,
       {
@@ -226,9 +227,32 @@ describe('boosters e ofertas de venda (REQ-140)', () => {
       ALL
     )
 
+    const standard = {
+      refinement: 0,
+      enchantments: [],
+      repairMarks: 0,
+      broken: false,
+    }
     expect(offers).toEqual([
-      { source: 'inventory', cardId: W.id, owned: 2, lotSize: 1, price: 3 },
+      {
+        source: 'inventory',
+        cardId: W.id,
+        owned: 1,
+        lotSize: 1,
+        price: 3,
+        inventorySlotIndex: 0,
+        equipmentState: standard,
+      },
       { source: 'inventory', cardId: A.id, owned: 20, lotSize: 10, price: 1 },
+      {
+        source: 'inventory',
+        cardId: W.id,
+        owned: 1,
+        lotSize: 1,
+        price: 3,
+        inventorySlotIndex: 2,
+        equipmentState: standard,
+      },
       { source: 'inventory', cardId: F.id, owned: 1, lotSize: 1, price: 10 },
       { source: 'tcgFolder', cardId: STR.id, owned: 2, lotSize: 1, price: 2 },
     ])
@@ -657,6 +681,259 @@ describe('applyMarketOperations — venda (REQ-142)', () => {
     if (!result.isRight()) return
     expect(result.value.player.inventory).toEqual([
       { cardId: W.id, quantity: 1 },
+    ])
+  })
+})
+
+describe('venda de equipamento modificado (REQ-154; D-141)', () => {
+  const FIRE = {
+    id: 'fixture.fire-edge',
+    name: 'Fio de Fogo',
+    materials: [],
+    kind: 'element' as const,
+    element: 'fire' as const,
+    bonusPercent: 10,
+  }
+  const SWORD = makeEquipmentCard({
+    id: 'fixture.short-sword',
+    rarity: 'common',
+    priceMultiplier: 1.2,
+    enchantment: {
+      slots: [
+        { kind: 'element', minRefinement: 2 },
+        { kind: 'element', minRefinement: 7 },
+      ],
+    },
+  })
+  const swordCards = cardsOf(SWORD)
+  const applied = (slotIndex: number | null) => ({
+    enchantment: FIRE,
+    zoneId: ZONE,
+    slotIndex,
+  })
+  const modified = (override: object = {}) => ({
+    refinement: 5,
+    enchantments: [applied(0)],
+    repairMarks: 1,
+    broken: false,
+    ...override,
+  })
+
+  it('REQ-154: Comum × 1,2 em +5 com 1 encantamento ligado e 1 reparo → ⌊3 × 1,6 × 0,88⌋ = 4', () => {
+    expect(sellValue(config, SWORD, modified())).toEqual({
+      price: 4,
+      lotSize: 1,
+    })
+  })
+
+  it('REQ-154: quebrado → 0; 9 reparos → 0 (sem o mínimo 1); encantamento desligado não valoriza', () => {
+    expect(sellValue(config, SWORD, modified({ broken: true }))?.price).toBe(0)
+    expect(sellValue(config, SWORD, modified({ repairMarks: 9 }))?.price).toBe(
+      0
+    )
+    // slot 1 exige +7: desligado em +5 → ⌊3 × 1,4 × 0,88⌋ = 3
+    expect(
+      sellValue(config, SWORD, modified({ enchantments: [applied(1)] }))?.price
+    ).toBe(3)
+    // o extra do Ferreiro Arcano está sempre ligado
+    expect(
+      sellValue(
+        config,
+        SWORD,
+        modified({ enchantments: [applied(0), applied(null)] })
+      )?.price
+    ).toBe(4) // ⌊3 × 1,8 × 0,88⌋ = ⌊4,75⌋
+  })
+
+  it('REQ-154: o mínimo 1 vale com fator de reparo > 0', () => {
+    const cheap = { ...config, singlesPriceCommon: 1 }
+    expect(
+      sellValue(cheap, SWORD, modified({ refinement: 0, enchantments: [] }))
+        ?.price
+    ).toBe(1)
+  })
+
+  it('REQ-154: as porcentagens vêm da configuração', () => {
+    const custom = { ...config, saleRefinePercent: 0, saleEnchantPercent: 0 }
+    // ⌊3 × 1 × 0,88⌋ = 2
+    expect(sellValue(custom, SWORD, modified())?.price).toBe(2)
+  })
+
+  it('REQ-154: oferta de cópia modificada traz o estado e o preço dela', () => {
+    const offers = sellOffersOf(
+      config,
+      {
+        inventory: [
+          { cardId: SWORD.id, quantity: 1, equipmentState: modified() },
+        ],
+        tcgFolder: [],
+      },
+      swordCards
+    )
+    expect(offers).toEqual([
+      {
+        source: 'inventory',
+        cardId: SWORD.id,
+        owned: 1,
+        lotSize: 1,
+        price: 4,
+        inventorySlotIndex: 0,
+        equipmentState: modified(),
+      },
+    ])
+  })
+
+  it('REQ-154: equipamento de valor 0 continua na oferta e vende por 0', () => {
+    const broken = modified({ broken: true })
+    const inventory = [
+      { cardId: SWORD.id, quantity: 1, equipmentState: broken },
+    ]
+    expect(
+      sellOffersOf(config, { inventory, tcgFolder: [] }, swordCards)[0].price
+    ).toBe(0)
+    const result = applyMarketOperations({
+      player: makePlayerState({ gold: 10, inventory }),
+      config,
+      cards: swordCards,
+      operations: [
+        {
+          operation: 'sell',
+          source: 'inventory',
+          cardId: SWORD.id,
+          quantity: 1,
+        },
+      ],
+      zoneId: ZONE,
+      zoneStock: [],
+      collectionId: null,
+      state: state(),
+      candidates: [],
+      rng: scriptedRng([]).rng,
+    })
+    expect(result.isRight() && result.value.player).toMatchObject({
+      gold: 10,
+      inventory: [],
+    })
+    expect(result.isRight() && result.value.result.results[0].gold).toBe(0)
+  })
+
+  function sell(
+    operations: TMarketOperation[],
+    inventory: TPlayerState['inventory'],
+    gold = 0
+  ) {
+    return applyMarketOperations({
+      player: makePlayerState({ gold, inventory }),
+      config,
+      cards: cardsOf(SWORD, P),
+      operations,
+      zoneId: ZONE,
+      zoneStock: [P.id],
+      collectionId: null,
+      state: state(),
+      candidates: [],
+      rng: scriptedRng([]).rng,
+    })
+  }
+
+  it('REQ-154: sem inventorySlotIndex vende primeiro as cópias de estado padrão; várias cópias somam o preço de cada uma', () => {
+    const inventory = [
+      { cardId: SWORD.id, quantity: 1, equipmentState: modified() },
+      { cardId: SWORD.id, quantity: 1 },
+      { cardId: SWORD.id, quantity: 1 },
+    ]
+    const one = sell(
+      [
+        {
+          operation: 'sell',
+          source: 'inventory',
+          cardId: SWORD.id,
+          quantity: 1,
+        },
+      ],
+      inventory
+    )
+    expect(one.isRight() && one.value.player.inventory).toEqual([
+      inventory[0],
+      inventory[2],
+    ])
+    const all = sell(
+      [
+        {
+          operation: 'sell',
+          source: 'inventory',
+          cardId: SWORD.id,
+          quantity: 3,
+        },
+      ],
+      inventory
+    )
+    expect(all.isRight() && all.value.player.gold).toBe(3 + 3 + 4)
+    expect(all.isRight() && all.value.result.results[0].gold).toBe(10)
+  })
+
+  it('D-141: inventorySlotIndex vende a cópia daquele slot do inventário de antes do lote', () => {
+    const inventory = [
+      { cardId: SWORD.id, quantity: 1 },
+      { cardId: P.id, quantity: 1 },
+      { cardId: SWORD.id, quantity: 1, equipmentState: modified() },
+    ]
+    const result = sell(
+      [
+        { operation: 'sell', source: 'inventory', cardId: P.id, quantity: 1 },
+        { operation: 'buyStock', cardId: P.id, quantity: 1 },
+        {
+          operation: 'sell',
+          source: 'inventory',
+          cardId: SWORD.id,
+          quantity: 1,
+          inventorySlotIndex: 2,
+        },
+      ],
+      inventory,
+      10
+    )
+    expect(result.isRight()).toBe(true)
+    if (!result.isRight()) return
+    expect(result.value.player.inventory).toEqual([
+      { cardId: SWORD.id, quantity: 1 },
+      { cardId: P.id, quantity: 1 },
+    ])
+    expect(result.value.result.results[2].gold).toBe(4)
+  })
+
+  it('D-141: inventorySlotIndex inválido → notInInventory (slot inexistente, já vendido, outra carta, quantity ≠ 1, pasta, não equipamento)', () => {
+    const inventory = [
+      { cardId: SWORD.id, quantity: 1 },
+      { cardId: P.id, quantity: 2 },
+    ]
+    const op = (override: object) =>
+      ({
+        operation: 'sell',
+        source: 'inventory',
+        cardId: SWORD.id,
+        quantity: 1,
+        inventorySlotIndex: 0,
+        ...override,
+      }) as TMarketOperation
+    const refusals = [
+      [op({ inventorySlotIndex: 5 })],
+      [op({}), op({})],
+      [op({ inventorySlotIndex: 1 })],
+      [op({ quantity: 2 })],
+      [op({ source: 'tcgFolder' })],
+      [op({ cardId: P.id, inventorySlotIndex: 1 })],
+    ].map((operations) => {
+      const result = sell(operations, inventory)
+      return result.isLeft() && result.value.reason
+    })
+    expect(refusals).toEqual([
+      'notInInventory',
+      'notInInventory',
+      'notInInventory',
+      'notInInventory',
+      'notInInventory',
+      'notInInventory',
     ])
   })
 })

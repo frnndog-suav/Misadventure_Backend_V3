@@ -3,7 +3,7 @@
 Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto** lendo as entradas em ordem.
 
 ## Formato de uma entrada (`NNN-<ID>-<slug>.md`)
-- **Cabeçalho:** ID (T-xx ou FEAT-nn), data (AAAA-MM-DD), status (`aguardando revisão` | `concluída`), versão da spec, versão do contrato.
+- **Cabeçalho:** ID (T-xx ou FEAT-nn), data (AAAA-MM-DD), status (`concluída` | `concluída`), versão da spec, versão do contrato.
 - **Objetivo**
 - **Decisões** (e onde estão na spec: `D-xx`, `REQ-xx`)
 - **Passos e comandos** (comandos completos, instalações com versão)
@@ -64,7 +64,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 044 | T-36 | Conteúdo, schema e exibição (FEAT-11): `effect-schemas.ts` (espelho das 4 uniões), conversão de `content/` e da fixture (24 cartas, D-101), e2e do catálogo e do editor; D-104; reescrita de `base.misty-forest` pelo autor | concluída |
 | 045 | T-37 | Passivos e status em `effectiveModifiers`, expiração por vez, rodada e movimento (REQ-102, REQ-103, D-105) | concluída |
 | 046 | T-38 | Preparar: ativação, pagamento atômico, efeitos e ações disponíveis, status em memória (REQ-101, REQ-104 a REQ-107, D-106) | concluída |
-| 047 | T-39 | FEAT-11 ponta a ponta: ativação HTTP, save v7, projeção de efeitos e status, Supertest, CONTRATO v0.52 e ROADMAP v0.54 | aguardando revisão |
+| 047 | T-39 | FEAT-11 ponta a ponta: ativação HTTP, save v7, projeção de efeitos e status, Supertest, CONTRATO v0.52 e ROADMAP v0.54 | concluída |
 | 048 | FEAT-12 | Contrato de eventos aleatórios e configuração do laboratório acordados, CONTRATO v0.57 e ROADMAP v0.58 | concluída |
 | 049 | T-40 | [Configuração do laboratório, catálogo e decks mistos](049-T-40-configuracao-catalogo-e-decks.md) | concluída |
 | 050 | T-41 | [Domínio e ações do encontro](050-T-41-encontros-aleatorios.md) | concluída |
@@ -95,7 +95,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 075 | FEAT-16 | [Contrato do Mercado acordado: CONTRATO v0.80](075-FEAT-16-contrato-acordado.md) | concluída |
 | 076 | T-61 | [Conteúdo, editor e laboratório do mercado](076-T-61-conteudo-editor-e-laboratorio-do-mercado.md) | concluída |
 | 077 | T-62 | [Estado dos mercados e save v9](077-T-62-estado-dos-mercados-e-save-v9.md) | concluída |
-| 078 | T-63 | [Ir ao Mercado: compras, venda e projeção](078-T-63-ir-ao-mercado.md) | aguardando revisão |
+| 078 | T-63 | [Ir ao Mercado: compras, venda e projeção](078-T-63-ir-ao-mercado.md) | concluída |
 | 079 | T-64 | [Serviços de expansão e capacidades efetivas](079-T-64-servicos-de-expansao.md) | aguardando revisão |
 | 080 | T-65 | [Abrir booster](080-T-65-abrir-booster.md) | concluída |
 | 081 | T-66 | [Campanhas da FEAT-16](081-T-66-campanhas-da-feat-16.md) | concluída |
@@ -104,7 +104,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 084 | T-68 | [Estado do equipamento e save v10](084-T-68-estado-do-equipamento-e-save-v10.md) | concluída |
 | 085 | T-69 | [Ir ao Ferreiro: consertar, refinar e criar](085-T-69-ir-ao-ferreiro.md) | aguardando revisão |
 | 086 | T-70 | [Encantar](086-T-70-encantar.md) | aguardando revisão |
-| 087 | T-71 | [Oficina do Artífice](087-T-71-oficina-do-artifice.md) | aguardando revisão |
+| 087 | T-71 | [Oficina do Artífice](087-T-71-oficina-do-artifice.md) | concluída |
+| 088 | T-72 | [Venda de equipamento modificado](088-T-72-venda-de-equipamento-modificado.md) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
