@@ -29,15 +29,17 @@ Preparar o catálogo temporário e as campanhas independentes da FEAT-17 no padr
 
 ## Campanhas (IDs entregues ao frontend)
 
+IDs da 2ª entrega (2026-11-24, depois da correção do `replaced`); os da 1ª foram consumidos na validação.
+
 | Campanha | ID | Início |
 | --- | --- | --- |
-| ferreiro | `d047855e-9ba0-45a1-9fae-44f9f4375fc4` | Porto, 300 de ouro, Espada Curta em uso (+0); inventário: Lâmina Rúnica, 8 Minérios, 2 Fragmentos |
-| quebra-mais-6 | `6e89fd09-9a6a-4e9d-b04e-15577a77df34` | Porto, 300 de ouro, Espada em uso a +6, 3 Minérios |
-| substituir | `5a8e3fb9-274d-430a-b130-af512e41637a` | Porto, 300 de ouro, Lâmina Rúnica +3 com `ember-edge` no slot 0, 1 Fragmento |
-| conserto-receita | `2d62d6cb-c18d-47d6-9f80-5cb28c5ba69e` | Porto, 100 de ouro, Espada em uso +4 quebrada; Projeto e 2 Minérios |
-| oficina | `ecbc283d-bd6f-443e-9ebb-f5ff46db3456` | Artífice na Mina Velha, 100 de ouro; Espada +4 quebrada (slot 0), Espada +6 (slot 1), 3 Minérios |
-| ferreiro-arcano | `f82e821e-055d-46ea-8e1f-44ff951d2eff` | Artífice com Ferreiro Arcano no Porto, 300 de ouro, Espada em uso (+0), 2 Fragmentos |
-| venda | `6158546f-a9eb-43cd-af94-a1bbde3ae59b` | Porto, 0 de ouro, save sem mercados sorteados; 4 Espadas: +3 com `ember-edge`, +2 quebrada, 2 marcas de reparo e padrão |
+| ferreiro | `86d9a7ac-810e-41c8-b234-420fc46f53c4` | Porto, 300 de ouro, Espada Curta em uso (+0); inventário: Lâmina Rúnica, 8 Minérios, 2 Fragmentos |
+| quebra-mais-6 | `94f44897-0328-4f42-98d0-77d0c9430e9f` | Porto, 300 de ouro, Espada em uso a +6, 3 Minérios |
+| substituir | `60d161d3-2b9d-4bec-9804-20c0792fde7c` | Porto, 300 de ouro, Lâmina Rúnica +3 com `ember-edge` no slot 0, 1 Fragmento |
+| conserto-receita | `c616d8b5-38f9-4751-8795-04fa847d5e59` | Porto, 100 de ouro, Espada em uso +4 quebrada; Projeto e 2 Minérios |
+| oficina | `756f1d18-1931-4c15-b5c1-384a59874685` | Artífice na Mina Velha, 100 de ouro; Espada +4 quebrada (slot 0), Espada +6 (slot 1), 3 Minérios |
+| ferreiro-arcano | `14cbf1b7-fa2d-41d5-9452-0af9fc85c7c6` | Artífice com Ferreiro Arcano no Porto, 300 de ouro, Espada em uso (+0), 2 Fragmentos |
+| venda | `fd0caa06-4691-4f35-a8c5-d44ec755183f` | Porto, 0 de ouro, save sem mercados sorteados; 4 Espadas: +3 com `ember-edge`, +2 quebrada, 2 marcas de reparo e padrão |
 
 ## Ações e resultados esperados
 
@@ -50,7 +52,7 @@ Executados pelo agente em cópias (o mesmo preparador, IDs descartáveis). O RNG
 | quebra-mais-6 | GET; `visitBlacksmith` [refine W] | Passo `{ targetLevel: 7, gold: 70, threshold: 12, breaksOnFailure: true }`. 200: roll 11 < 12, `success: false`, `broke: true`, −70; ouro 230; Espada +6 com `broken: true`. |
 | substituir | GET | ember e frost `replaceRequired: true`; guard-rune `replaceRequired: false`, `requiresRefinement: 0`. |
 | substituir | enchant frost-edge sem `replaceIndex`; com `replaceIndex: 5` | 409 `replaceIndexRequired`; 409 `replaceIndexInvalid` (os dois com o `cardId` da Lâmina e `operationIndex: 0`). |
-| substituir | enchant frost-edge com `replaceIndex: 0` | 200, roll 11, sucesso, −50, `replaced` = ember-edge; ouro 250; Lâmina só com frost-edge. |
+| substituir | enchant frost-edge com `replaceIndex: 0` | 200, roll 11, sucesso, −50, `replaced` = ember-edge com `active: true`; ouro 250; Lâmina só com frost-edge. |
 | conserto-receita | GET | `repair: { gold: 13 }`; `recipes[0]` Projeto, 2 Minérios, 15 de ouro, `canCraft: true`. |
 | conserto-receita | [refine W]; [craft inventorySlotIndex 1] | 409 `equipmentBroken`; 409 `recipeMissing` (`cardId` fixture.iron-ore). |
 | conserto-receita | [repair W, craft 0] | 200, ouro 72 (−13, −15). Espada +4 com `repairMarks: 1`; o Projeto fica (não consumido); Espada nova padrão no slot 1; os Minérios somem. |
@@ -90,11 +92,19 @@ O `/health` deve mostrar `contractVersion` 0.86. O preparador imprime uma linha 
 - O validador recusou a classe com uma só especialização e o efeito com duração sem `mark`. Foram acrescentadas as três especializações sem regra e `mark: 'buff'`.
 - `contract-version.ts` estava em 0.82. Passou para 0.86.
 
+## Retorno do frontend (2026-11-24)
+
+- 6 das 7 campanhas bateram. Na `substituir`, `results[0].replaced` vinha sem `active`, que é obrigatório em `AppliedEnchantment` (CONTRATO v0.86). Contrato sem mudança.
+- Correção: o domínio devolve o substituído com `active` calculado sobre o estado de antes da troca (`enchantmentActive`). O save v10 grava o campo. Um save anterior sem ele é lido com `active: true`: só se substitui encantamento ligado (D-139 b), então o valor é exato. Sem isso, a campanha já consumida dava 500 no GET.
+- Testes: unitário do encantar (o `replaced` exato), mapper (ida e volta e save sem `active`) e e2e `REQ-151, CONTRATO v0.86` no ferreiro.
+- Arquivos: `src/domain/campaign/enterprise/blacksmith/index.ts` e `index.test.ts`, `src/infra/database/drizzle/mappers/drizzle-party-mapper.ts` e `.test.ts`, `index.blacksmith.controller.e2e-spec.ts`.
+- As 7 campanhas foram geradas de novo.
+
 ## Checks
 
 - `node --check`, Prettier e ESLint no preparador; `npm run validate:content` na pasta temporária (29 cartas).
 - `campaigns` (7) e os fluxos nas cópias: tudo como esperado.
-- E2E da FEAT-17 (ferreiro, Oficina, mercado e laboratório): 29/29.
+- E2E da FEAT-17 (ferreiro, Oficina, mercado e laboratório): 29/29. Depois da correção: e2e do ferreiro e da Oficina 13/13; unitários relacionados 794/794; typecheck, ESLint, Prettier e domain-guard OK.
 
 ## Ponte com o frontend
 
@@ -102,4 +112,6 @@ AVISO DE FRONTEND — FEAT-17: CONTRATO v0.86 e ROADMAP v0.79. O frontend valida
 
 ## Commit sugerido
 
-`test/add feat-17 campaign preparer (t-73)`
+`test/add feat-17 campaign preparer (t-73)` (1ª entrega)
+
+`fix/include active in replaced enchantment (t-73)` (correção)

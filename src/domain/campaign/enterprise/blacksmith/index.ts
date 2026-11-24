@@ -16,6 +16,7 @@ import {
   copySlot,
   type TAppliedEnchantment,
   DEFAULT_EQUIPMENT_STATE,
+  enchantmentActive,
   type TEquipmentState,
   withWornState,
   wornStateOf,
@@ -63,7 +64,8 @@ export type TBlacksmithOperationResult =
       roll: number | null
       threshold: number
       success: boolean
-      replaced: TAppliedEnchantment | null
+      /** O substituído, com o `active` de antes da troca (CONTRATO v0.86). */
+      replaced: (TAppliedEnchantment & { active: boolean }) | null
       skipped: boolean
     }
   | {
@@ -461,8 +463,12 @@ function plan(
           // Na conferência (sem RNG) supõe sucesso (D-132); sem bônus (D-133).
           const roll = threshold > 0 && rng ? rng.nextInt(1, 20) : null
           const success = roll === null || roll >= threshold
-          const replaced =
+          const previous =
             success && replaceAt !== null ? state.enchantments[replaceAt] : null
+          const replaced = previous && {
+            ...previous,
+            active: enchantmentActive(previous, card, state),
+          }
           if (success)
             write(work, {
               ...state,

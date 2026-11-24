@@ -895,7 +895,12 @@ const blacksmithVisitSchema = z.strictObject({
           roll: z.number().int().min(1).max(20).nullable(),
           threshold: count,
           success: z.boolean(),
-          replaced: appliedEnchantmentSchema.nullable(),
+          // CONTRATO v0.86: com o `active` de antes da troca. Saves anteriores
+          // não o gravavam; só se substitui encantamento ligado (D-139 b), então
+          // o ausente é `true`.
+          replaced: appliedEnchantmentSchema
+            .extend({ active: z.boolean().default(true) })
+            .nullable(),
           skipped: z.boolean(),
         }),
         z.strictObject({

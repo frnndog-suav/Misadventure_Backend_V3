@@ -786,10 +786,12 @@ describe('Encantar (REQ-151)', () => {
     expect(done.player.inventory).toEqual([
       rune(at(0, { enchantments: [applied(FROST, 0)] })),
     ])
-    expect(done.result.results[0]).toMatchObject({
-      success: true,
-      replaced: applied(EMBER, 0),
-    })
+    expect(done.result.results[0]).toMatchObject({ success: true })
+    // CONTRATO v0.86: `replaced` é `AppliedEnchantment`, com o `active` de antes da troca.
+    expect(
+      done.result.results[0].operation === 'enchant' &&
+        done.result.results[0].replaced
+    ).toEqual({ ...applied(EMBER, 0), active: true })
     const failed = ok(
       run(
         { gold: 50, inventory: [rune(before)] },

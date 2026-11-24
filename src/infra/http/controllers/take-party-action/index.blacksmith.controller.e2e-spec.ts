@@ -486,6 +486,47 @@ describe('Ir ao Ferreiro (e2e)', () => {
     )
   })
 
+  it('REQ-151, CONTRATO v0.86: substituir com replaceIndex devolve replaced como AppliedEnchantment, com o active de antes da troca', async () => {
+    await request(server())
+      .patch('/lab/config')
+      .send({ enchantElementThreshold: 0 })
+      .expect(200)
+    const party = await startedParty()
+    await give(party, W)
+    await give(party, ORE, 2)
+    await give(party, E, 2)
+    await grant(party, { type: 'gold', amount: 130 })
+    const refine = { operation: 'refine', target: inv(0) }
+    const enchant = {
+      operation: 'enchant',
+      target: inv(0),
+      enchantmentId: 'ember-edge',
+    }
+
+    const res = await act(
+      party.id,
+      visit(refine, refine, enchant, { ...enchant, replaceIndex: 0 })
+    ).expect(200)
+
+    const results = player(res.body).lastBlacksmithVisit?.results ?? []
+    expect(results[2]).toMatchObject({ success: true, replaced: null })
+    expect(results[3]).toMatchObject({
+      success: true,
+      replaced: {
+        enchantment: expect.objectContaining({ id: 'ember-edge' }),
+        zoneId: 'fixture.gray-harbor',
+        slotIndex: 0,
+        active: true,
+      },
+    })
+    expect(Object.keys(results[3].replaced as object).sort()).toEqual([
+      'active',
+      'enchantment',
+      'slotIndex',
+      'zoneId',
+    ])
+  })
+
   it('CONTRATO FEAT-17: alvo inexistente → equipmentNotFound; encantar sem o refino do slot → enchantSlotUnavailable; forma inválida → 400', async () => {
     const party = await stocked()
 

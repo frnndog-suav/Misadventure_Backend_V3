@@ -1077,6 +1077,74 @@ describe('DrizzlePartyMapper', () => {
     ).toBeUndefined()
   })
 
+  it('CONTRATO v0.86: replaced do enchant guarda o active; save anterior sem ele lê active true (D-139 b)', () => {
+    const emberEdge = {
+      id: 'ember-edge',
+      name: 'Fio de Brasa',
+      kind: 'element' as const,
+      element: 'fire' as const,
+      bonusPercent: 10,
+      materials: [],
+    }
+    const replaced = {
+      enchantment: emberEdge,
+      zoneId: 'fixture.gray-harbor',
+      slotIndex: 0,
+      active: true,
+    }
+    const lastBlacksmithVisit = {
+      source: 'blacksmith' as const,
+      zoneId: 'fixture.gray-harbor',
+      actionPointsSpent: 3,
+      results: [
+        {
+          operation: 'enchant' as const,
+          target: { location: 'inventory' as const, inventorySlotIndex: 0 },
+          cardId: 'fixture.short-sword',
+          enchantmentId: 'ember-edge',
+          gold: -50,
+          roll: 11,
+          threshold: 10,
+          success: true,
+          replaced,
+          skipped: false,
+        },
+      ],
+    }
+    const row = {
+      ...JSON.parse(
+        JSON.stringify(
+          DrizzlePartyMapper.toDrizzle(
+            makeParty({
+              status: 'inSession',
+              members: [
+                PartyMember.create(
+                  {
+                    characterName: 'Lia',
+                    kind: 'human',
+                    player: makePlayerState({ lastBlacksmithVisit }),
+                  },
+                  new UniqueEntityID('member-1')
+                ),
+              ],
+            })
+          )
+        )
+      ),
+    } as TPartyRow
+    const visitOf = (r: TPartyRow) =>
+      DrizzlePartyMapper.toDomain(r).members[0].player.lastBlacksmithVisit
+
+    expect(visitOf(row)).toEqual(lastBlacksmithVisit)
+    const stored = row.state as unknown as {
+      members: { player: { lastBlacksmithVisit: typeof lastBlacksmithVisit } }[]
+    }
+    const legacy = stored.members[0].player.lastBlacksmithVisit.results[0]
+      .replaced as Partial<typeof replaced>
+    delete legacy.active
+    expect(visitOf(row)).toEqual(lastBlacksmithVisit)
+  })
+
   it('REQ-144: ida e volta preserva lastBoosterOpening, a entrega pendente do booster e a fila; save sem eles lê undefined', () => {
     const lastBoosterOpening = {
       boosterCardId: 'fixture.booster',
