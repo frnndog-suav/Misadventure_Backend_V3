@@ -830,15 +830,14 @@ const stateFields = <TConfig extends z.ZodType, TPlayer extends z.ZodType>(
 })
 
 // REQ-147, D-131: estado por cópia de equipamento (save v10).
+const appliedEnchantmentSchema = z.strictObject({
+  enchantment: blacksmithEnchantment,
+  zoneId: id,
+  slotIndex: z.number().int().min(0).nullable(),
+})
 const equipmentStateSchema = z.strictObject({
   refinement: z.number().int().min(0).max(10),
-  enchantments: z.array(
-    z.strictObject({
-      enchantment: blacksmithEnchantment,
-      zoneId: id,
-      slotIndex: z.number().int().min(0).nullable(),
-    })
-  ),
+  enchantments: z.array(appliedEnchantmentSchema),
   repairMarks: z.number().int().min(0),
   broken: z.boolean(),
 })
@@ -884,6 +883,19 @@ const blacksmithVisitSchema = z.strictObject({
           threshold: count,
           success: z.boolean(),
           broke: z.boolean(),
+          skipped: z.boolean(),
+        }),
+        // REQ-151 (T-70).
+        z.strictObject({
+          operation: z.literal('enchant'),
+          target: equipmentTarget,
+          cardId: id,
+          enchantmentId: id,
+          gold: z.number().int(),
+          roll: z.number().int().min(1).max(20).nullable(),
+          threshold: count,
+          success: z.boolean(),
+          replaced: appliedEnchantmentSchema.nullable(),
           skipped: z.boolean(),
         }),
         z.strictObject({
@@ -1202,7 +1214,9 @@ export class DrizzlePartyMapper {
               lastBoosterOpening: m.player.lastBoosterOpening,
             }),
             ...(m.player.lastBlacksmithVisit !== undefined && {
-              lastBlacksmithVisit: m.player.lastBlacksmithVisit,
+              // Mesmos dados; o schema só não é `readonly` (como storedState).
+              lastBlacksmithVisit: m.player
+                .lastBlacksmithVisit as unknown as TStoredBlacksmithVisit,
             }),
             deck: [...m.player.deck],
             hand: [...m.player.hand],
@@ -1348,6 +1362,7 @@ export class DrizzlePartyMapper {
 }
 
 type TStoredEquipmentState = z.infer<typeof equipmentStateSchema>
+type TStoredBlacksmithVisit = z.infer<typeof blacksmithVisitSchema> | null
 
 // Só leitura: o tipo do domínio é `readonly`; o save nunca o altera.
 const storedState = (state: TEquipmentState): TStoredEquipmentState =>

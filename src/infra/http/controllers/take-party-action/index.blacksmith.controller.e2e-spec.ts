@@ -6,11 +6,13 @@ import { postParty, resetCampaign } from '../../../../../test/parties-e2e'
 // CONTRATO v0.85, FEAT-17 (T-69): Ir ao Ferreiro de ponta a ponta (REQ-149,
 // REQ-150, REQ-152). Refino de +0 a +1 tem limiar 0 (sem rolagem); a quebra é
 // forçada pelo laboratório (limiar 21 e quebra a partir de +1), sem depender do
-// sorteio. O estado é montado pela doação (REQ-77).
+// sorteio. O estado é montado pela doação (REQ-77). Encantar (REQ-151) entra
+// na T-70.
 
 const W = 'fixture.short-sword'
 const ORE = 'fixture.iron-ore'
 const BP = 'fixture.sword-blueprint'
+const E = 'fixture.ember-shard'
 
 type TState = {
   refinement: number
@@ -22,6 +24,7 @@ type TState = {
 type TPlayer = {
   gold: number
   inventory: { cardId: string; quantity: number; equipmentState?: TState }[]
+  equipmentStates: Record<string, TState>
   availableActions: string[]
   blacksmith: {
     zoneId: string | null
@@ -173,7 +176,14 @@ describe('Ir ao Ferreiro (e2e)', () => {
       cardId: W,
       state: DEFAULT_STATE,
       repair: null,
-      enchantOptions: [],
+      enchantOptions: [
+        {
+          enchantmentId: 'ember-edge',
+          replaceRequired: false,
+          extra: false,
+          requiresRefinement: 2,
+        },
+      ],
     })
     expect(sword?.refineSteps).toHaveLength(10)
     expect(sword?.refineSteps.slice(0, 2)).toEqual([
@@ -333,7 +343,94 @@ describe('Ir ao Ferreiro (e2e)', () => {
     expect(await get(party.id)).toEqual(before)
   })
 
-  it('CONTRATO FEAT-17: alvo inexistente → equipmentNotFound; encantar ainda recusado (D-138); forma inválida → 400', async () => {
+  it('CONTRATO FEAT-17 (Lote com falha e quebra): refinos, encantamento suposto pela conferência, o refino +4 falha e quebra', async () => {
+    await request(server())
+      .patch('/lab/config')
+      .send({
+        refineThreshold4to6: 21,
+        refineBreakFromLevel: 4,
+        enchantElementThreshold: 0,
+      })
+      .expect(200)
+    const party = await startedParty()
+    await give(party, W)
+    await give(party, ORE, 4)
+    await give(party, E)
+    await grant(party, { type: 'gold', amount: 300 })
+    await act(party.id, {
+      type: 'prepare',
+      operation: 'equip',
+      cardId: W,
+    }).expect(200)
+    const weapon = { location: 'equipment', slot: 'weapon' }
+    const refine = { operation: 'refine', target: weapon }
+
+    const res = await act(
+      party.id,
+      visit(
+        refine,
+        refine,
+        { operation: 'enchant', target: weapon, enchantmentId: 'ember-edge' },
+        refine,
+        refine
+      )
+    ).expect(200)
+
+    const p = player(res.body)
+    const results = p.lastBlacksmithVisit?.results ?? []
+    expect(results.map(({ gold }) => gold)).toEqual([-10, -20, -50, -30, -40])
+    expect(results.map(({ skipped }) => skipped)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+    ])
+    expect(results.map(({ success }) => success)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      false,
+    ])
+    expect(res.body.turn.actionPoints).toBe(0)
+    expect(p.lastBlacksmithVisit?.actionPointsSpent).toBe(3)
+    expect(results[2]).toEqual({
+      operation: 'enchant',
+      target: weapon,
+      cardId: W,
+      enchantmentId: 'ember-edge',
+      gold: -50,
+      roll: null,
+      threshold: 0,
+      success: true,
+      replaced: null,
+      skipped: false,
+    })
+    expect(results[4]).toMatchObject({
+      targetLevel: 4,
+      threshold: 21,
+      success: false,
+      broke: true,
+    })
+    expect(p.gold).toBe(150)
+    expect(p.inventory).toEqual([])
+    expect(p.equipmentStates.weapon).toEqual({
+      refinement: 3,
+      enchantments: [
+        {
+          enchantment: expect.objectContaining({ id: 'ember-edge' }),
+          zoneId: 'fixture.gray-harbor',
+          slotIndex: 0,
+          active: false,
+        },
+      ],
+      repairMarks: 0,
+      broken: true,
+    })
+  })
+
+  it('CONTRATO FEAT-17: alvo inexistente → equipmentNotFound; encantar sem o refino do slot → enchantSlotUnavailable; forma inválida → 400', async () => {
     const party = await stocked()
 
     expect(
@@ -360,7 +457,7 @@ describe('Ir ao Ferreiro (e2e)', () => {
       ).body
     ).toEqual(
       notAllowed({
-        reason: 'enchantmentNotOffered',
+        reason: 'enchantSlotUnavailable',
         cardId: W,
         operationIndex: 0,
       })

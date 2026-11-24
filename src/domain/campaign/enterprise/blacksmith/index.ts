@@ -14,6 +14,7 @@ import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/ga
 import type { TPlayerState } from '../entities/party-member'
 import {
   copySlot,
+  type TAppliedEnchantment,
   DEFAULT_EQUIPMENT_STATE,
   type TEquipmentState,
   withWornState,
@@ -54,6 +55,18 @@ export type TBlacksmithOperationResult =
       skipped: boolean
     }
   | {
+      operation: 'enchant'
+      target: TEquipmentTarget
+      cardId: string
+      enchantmentId: string
+      gold: number
+      roll: number | null
+      threshold: number
+      success: boolean
+      replaced: TAppliedEnchantment | null
+      skipped: boolean
+    }
+  | {
       operation: 'craft'
       recipeCardId: string
       equipmentId: string
@@ -78,6 +91,10 @@ export type TBlacksmithRefusalReason =
   | 'refinementMaterialsMissing'
   | 'refineLevelMax'
   | 'enchantmentNotOffered'
+  | 'notEnchantable'
+  | 'enchantSlotUnavailable'
+  | 'replaceIndexRequired'
+  | 'replaceIndexInvalid'
   | 'materialsMissing'
   | 'notEnoughGold'
   | 'notInInventory'
@@ -113,6 +130,50 @@ export const artificerActive = (player: Pick<TPlayerState, 'playerClasses'>) =>
   player.playerClasses.some(
     ({ playerClass, deckLockMet }) => playerClass === 'artificer' && deckLockMet
   )
+
+/** Id da especialização Ferreiro Arcano do Artífice (D-139). */
+export const ARCANE_SMITH_SPECIALIZATION_ID = 'arcaneSmith'
+
+/** Ferreiro Arcano ativo (D-133, D-139): a especialização com a trava cumprida. */
+export const arcaneSmithActive = (
+  player: Pick<TPlayerState, 'specializations'>
+) =>
+  (player.specializations ?? []).some(
+    ({ playerClass, specializationId, deckLockMet }) =>
+      playerClass === 'artificer' &&
+      specializationId === ARCANE_SMITH_SPECIALIZATION_ID &&
+      deckLockMet
+  )
+
+/** Ouro e limiar do encantamento pelo tipo (README 25.3). */
+const enchantCost = (
+  config: TGameConfigValues,
+  enchantment: TBlacksmithEnchantment
+) =>
+  enchantment.kind === 'element'
+    ? {
+        gold: config.enchantElementGold,
+        threshold: config.enchantElementThreshold,
+      }
+    : {
+        gold: config.enchantEffectGold,
+        threshold: config.enchantEffectThreshold,
+      }
+
+/** Índices dos slots da carta do tipo do encantamento com o refino exigido. */
+const eligibleSlots = (
+  card: TEquipmentCard,
+  enchantment: TBlacksmithEnchantment,
+  refinement: number
+): number[] =>
+  (card.enchantment?.slots ?? []).flatMap((slot, index) =>
+    slot.kind === enchantment.kind && slot.minRefinement <= refinement
+      ? [index]
+      : []
+  )
+
+const occupied = (state: TEquipmentState, slotIndex: number | null) =>
+  state.enchantments.some((applied) => applied.slotIndex === slotIndex)
 
 /** Slot do inventário com a posição que tinha antes do lote (`null` = criado no lote). */
 type TTrackedSlot = Readonly<{ origin: number | null; slot: TInventorySlot }>
@@ -227,6 +288,9 @@ function plan(
     config: TGameConfigValues
     cards: TCards
     d20Bonus: number
+    zoneId: string
+    enchantments: readonly TBlacksmithEnchantment[]
+    arcaneSmith: boolean
   }>
 ): TPlanned {
   const { config, cards } = input
@@ -310,12 +374,90 @@ function plan(
       }
     }
     case 'enchant': {
-      // Encantar entra na T-70 (D-138): por ora, nenhum encantamento é oferecido.
       const found = findTarget(work, operation.target, cards)
       if (!found) return { reason: 'equipmentNotFound' }
-      const cardId = found.card.id
-      if (found.state.broken) return { reason: 'equipmentBroken', cardId }
-      return { reason: 'enchantmentNotOffered', cardId }
+      const { card, state, write } = found
+      const cardId = card.id
+      if (state.broken) return { reason: 'equipmentBroken', cardId }
+      const enchantment = input.enchantments.find(
+        ({ id }) => id === operation.enchantmentId
+      )
+      if (!enchantment) return { reason: 'enchantmentNotOffered', cardId }
+      if (card.enchantment === null) return { reason: 'notEnchantable', cardId }
+      let slotIndex: number | null = null
+      let replaceAt: number | null = null
+      if (operation.extra === true) {
+        if (!input.arcaneSmith || occupied(state, null))
+          return { reason: 'enchantSlotUnavailable', cardId }
+      } else {
+        const eligible = eligibleSlots(card, enchantment, state.refinement)
+        if (eligible.length === 0)
+          return { reason: 'enchantSlotUnavailable', cardId }
+        if (operation.replaceIndex !== undefined) {
+          const old = state.enchantments[operation.replaceIndex]
+          if (
+            !old ||
+            old.slotIndex === null ||
+            !eligible.includes(old.slotIndex)
+          )
+            return { reason: 'replaceIndexInvalid', cardId }
+          slotIndex = old.slotIndex
+          replaceAt = operation.replaceIndex
+        } else {
+          const free = eligible.find((index) => !occupied(state, index))
+          if (free === undefined)
+            return { reason: 'replaceIndexRequired', cardId }
+          slotIndex = free
+        }
+      }
+      const { materials } = enchantment
+      if (!hasMaterials(work.inventory, materials))
+        return { reason: 'materialsMissing', cardId }
+      const { gold: cost, threshold } = enchantCost(config, enchantment)
+      if (work.gold < cost) return { reason: 'notEnoughGold', cardId }
+      const base = {
+        operation: 'enchant' as const,
+        target: operation.target,
+        cardId,
+        enchantmentId: enchantment.id,
+        threshold,
+      }
+      return {
+        reason: null,
+        apply: (rng) => {
+          work.gold -= cost
+          work.inventory = consume(work.inventory, materials)
+          // Na conferência (sem RNG) supõe sucesso (D-132); sem bônus (D-133).
+          const roll = threshold > 0 && rng ? rng.nextInt(1, 20) : null
+          const success = roll === null || roll >= threshold
+          const replaced =
+            success && replaceAt !== null ? state.enchantments[replaceAt] : null
+          if (success)
+            write(work, {
+              ...state,
+              enchantments: [
+                ...state.enchantments.filter((_, i) => i !== replaceAt),
+                { enchantment, zoneId: input.zoneId, slotIndex },
+              ],
+            })
+          return {
+            ...base,
+            gold: -cost,
+            roll,
+            success,
+            replaced,
+            skipped: false,
+          }
+        },
+        skipped: () => ({
+          ...base,
+          gold: 0,
+          roll: null,
+          success: false,
+          replaced: null,
+          skipped: true,
+        }),
+      }
     }
     case 'craft': {
       const entry = work.inventory.find(
@@ -405,6 +547,8 @@ export function applyBlacksmithOperations(input: {
   cards: TCards
   operations: readonly TBlacksmithOperation[]
   zoneId: string
+  /** Encantamentos do ferreiro da zona (README 3.4). */
+  enchantments: readonly TBlacksmithEnchantment[]
   actionPointsSpent: number
   rng: TRng
 }): Either<
@@ -413,7 +557,14 @@ export function applyBlacksmithOperations(input: {
 > {
   const { config, cards, operations } = input
   const d20Bonus = artificerActive(input.player) ? config.artificerD20Bonus : 0
-  const context = { config, cards, d20Bonus }
+  const context = {
+    config,
+    cards,
+    d20Bonus,
+    zoneId: input.zoneId,
+    enchantments: input.enchantments,
+    arcaneSmith: arcaneSmithActive(input.player),
+  }
 
   const check = startWork(input.player)
   const checked: Extract<TPlanned, { reason: null }>[] = []
@@ -523,10 +674,66 @@ function refineStepsOf(
   return steps
 }
 
+type TEnchantOption = TServiceEquipment['enchantOptions'][number]
+
+/**
+ * Encantamentos da zona que cabem no equipamento (REQ-151): num slot agora
+ * (`replaceRequired` se todos os do tipo estão ocupados), num slot depois de
+ * refinar até um nível de `refineSteps`, ou como extra do Ferreiro Arcano.
+ */
+function enchantOptionsOf(
+  card: TEquipmentCard,
+  state: TEquipmentState,
+  enchantments: readonly TBlacksmithEnchantment[],
+  steps: readonly TRefineStep[],
+  arcaneSmith: boolean
+): TEnchantOption[] {
+  if (state.broken || card.enchantment === null) return []
+  const slots = card.enchantment.slots
+  const reachable = steps.at(-1)?.targetLevel ?? state.refinement
+  return enchantments.flatMap((enchantment): TEnchantOption[] => {
+    const now = eligibleSlots(card, enchantment, state.refinement)
+    if (now.length > 0)
+      return [
+        {
+          enchantmentId: enchantment.id,
+          replaceRequired: now.every((index) => occupied(state, index)),
+          extra: false,
+          requiresRefinement: 0,
+        },
+      ]
+    // Slot acima do refino atual nunca está ocupado: o refino não baixa.
+    const later = slots
+      .filter(
+        ({ kind, minRefinement }) =>
+          kind === enchantment.kind && minRefinement <= reachable
+      )
+      .map(({ minRefinement }) => minRefinement)
+    if (later.length > 0)
+      return [
+        {
+          enchantmentId: enchantment.id,
+          replaceRequired: false,
+          extra: false,
+          requiresRefinement: Math.min(...later),
+        },
+      ]
+    if (arcaneSmith && !occupied(state, null))
+      return [
+        {
+          enchantmentId: enchantment.id,
+          replaceRequired: false,
+          extra: true,
+          requiresRefinement: 0,
+        },
+      ]
+    return []
+  })
+}
+
 /**
  * Projeção do ferreiro para o membro da vez numa zona com `visitBlacksmith`
- * (REQ-149). A Oficina (`workshop`) e as opções de encantamento entram nas
- * T-71 e T-70 (D-138).
+ * (REQ-149, REQ-151). A Oficina (`workshop`) entra na T-71 (D-138).
  */
 export function describeBlacksmith(input: {
   config: TGameConfigValues
@@ -538,20 +745,31 @@ export function describeBlacksmith(input: {
   if (!zone.zoneActions.includes('visitBlacksmith') || !zone.blacksmith)
     return null
   const d20Bonus = artificerActive(player) ? config.artificerD20Bonus : 0
+  const arcaneSmith = arcaneSmithActive(player)
+  const { enchantments } = zone.blacksmith
   const service = (
     target: TEquipmentTarget,
     card: TEquipmentCard,
     state: TEquipmentState
-  ): TServiceEquipment => ({
-    target,
-    cardId: card.id,
-    state,
-    repair: state.broken
-      ? { gold: repairGold(config, state.refinement) }
-      : null,
-    refineSteps: refineStepsOf(config, card, state, d20Bonus),
-    enchantOptions: [],
-  })
+  ): TServiceEquipment => {
+    const refineSteps = refineStepsOf(config, card, state, d20Bonus)
+    return {
+      target,
+      cardId: card.id,
+      state,
+      repair: state.broken
+        ? { gold: repairGold(config, state.refinement) }
+        : null,
+      refineSteps,
+      enchantOptions: enchantOptionsOf(
+        card,
+        state,
+        enchantments,
+        refineSteps,
+        arcaneSmith
+      ),
+    }
+  }
   const equipment: TServiceEquipment[] = []
   for (const slot of EQUIPMENT_SLOTS) {
     const cardId = player.equipment[slot]
@@ -602,16 +820,9 @@ export function describeBlacksmith(input: {
     zoneId: zone.id,
     blacksmith: { equipment },
     workshop: null,
-    enchantments: zone.blacksmith.enchantments.map((enchantment) => ({
+    enchantments: enchantments.map((enchantment) => ({
       enchantment,
-      gold:
-        enchantment.kind === 'element'
-          ? config.enchantElementGold
-          : config.enchantEffectGold,
-      threshold:
-        enchantment.kind === 'element'
-          ? config.enchantElementThreshold
-          : config.enchantEffectThreshold,
+      ...enchantCost(config, enchantment),
     })),
     recipes,
   }

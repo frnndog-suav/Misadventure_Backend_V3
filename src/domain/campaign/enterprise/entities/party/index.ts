@@ -5300,6 +5300,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       cards: new Map(catalog.cards.map((card) => [card.id, card])),
       operations,
       zoneId: zone.id,
+      enchantments: zone.blacksmith?.enchantments ?? [],
       actionPointsSpent: actionPoints,
       rng,
     })

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import type { TCard } from '@/domain/catalog/enterprise/value-objects/card'
+import type {
+  TBlacksmithEnchantment,
+  TCard,
+} from '@/domain/catalog/enterprise/value-objects/card'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import {
   makeEquipmentCard,
@@ -41,8 +44,61 @@ const BLUEPRINT = makeItemCard({
     consumed: false,
   },
 })
+const SHARD = makeItemCard({
+  id: 'fixture.ember-shard',
+  itemCategory: 'material',
+})
+/** Slots: 0 = elemento sem requisito, 1 = efeito a partir de +4. */
+const RUNE = makeEquipmentCard({
+  id: 'fixture.rune-blade',
+  refinement: { maxLevel: 5, materials: [{ cardId: ORE.id, quantity: 1 }] },
+  enchantment: {
+    slots: [
+      { kind: 'element', minRefinement: 0 },
+      { kind: 'effect', minRefinement: 4 },
+    ],
+  },
+})
+/** Dois slots de elemento sem requisito. */
+const TWIN = makeEquipmentCard({
+  id: 'fixture.twin-blade',
+  enchantment: {
+    slots: [
+      { kind: 'element', minRefinement: 0 },
+      { kind: 'element', minRefinement: 0 },
+    ],
+  },
+})
+const EMBER: TBlacksmithEnchantment = {
+  id: 'ember-edge',
+  name: 'Fio de Brasa',
+  kind: 'element',
+  element: 'fire',
+  bonusPercent: 10,
+  materials: [{ cardId: SHARD.id, quantity: 1 }],
+}
+const FROST: TBlacksmithEnchantment = {
+  id: 'frost-edge',
+  name: 'Fio Gélido',
+  kind: 'element',
+  element: 'frost',
+  bonusPercent: 5,
+  materials: [],
+}
+const WARD: TBlacksmithEnchantment = {
+  id: 'ward',
+  name: 'Guarda',
+  kind: 'effect',
+  effects: [],
+  abilities: [],
+  materials: [],
+}
+const ENCHANTMENTS = [EMBER, FROST, WARD]
 const CARDS = new Map<string, TCard>(
-  [ORE, SWORD, LEGACY, PLAIN, BLUEPRINT].map((card) => [card.id, card])
+  [ORE, SWORD, LEGACY, PLAIN, BLUEPRINT, SHARD, RUNE, TWIN].map((card) => [
+    card.id,
+    card,
+  ])
 )
 const config = { ...GAME_CONFIG_DEFAULTS }
 
@@ -89,6 +145,7 @@ function run(
     cards: CARDS,
     operations,
     zoneId: 'fixture.gray-harbor',
+    enchantments: ENCHANTMENTS,
     actionPointsSpent: 2,
     rng,
   })
@@ -372,18 +429,6 @@ describe('Ir ao Ferreiro — lote (REQ-149, REQ-150, REQ-152; D-132)', () => {
     ).toEqual({ reason: 'notEnoughGold', operationIndex: 0, cardId: SWORD.id })
   })
 
-  it('D-138: encantar ainda é recusado (T-70) com enchantmentNotOffered', () => {
-    expect(
-      run({ gold: 999, inventory: [sword(at(2))] }, [
-        { operation: 'enchant', target: inv(0), enchantmentId: 'ember-edge' },
-      ]).value
-    ).toEqual({
-      reason: 'enchantmentNotOffered',
-      operationIndex: 0,
-      cardId: SWORD.id,
-    })
-  })
-
   it('REQ-152: criar consome materiais e ouro, mantém a receita (consumed false) e entrega no fim com estado padrão', () => {
     const outcome = run(
       {
@@ -436,6 +481,7 @@ describe('Ir ao Ferreiro — lote (REQ-149, REQ-150, REQ-152; D-132)', () => {
         { operation: 'craft', inventorySlotIndex: 0 },
         { operation: 'refine', target: inv(2) },
       ],
+      enchantments: ENCHANTMENTS,
       zoneId: 'z',
       actionPointsSpent: 1,
       rng: rolls(),
@@ -573,5 +619,456 @@ describe('Ir ao Ferreiro — projeção (REQ-149)', () => {
         zone: makeZoneCard(),
       })
     ).toBeNull()
+  })
+})
+
+describe('Encantar (REQ-151)', () => {
+  const rune = (state?: TEquipmentState) => ({
+    cardId: RUNE.id,
+    quantity: 1,
+    ...(state && { equipmentState: state }),
+  })
+  const shard = (quantity: number) => ({ cardId: SHARD.id, quantity })
+  const applied = (
+    enchantment: TBlacksmithEnchantment,
+    slotIndex: number | null
+  ) => ({ enchantment, zoneId: 'fixture.gray-harbor', slotIndex })
+  const enchant = (
+    enchantmentId: string,
+    options: { replaceIndex?: number; extra?: boolean } = {}
+  ): TBlacksmithOperation => ({
+    operation: 'enchant',
+    target: inv(0),
+    enchantmentId,
+    ...options,
+  })
+  const ARCANE = {
+    playerClasses: ARTIFICER,
+    specializations: [
+      {
+        playerClass: 'artificer' as const,
+        specializationId: 'arcaneSmith',
+        deckLockMet: true,
+      },
+    ],
+  }
+  const ok = (outcome: ReturnType<typeof run>) => {
+    if (outcome.isLeft()) throw new Error(outcome.value.reason)
+    return outcome.value
+  }
+
+  it('REQ-151: elemento com D20 10 aplica no slot livre, copia a definição da zona e cobra 50 e os materiais', () => {
+    const { player, result } = ok(
+      run(
+        { gold: 60, inventory: [rune(), shard(2)] },
+        [enchant('ember-edge')],
+        rolls(10)
+      )
+    )
+    expect(player.gold).toBe(10)
+    expect(player.inventory).toEqual([
+      rune(at(0, { enchantments: [applied(EMBER, 0)] })),
+      shard(1),
+    ])
+    expect(result.results).toEqual([
+      {
+        operation: 'enchant',
+        target: inv(0),
+        cardId: RUNE.id,
+        enchantmentId: 'ember-edge',
+        gold: -50,
+        roll: 10,
+        threshold: 10,
+        success: true,
+        replaced: null,
+        skipped: false,
+      },
+    ])
+  })
+
+  it('REQ-151: elemento com D20 9 falha: perde materiais e ouro, o equipamento não muda (sem bônus do Artífice)', () => {
+    const { player, result } = ok(
+      run(
+        { gold: 50, inventory: [rune(), shard(1)], ...ARCANE },
+        [enchant('ember-edge')],
+        rolls(9)
+      )
+    )
+    expect(player.gold).toBe(0)
+    expect(player.inventory).toEqual([rune()])
+    expect(result.results[0]).toMatchObject({ roll: 9, success: false })
+  })
+
+  it('REQ-151: efeito exige D20 13 e 100 de ouro; 12 falha, 13 aplica no slot de efeito (+4)', () => {
+    const failed = ok(
+      run({ gold: 100, inventory: [rune(at(4))] }, [enchant('ward')], rolls(12))
+    )
+    expect(failed.player.inventory).toEqual([rune(at(4))])
+    expect(failed.result.results[0]).toMatchObject({
+      gold: -100,
+      threshold: 13,
+      success: false,
+    })
+    const done = ok(
+      run({ gold: 100, inventory: [rune(at(4))] }, [enchant('ward')], rolls(13))
+    )
+    expect(done.player.gold).toBe(0)
+    expect(done.player.inventory).toEqual([
+      rune(at(4, { enchantments: [applied(WARD, 1)] })),
+    ])
+  })
+
+  it('REQ-151: slot do tipo abaixo do refino exigido → enchantSlotUnavailable; equipamento sem enchantment → notEnchantable', () => {
+    expect(
+      run({ gold: 999, inventory: [rune(at(3))] }, [enchant('ward')]).value
+    ).toEqual({
+      reason: 'enchantSlotUnavailable',
+      operationIndex: 0,
+      cardId: RUNE.id,
+    })
+    expect(
+      run({ gold: 999, inventory: [sword()] }, [enchant('frost-edge')]).value
+    ).toEqual({ reason: 'notEnchantable', operationIndex: 0, cardId: SWORD.id })
+  })
+
+  it('REQ-151: slots do tipo ocupados → replaceIndexRequired; índice fora, de outro tipo ou extra → replaceIndexInvalid', () => {
+    const full = rune(
+      at(4, {
+        enchantments: [
+          applied(WARD, 1),
+          applied(EMBER, 0),
+          applied(FROST, null),
+        ],
+      })
+    )
+    const refusal = (op: TBlacksmithOperation) =>
+      run({ gold: 999, inventory: [full], ...ARCANE }, [op]).value
+    expect(refusal(enchant('frost-edge'))).toEqual({
+      reason: 'replaceIndexRequired',
+      operationIndex: 0,
+      cardId: RUNE.id,
+    })
+    for (const replaceIndex of [3, 0, 2])
+      expect(refusal(enchant('frost-edge', { replaceIndex }))).toEqual({
+        reason: 'replaceIndexInvalid',
+        operationIndex: 0,
+        cardId: RUNE.id,
+      })
+  })
+
+  it('REQ-151: substituição com replaceIndex: sucesso troca e devolve o substituído; falha não muda nada', () => {
+    const before = at(0, { enchantments: [applied(EMBER, 0)] })
+    const done = ok(
+      run(
+        { gold: 50, inventory: [rune(before)] },
+        [enchant('frost-edge', { replaceIndex: 0 })],
+        rolls(15)
+      )
+    )
+    expect(done.player.inventory).toEqual([
+      rune(at(0, { enchantments: [applied(FROST, 0)] })),
+    ])
+    expect(done.result.results[0]).toMatchObject({
+      success: true,
+      replaced: applied(EMBER, 0),
+    })
+    const failed = ok(
+      run(
+        { gold: 50, inventory: [rune(before)] },
+        [enchant('frost-edge', { replaceIndex: 0 })],
+        rolls(2)
+      )
+    )
+    expect(failed.player.inventory).toEqual([rune(before)])
+    expect(failed.result.results[0]).toMatchObject({
+      success: false,
+      replaced: null,
+    })
+  })
+
+  it('D-139: replaceIndex com slot livre do tipo substitui mesmo assim', () => {
+    const twin = (state: TEquipmentState) => ({
+      cardId: TWIN.id,
+      quantity: 1,
+      equipmentState: state,
+    })
+    const { player } = ok(
+      run(
+        {
+          gold: 50,
+          inventory: [twin(at(0, { enchantments: [applied(EMBER, 1)] }))],
+        },
+        [enchant('frost-edge', { replaceIndex: 0 })],
+        rolls(10)
+      )
+    )
+    expect(player.inventory).toEqual([
+      twin(at(0, { enchantments: [applied(FROST, 1)] })),
+    ])
+  })
+
+  it('REQ-151: Ferreiro Arcano ativo coloca 1 extra (sem requisito de refino, slotIndex null); o 2º extra e o sem especialização → enchantSlotUnavailable', () => {
+    const { player } = ok(
+      run(
+        { gold: 100, inventory: [rune()], ...ARCANE },
+        [enchant('ward', { extra: true })],
+        rolls(13)
+      )
+    )
+    expect(player.inventory).toEqual([
+      rune(at(0, { enchantments: [applied(WARD, null)] })),
+    ])
+    const withExtra = rune(at(0, { enchantments: [applied(WARD, null)] }))
+    expect(
+      run({ gold: 999, inventory: [withExtra], ...ARCANE }, [
+        enchant('frost-edge', { extra: true }),
+      ]).value
+    ).toMatchObject({ reason: 'enchantSlotUnavailable' })
+    for (const specializations of [
+      [],
+      [{ ...ARCANE.specializations[0], deckLockMet: false }],
+    ])
+      expect(
+        run(
+          {
+            gold: 999,
+            inventory: [rune()],
+            playerClasses: ARTIFICER,
+            specializations,
+          },
+          [enchant('ward', { extra: true })]
+        ).value
+      ).toMatchObject({ reason: 'enchantSlotUnavailable' })
+  })
+
+  it('CONTRATO FEAT-17: ordem das recusas do encantar', () => {
+    const refusal = (player: Partial<TPlayerState>, op: TBlacksmithOperation) =>
+      (run(player, [op]).value as { reason: string }).reason
+    expect(
+      refusal({ inventory: [rune(at(0, { broken: true }))] }, enchant('nope'))
+    ).toBe('equipmentBroken')
+    expect(refusal({ inventory: [sword()] }, enchant('nope'))).toBe(
+      'enchantmentNotOffered'
+    )
+    expect(
+      refusal({ gold: 99, inventory: [rune()] }, enchant('ember-edge'))
+    ).toBe('materialsMissing')
+    expect(
+      refusal(
+        { gold: 49, inventory: [rune(), shard(1)] },
+        enchant('ember-edge')
+      )
+    ).toBe('notEnoughGold')
+  })
+
+  it('D-132: a conferência supõe o refino anterior; se ele falha, o encantamento que dependia dele sai skipped, sem custo', () => {
+    const { player, result } = ok(
+      run(
+        { gold: 999, inventory: [rune(at(3)), ore(1)] },
+        [{ operation: 'refine', target: inv(0) }, enchant('ward')],
+        rolls(1)
+      )
+    )
+    expect(player.gold).toBe(999 - 40)
+    expect(result.results[1]).toEqual({
+      operation: 'enchant',
+      target: inv(0),
+      cardId: RUNE.id,
+      enchantmentId: 'ward',
+      gold: 0,
+      roll: null,
+      threshold: 13,
+      success: false,
+      replaced: null,
+      skipped: true,
+    })
+  })
+
+  it('REQ-151: enchantOptions (livre, substituição, depois de refinar) e [] com o equipamento quebrado', () => {
+    const zone = makeZoneCard({
+      id: 'fixture.gray-harbor',
+      zoneActions: ['visitBlacksmith'],
+      blacksmith: { enchantments: [EMBER, WARD] },
+    })
+    const view = describeBlacksmith({
+      config,
+      player: makePlayerState({
+        inventory: [
+          rune(),
+          rune(at(4, { enchantments: [applied(EMBER, 0)] })),
+          rune(at(0, { broken: true })),
+        ],
+      }),
+      cards: CARDS,
+      zone,
+    })
+    expect(
+      view?.blacksmith?.equipment.map(({ enchantOptions }) => enchantOptions)
+    ).toEqual([
+      [
+        {
+          enchantmentId: 'ember-edge',
+          replaceRequired: false,
+          extra: false,
+          requiresRefinement: 0,
+        },
+        {
+          enchantmentId: 'ward',
+          replaceRequired: false,
+          extra: false,
+          requiresRefinement: 4,
+        },
+      ],
+      [
+        {
+          enchantmentId: 'ember-edge',
+          replaceRequired: true,
+          extra: false,
+          requiresRefinement: 0,
+        },
+        {
+          enchantmentId: 'ward',
+          replaceRequired: false,
+          extra: false,
+          requiresRefinement: 0,
+        },
+      ],
+      [],
+    ])
+  })
+
+  it('REQ-151: enchantOptions com Ferreiro Arcano: o que não cabe em slot (nem refinando) sai como extra', () => {
+    const zone = makeZoneCard({
+      id: 'fixture.gray-harbor',
+      zoneActions: ['visitBlacksmith'],
+      blacksmith: { enchantments: [WARD] },
+    })
+    const blocked = makeEquipmentCard({
+      id: 'fixture.rune-blade',
+      refinement: null,
+      enchantment: { slots: [{ kind: 'effect', minRefinement: 3 }] },
+    })
+    const view = describeBlacksmith({
+      config,
+      player: makePlayerState({ ...ARCANE, inventory: [rune()] }),
+      cards: new Map<string, TCard>([[blocked.id, blocked]]),
+      zone,
+    })
+    expect(view?.blacksmith?.equipment[0].enchantOptions).toEqual([
+      {
+        enchantmentId: 'ward',
+        replaceRequired: false,
+        extra: true,
+        requiresRefinement: 0,
+      },
+    ])
+  })
+})
+
+describe('Encantar â€” bordas da D-139 (REQ-151)', () => {
+  const rune = (state?: TEquipmentState) => ({
+    cardId: RUNE.id,
+    quantity: 1,
+    ...(state && { equipmentState: state }),
+  })
+  const twin = (state: TEquipmentState) => ({
+    cardId: TWIN.id,
+    quantity: 1,
+    equipmentState: state,
+  })
+  const applied = (
+    enchantment: TBlacksmithEnchantment,
+    slotIndex: number | null
+  ) => ({ enchantment, zoneId: 'fixture.gray-harbor', slotIndex })
+  const ARCANE = {
+    playerClasses: ARTIFICER,
+    specializations: [
+      {
+        playerClass: 'artificer' as const,
+        specializationId: 'arcaneSmith',
+        deckLockMet: true,
+      },
+    ],
+  }
+  const reason = (
+    player: Partial<TPlayerState>,
+    op: Omit<
+      Extract<TBlacksmithOperation, { operation: 'enchant' }>,
+      'operation' | 'target'
+    >
+  ) =>
+    (
+      run(player, [{ operation: 'enchant', target: inv(0), ...op }]).value as {
+        reason?: string
+      }
+    ).reason
+
+  it('CONTRATO FEAT-17: notEnchantable, enchantSlotUnavailable e replaceIndexRequired vÃªm antes de materiais e ouro', () => {
+    const poor = { gold: 0 }
+    expect(
+      reason(
+        { ...poor, ...ARCANE, inventory: [sword()] },
+        {
+          enchantmentId: 'ember-edge',
+          extra: true,
+        }
+      )
+    ).toBe('notEnchantable')
+    expect(
+      reason({ ...poor, inventory: [rune()] }, { enchantmentId: 'ward' })
+    ).toBe('enchantSlotUnavailable')
+    expect(
+      reason(
+        {
+          ...poor,
+          inventory: [rune(at(0, { enchantments: [applied(FROST, 0)] }))],
+        },
+        { enchantmentId: 'ember-edge' }
+      )
+    ).toBe('replaceIndexRequired')
+  })
+
+  it('D-139: com extra: true o replaceIndex Ã© ignorado', () => {
+    const outcome = run(
+      { gold: 100, inventory: [rune()], ...ARCANE },
+      [
+        {
+          operation: 'enchant',
+          target: inv(0),
+          enchantmentId: 'ward',
+          extra: true,
+          replaceIndex: 99,
+        },
+      ],
+      rolls(13)
+    )
+    if (outcome.isLeft()) throw new Error(outcome.value.reason)
+    expect(outcome.value.player.inventory).toEqual([
+      rune(at(0, { enchantments: [applied(WARD, null)] })),
+    ])
+  })
+
+  it('D-139: substituir tira o antigo e pÃµe o novo no fim da lista, no mesmo slotIndex', () => {
+    const outcome = run(
+      {
+        gold: 50,
+        inventory: [
+          twin(at(0, { enchantments: [applied(EMBER, 0), applied(EMBER, 1)] })),
+        ],
+      },
+      [
+        {
+          operation: 'enchant',
+          target: inv(0),
+          enchantmentId: 'frost-edge',
+          replaceIndex: 0,
+        },
+      ],
+      rolls(10)
+    )
+    if (outcome.isLeft()) throw new Error(outcome.value.reason)
+    expect(outcome.value.player.inventory).toEqual([
+      twin(at(0, { enchantments: [applied(EMBER, 1), applied(FROST, 0)] })),
+    ])
   })
 })
