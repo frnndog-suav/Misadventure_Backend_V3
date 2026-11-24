@@ -323,3 +323,50 @@ describe('availableActions — visitBlacksmith (REQ-149)', () => {
     ).toEqual(['endTurn'])
   })
 })
+
+describe('availableActions — artificerWorkshop (REQ-153; D-133)', () => {
+  const memberId = new UniqueEntityID('member-1')
+  const partyWith = (deckLockMet: boolean) => {
+    const host = PartyMember.create(
+      {
+        characterName: 'Lia',
+        kind: 'human',
+        player: makePlayerState({
+          playerClasses: [{ playerClass: 'artificer', deckLockMet }],
+        }),
+      },
+      memberId
+    )
+    return makeParty({
+      status: 'inSession',
+      members: [host],
+      hostMemberId: host.id,
+    })
+  }
+
+  it('REQ-153: Artífice ativo e pontos → entra em qualquer zona, depois de abandonQuest e antes de visitBlacksmith', () => {
+    expect(
+      availableActions(partyWith(true), memberId, new Set(), [
+        'visitBlacksmith',
+      ])
+    ).toEqual([
+      'move',
+      'recover',
+      'adjustDeck',
+      'artificerWorkshop',
+      'visitBlacksmith',
+      'endTurn',
+    ])
+  })
+
+  it('REQ-153, D-133: trava de classe não cumprida ou 0 pontos → não entra', () => {
+    expect(
+      availableActions(partyWith(false), memberId, new Set())
+    ).not.toContain('artificerWorkshop')
+    const party = partyWith(true)
+    party.move(MINE, party.savedAt)
+    party.move(HARBOR, party.savedAt)
+    party.move(MINE, party.savedAt)
+    expect(availableActions(party, memberId, new Set())).toEqual(['endTurn'])
+  })
+})

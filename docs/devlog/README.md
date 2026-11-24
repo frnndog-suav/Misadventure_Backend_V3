@@ -104,6 +104,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 084 | T-68 | [Estado do equipamento e save v10](084-T-68-estado-do-equipamento-e-save-v10.md) | concluída |
 | 085 | T-69 | [Ir ao Ferreiro: consertar, refinar e criar](085-T-69-ir-ao-ferreiro.md) | aguardando revisão |
 | 086 | T-70 | [Encantar](086-T-70-encantar.md) | aguardando revisão |
+| 087 | T-71 | [Oficina do Artífice](087-T-71-oficina-do-artifice.md) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

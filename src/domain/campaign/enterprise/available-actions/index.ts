@@ -2,6 +2,7 @@ import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { TZoneAction } from '@/domain/catalog/enterprise/value-objects/card'
 
 import type { TActivatableEffect } from '../activatable-effects'
+import { artificerActive } from '../blacksmith'
 import { connectedZones } from '../connected-zones'
 import type { Party } from '../entities/party'
 import type { TPartyActionType } from '../party-action'
@@ -10,8 +11,8 @@ import type { TZoneQuestChoice } from '../zone-quests'
 /**
  * Ações que o membro pode mandar agora (README 12.1, 11.4; REQ-58; D-65).
  * Ordem fixa: `move`, `recover`, `prepare`, `adjustDeck`, `scavenge`,
- * `useVault`, as ações de missão, `visitBlacksmith`, `visitMarket`, `trainWithMentor`,
- * `saveRespawnPoint`, `endTurn` (12.2; REQ-75, REQ-93, REQ-140, REQ-149). Só a vez de quem age; os
+ * `useVault`, as ações de missão (`artificerWorkshop` depois de `abandonQuest`), `visitBlacksmith`, `visitMarket`, `trainWithMentor`,
+ * `saveRespawnPoint`, `endTurn` (12.2; REQ-75, REQ-93, REQ-140, REQ-149, REQ-153). Só a vez de quem age; os
  * demais não têm nada.
  * `equipmentCardIds`: quais ids do inventário são cartas `equipment` (o
  * inventário guarda só o id, D-75; quem chama lê no catálogo).
@@ -93,6 +94,9 @@ export function availableActions(
   if (turn.actionPoints >= 1) actions.push('adjustDeck')
   const questActionTypes = new Set(questChoices.map(({ type }) => type))
   if (questActionTypes.has('abandonQuest')) actions.push('abandonQuest')
+  // Universal com Artífice ativo, em qualquer zona (REQ-153).
+  if (member && turn.actionPoints >= 1 && artificerActive(member.player))
+    actions.push('artificerWorkshop')
   const startEvent = turn.actionPoints >= 1 && canStartEvent
   if (startEvent && questChoices.length) actions.push('startEvent')
   if (turn.actionPoints >= 1 && scavengeTargets.length > 0) {

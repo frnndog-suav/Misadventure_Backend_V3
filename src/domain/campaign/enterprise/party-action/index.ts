@@ -139,6 +139,7 @@ export type TPartyAction =
   | { type: 'useVault'; operations: TVaultOperation[] }
   | { type: 'visitMarket'; operations: TMarketOperation[] }
   | { type: 'visitBlacksmith'; operations: TBlacksmithOperation[] }
+  | { type: 'artificerWorkshop'; operations: TBlacksmithOperation[] }
   | { type: 'scavenge'; cardId: string }
 
 /** Os `type` possíveis, para `availableActions` (REQ-58). */
@@ -232,7 +233,8 @@ export function parsePartyAction(
     case 'visitMarket':
       return parseVisitMarket(body)
     case 'visitBlacksmith':
-      return parseVisitBlacksmith(body)
+    case 'artificerWorkshop':
+      return parseVisitBlacksmith(body.type, body)
     case 'takeQuest':
     case 'continueQuest':
     case 'finishQuest':
@@ -1160,12 +1162,13 @@ function parseMarketOperation(
 }
 
 /**
- * REQ-149. Mesmas regras de `operations` do Ir ao Mercado (1 a 50). Em cada
+ * REQ-149, REQ-153 (Ir ao Ferreiro e Oficina). Mesmas regras de `operations` do Ir ao Mercado (1 a 50). Em cada
  * operação: `operation` ausente/inválida/desconhecida vem sozinha; `target`
  * não objeto → `notObject`; `location` ou `slot` desconhecidos e `extra` não
  * booleano → `unknownOption`; índices → `notNonNegativeInteger` (D-138).
  */
 function parseVisitBlacksmith(
+  type: 'visitBlacksmith' | 'artificerWorkshop',
   body: Record<string, unknown>
 ): Either<TActionIssue[], TPartyAction> {
   const { operations } = body
@@ -1193,7 +1196,7 @@ function parseVisitBlacksmith(
   }
   issues.push(...extraKeys(body, ['type', 'operations']))
   if (issues.length > 0) return left(issues)
-  return right({ type: 'visitBlacksmith', operations: parsed })
+  return right({ type, operations: parsed })
 }
 
 function parseBlacksmithOperation(

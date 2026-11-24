@@ -858,7 +858,7 @@ const equipmentTarget = z.discriminatedUnion('location', [
   }),
 ])
 const blacksmithVisitSchema = z.strictObject({
-  source: z.literal('blacksmith'),
+  source: z.enum(['blacksmith', 'workshop']),
   zoneId: id,
   actionPointsSpent: z.number().int().min(1),
   results: z

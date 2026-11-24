@@ -7,7 +7,10 @@ import type {
   TPlayerClass,
 } from '@/domain/catalog/enterprise/value-objects/card'
 
-import type { TBlacksmithOperationResult } from '../../blacksmith'
+import type {
+  TBlacksmithOperationResult,
+  TBlacksmithSource,
+} from '../../blacksmith'
 import type { TMarketOperationResult } from '../../market-trade'
 import type { TRecoverOption } from '../../party-action'
 
@@ -135,10 +138,11 @@ export interface MarketVisitedEvent extends DomainEvent {
   readonly goldLost: number
 }
 
-/** Ir ao Ferreiro aceito (README 12.2, 25; REQ-149): o que cada operação fez, na ordem. */
+/** Ir ao Ferreiro ou Oficina do Artífice aceitos (README 12.2, 25; REQ-149, REQ-153): o que cada operação fez, na ordem. */
 export interface BlacksmithVisitedEvent extends DomainEvent {
   readonly type: 'BlacksmithVisited'
   readonly memberId: UniqueEntityID
+  readonly source: TBlacksmithSource
   readonly zoneId: string
   readonly actionPointsSpent: number
   readonly results: readonly TBlacksmithOperationResult[]

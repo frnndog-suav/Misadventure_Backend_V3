@@ -437,6 +437,38 @@ export class TakePartyActionUseCase {
         }
         break
       }
+      case 'artificerWorkshop': {
+        const { cards } = await this.findBlacksmithCatalog(party)
+        const worked = party.artificerWorkshop(
+          action.operations,
+          { cards },
+          this.clock.now()
+        )
+        if (worked.isLeft()) {
+          const refusal = worked.value
+          if (typeof refusal === 'object') {
+            return left(
+              new ActionNotAllowedError(
+                refusal.reason,
+                refusal.cardId,
+                refusal.operationIndex
+              )
+            )
+          }
+          switch (refusal) {
+            case 'sessionNotActive':
+              return left(new PartySessionNotActiveError())
+            case 'noActionPoints':
+            case 'artificerInactive':
+              return left(new ActionNotAllowedError(refusal))
+            default: {
+              const _exhaustive: never = refusal
+              return _exhaustive
+            }
+          }
+        }
+        break
+      }
       case 'scavenge': {
         const scavenged = party.scavenge(
           action.cardId,

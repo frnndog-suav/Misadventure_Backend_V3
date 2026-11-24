@@ -112,6 +112,7 @@ describe('Party.visitBlacksmith (REQ-149; D-132)', () => {
       {
         type: 'BlacksmithVisited',
         memberId: party.members[0].id,
+        source: 'blacksmith',
         zoneId: HARBOR.id,
         actionPointsSpent: POINTS,
         results: visit?.results,

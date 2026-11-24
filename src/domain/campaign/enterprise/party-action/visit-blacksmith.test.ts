@@ -121,3 +121,22 @@ describe('parsePartyAction — visitBlacksmith (REQ-149; D-138)', () => {
     ])
   })
 })
+
+describe('parsePartyAction — artificerWorkshop (REQ-153)', () => {
+  it('REQ-153: mesmas operações e regras do Ir ao Ferreiro', () => {
+    const body = {
+      type: 'artificerWorkshop',
+      operations: [
+        {
+          operation: 'repair',
+          target: { location: 'equipment', slot: 'weapon' },
+        },
+        { operation: 'craft', inventorySlotIndex: 1 },
+      ],
+    }
+    expect(parsePartyAction(body).value).toEqual(body)
+    expect(issuesOf({ type: 'artificerWorkshop', operations: [] })).toEqual([
+      { field: 'operations', reason: 'invalidLength' },
+    ])
+  })
+})

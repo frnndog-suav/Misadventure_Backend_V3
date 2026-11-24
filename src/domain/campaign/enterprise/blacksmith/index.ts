@@ -75,9 +75,12 @@ export type TBlacksmithOperationResult =
       skipped: boolean
     }
 
-/** Resultado do Ir ao Ferreiro aceito (REQ-149). */
+/** Onde o lote roda: no ferreiro da zona ou na Oficina do Artífice (REQ-153). */
+export type TBlacksmithSource = 'blacksmith' | 'workshop'
+
+/** Resultado do Ir ao Ferreiro ou da Oficina aceitos (REQ-149, REQ-153). */
 export type TBlacksmithVisitResult = Readonly<{
-  source: 'blacksmith'
+  source: TBlacksmithSource
   zoneId: string
   actionPointsSpent: number
   results: readonly TBlacksmithOperationResult[]
@@ -90,6 +93,8 @@ export type TBlacksmithRefusalReason =
   | 'notRefinable'
   | 'refinementMaterialsMissing'
   | 'refineLevelMax'
+  | 'refineLevelTooHigh'
+  | 'enchantNotAvailable'
   | 'enchantmentNotOffered'
   | 'notEnchantable'
   | 'enchantSlotUnavailable'
@@ -113,6 +118,27 @@ export const repairGold = (
   config: TGameConfigValues,
   refinement: number
 ): number => config.repairBaseGold + config.repairGoldPerLevel * refinement
+
+/** Conserto no local: na Oficina, com o desconto arredondado para cima (REQ-153). */
+function serviceRepairGold(
+  config: TGameConfigValues,
+  refinement: number,
+  source: TBlacksmithSource
+): number {
+  const cost = repairGold(config, refinement)
+  if (source === 'blacksmith') return cost
+  return Math.ceil((cost * (100 - config.artificerRepairDiscountPercent)) / 100)
+}
+
+/** Maior nível desejado de refino no local (REQ-153: teto da Oficina). */
+const maxRefineLevel = (
+  config: TGameConfigValues,
+  maxLevel: number,
+  source: TBlacksmithSource
+) =>
+  source === 'blacksmith'
+    ? maxLevel
+    : Math.min(maxLevel, config.artificerMaxRefineLevel)
 
 /** Limiar do D20 pela faixa do nível desejado (README 25.2); 0 = sem rolagem. */
 export function refineThreshold(
@@ -291,6 +317,7 @@ function plan(
     zoneId: string
     enchantments: readonly TBlacksmithEnchantment[]
     arcaneSmith: boolean
+    source: TBlacksmithSource
   }>
 ): TPlanned {
   const { config, cards } = input
@@ -300,7 +327,7 @@ function plan(
       if (!found) return { reason: 'equipmentNotFound' }
       const { card, state, write } = found
       if (!state.broken) return { reason: 'notBroken', cardId: card.id }
-      const cost = repairGold(config, state.refinement)
+      const cost = serviceRepairGold(config, state.refinement, input.source)
       if (work.gold < cost) return { reason: 'notEnoughGold', cardId: card.id }
       const base = {
         operation: 'repair' as const,
@@ -335,6 +362,8 @@ function plan(
         return { reason: 'refinementMaterialsMissing', cardId }
       if (state.refinement >= maxLevel)
         return { reason: 'refineLevelMax', cardId }
+      if (state.refinement >= maxRefineLevel(config, maxLevel, input.source))
+        return { reason: 'refineLevelTooHigh', cardId }
       if (!hasMaterials(work.inventory, materials))
         return { reason: 'materialsMissing', cardId }
       const targetLevel = state.refinement + 1
@@ -374,6 +403,8 @@ function plan(
       }
     }
     case 'enchant': {
+      // Na Oficina não se encanta (REQ-153), antes de olhar o alvo (D-140).
+      if (input.source === 'workshop') return { reason: 'enchantNotAvailable' }
       const found = findTarget(work, operation.target, cards)
       if (!found) return { reason: 'equipmentNotFound' }
       const { card, state, write } = found
@@ -546,8 +577,10 @@ export function applyBlacksmithOperations(input: {
   config: TGameConfigValues
   cards: TCards
   operations: readonly TBlacksmithOperation[]
+  /** Padrão: `blacksmith`. */
+  source?: TBlacksmithSource
   zoneId: string
-  /** Encantamentos do ferreiro da zona (README 3.4). */
+  /** Encantamentos do ferreiro da zona (README 3.4); não usados na Oficina. */
   enchantments: readonly TBlacksmithEnchantment[]
   actionPointsSpent: number
   rng: TRng
@@ -556,6 +589,7 @@ export function applyBlacksmithOperations(input: {
   { player: TPlayerState; result: TBlacksmithVisitResult }
 > {
   const { config, cards, operations } = input
+  const source = input.source ?? 'blacksmith'
   const d20Bonus = artificerActive(input.player) ? config.artificerD20Bonus : 0
   const context = {
     config,
@@ -564,6 +598,7 @@ export function applyBlacksmithOperations(input: {
     zoneId: input.zoneId,
     enchantments: input.enchantments,
     arcaneSmith: arcaneSmithActive(input.player),
+    source,
   }
 
   const check = startWork(input.player)
@@ -599,7 +634,7 @@ export function applyBlacksmithOperations(input: {
       gold: work.gold,
     },
     result: {
-      source: 'blacksmith',
+      source,
       zoneId: input.zoneId,
       actionPointsSpent: input.actionPointsSpent,
       results,
@@ -655,13 +690,15 @@ function refineStepsOf(
   config: TGameConfigValues,
   card: TEquipmentCard,
   state: TEquipmentState,
-  d20Bonus: number
+  d20Bonus: number,
+  source: TBlacksmithSource
 ): TRefineStep[] {
   if (state.broken || card.refinement === null) return []
-  const { maxLevel, materials } = card.refinement
+  const { materials } = card.refinement
   if (materials.length === 0) return []
+  const top = maxRefineLevel(config, card.refinement.maxLevel, source)
   const steps: TRefineStep[] = []
-  for (let level = state.refinement + 1; level <= maxLevel; level++) {
+  for (let level = state.refinement + 1; level <= top; level++) {
     steps.push({
       targetLevel: level,
       materials,
@@ -732,8 +769,9 @@ function enchantOptionsOf(
 }
 
 /**
- * Projeção do ferreiro para o membro da vez numa zona com `visitBlacksmith`
- * (REQ-149, REQ-151). A Oficina (`workshop`) entra na T-71 (D-138).
+ * Projeção do ferreiro e da Oficina para o membro da vez (REQ-149, REQ-151,
+ * REQ-153): `blacksmith` numa zona com `visitBlacksmith`; `workshop` com
+ * Artífice ativo, em qualquer zona; `null` sem nenhum dos dois.
  */
 export function describeBlacksmith(input: {
   config: TGameConfigValues
@@ -742,59 +780,70 @@ export function describeBlacksmith(input: {
   zone: TZoneCard
 }): TBlacksmithView | null {
   const { config, player, cards, zone } = input
-  if (!zone.zoneActions.includes('visitBlacksmith') || !zone.blacksmith)
-    return null
-  const d20Bonus = artificerActive(player) ? config.artificerD20Bonus : 0
+  const smithy =
+    zone.zoneActions.includes('visitBlacksmith') && zone.blacksmith
+      ? zone.blacksmith
+      : null
+  const artificer = artificerActive(player)
+  if (!smithy && !artificer) return null
+  const d20Bonus = artificer ? config.artificerD20Bonus : 0
   const arcaneSmith = arcaneSmithActive(player)
-  const { enchantments } = zone.blacksmith
-  const service = (
-    target: TEquipmentTarget,
-    card: TEquipmentCard,
-    state: TEquipmentState
-  ): TServiceEquipment => {
-    const refineSteps = refineStepsOf(config, card, state, d20Bonus)
-    return {
-      target,
-      cardId: card.id,
-      state,
-      repair: state.broken
-        ? { gold: repairGold(config, state.refinement) }
-        : null,
-      refineSteps,
-      enchantOptions: enchantOptionsOf(
-        card,
-        state,
-        enchantments,
-        refineSteps,
-        arcaneSmith
-      ),
-    }
-  }
-  const equipment: TServiceEquipment[] = []
-  for (const slot of EQUIPMENT_SLOTS) {
+  const enchantments = smithy?.enchantments ?? []
+  const worn = EQUIPMENT_SLOTS.flatMap((slot) => {
     const cardId = player.equipment[slot]
     const card = cardId === null ? undefined : cards.get(cardId)
-    if (card?.type === 'equipment')
-      equipment.push(
-        service(
-          { location: 'equipment', slot },
-          card,
-          wornStateOf(player, slot)
-        )
-      )
-  }
+    return card?.type === 'equipment'
+      ? [
+          {
+            target: { location: 'equipment', slot } satisfies TEquipmentTarget,
+            card,
+            state: wornStateOf(player, slot),
+          },
+        ]
+      : []
+  })
   const inventory = player.inventory.map((slot, origin) => ({ origin, slot }))
-  for (const { origin, slot } of inventory) {
+  const carried = inventory.flatMap(({ origin, slot }) => {
     const card = cards.get(slot.cardId)
-    if (card?.type === 'equipment')
-      equipment.push(
-        service(
-          { location: 'inventory', inventorySlotIndex: origin },
-          card,
-          slot.equipmentState ?? DEFAULT_EQUIPMENT_STATE
-        )
-      )
-  }
+    return card?.type === 'equipment'
+      ? [
+          {
+            target: {
+              location: 'inventory',
+              inventorySlotIndex: origin,
+            } satisfies TEquipmentTarget,
+            card,
+            state: slot.equipmentState ?? DEFAULT_EQUIPMENT_STATE,
+          },
+        ]
+      : []
+  })
+  const serviceView = (source: TBlacksmithSource) => ({
+    equipment: [...worn, ...carried].map(
+      ({ target, card, state }): TServiceEquipment => {
+        const refineSteps = refineStepsOf(config, card, state, d20Bonus, source)
+        return {
+          target,
+          cardId: card.id,
+          state,
+          repair: state.broken
+            ? { gold: serviceRepairGold(config, state.refinement, source) }
+            : null,
+          refineSteps,
+          enchantOptions:
+            source === 'blacksmith'
+              ? enchantOptionsOf(
+                  card,
+                  state,
+                  enchantments,
+                  refineSteps,
+                  arcaneSmith
+                )
+              : [],
+        }
+      }
+    ),
+  })
   const recipes = inventory.flatMap(({ origin, slot }) => {
     const card = cards.get(slot.cardId)
     if (
@@ -817,9 +866,9 @@ export function describeBlacksmith(input: {
     ]
   })
   return {
-    zoneId: zone.id,
-    blacksmith: { equipment },
-    workshop: null,
+    zoneId: smithy ? zone.id : null,
+    blacksmith: smithy ? serviceView('blacksmith') : null,
+    workshop: artificer ? serviceView('workshop') : null,
     enchantments: enchantments.map((enchantment) => ({
       enchantment,
       ...enchantCost(config, enchantment),

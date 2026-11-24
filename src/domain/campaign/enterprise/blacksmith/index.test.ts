@@ -564,7 +564,25 @@ describe('Ir ao Ferreiro — projeção (REQ-149)', () => {
       zone,
     })
     expect(view?.zoneId).toBe(zone.id)
-    expect(view?.workshop).toBeNull()
+    // REQ-153: Artífice ativo → Oficina com desconto, teto +6 e sem encantar.
+    expect(view?.workshop?.equipment).toEqual([
+      {
+        target: inv(0),
+        cardId: SWORD.id,
+        state: at(8),
+        repair: null,
+        refineSteps: [],
+        enchantOptions: [],
+      },
+      {
+        target: inv(3),
+        cardId: SWORD.id,
+        state: at(3, { broken: true }),
+        repair: { gold: 6 },
+        refineSteps: [],
+        enchantOptions: [],
+      },
+    ])
     expect(view?.enchantments).toEqual([
       {
         enchantment: zone.blacksmith!.enchantments[0],
@@ -1069,6 +1087,130 @@ describe('Encantar â€” bordas da D-139 (REQ-151)', () => {
     if (outcome.isLeft()) throw new Error(outcome.value.reason)
     expect(outcome.value.player.inventory).toEqual([
       twin(at(0, { enchantments: [applied(EMBER, 1), applied(FROST, 0)] })),
+    ])
+  })
+})
+
+describe('Oficina do Artífice — lote e projeção (REQ-153; D-133, D-140)', () => {
+  const workshop = (
+    player: Partial<TPlayerState>,
+    operations: TBlacksmithOperation[],
+    rng = rolls()
+  ) =>
+    applyBlacksmithOperations({
+      player: makePlayerState({ playerClasses: ARTIFICER, ...player }),
+      config,
+      cards: CARDS,
+      operations,
+      source: 'workshop',
+      zoneId: 'fixture.old-mine',
+      enchantments: ENCHANTMENTS,
+      actionPointsSpent: 1,
+      rng,
+    })
+
+  it('REQ-153: conserto com 50% de desconto arredondado para cima (+4 → 7; +3 → 6) e marca de reparo', () => {
+    const result = workshop(
+      {
+        gold: 13,
+        inventory: [
+          sword(at(4, { broken: true })),
+          sword(at(3, { broken: true })),
+        ],
+      },
+      [
+        { operation: 'repair', target: inv(0) },
+        { operation: 'repair', target: inv(1) },
+      ]
+    )
+    expect(result.isRight()).toBe(true)
+    if (!result.isRight()) return
+    expect(result.value.result.source).toBe('workshop')
+    expect(result.value.result.zoneId).toBe('fixture.old-mine')
+    expect(result.value.result.results.map((r) => r.gold)).toEqual([-7, -6])
+    expect(result.value.player.gold).toBe(0)
+    expect(result.value.player.inventory[0].equipmentState).toEqual(
+      at(4, { repairMarks: 1 })
+    )
+  })
+
+  it('REQ-153: refino até +6 com o +2 no D20; acima → refineLevelTooHigh (depois de refineLevelMax)', () => {
+    const rng = rolls(6)
+    const result = workshop(
+      { gold: 999, inventory: [sword(at(5)), ore(5)] },
+      [{ operation: 'refine', target: inv(0) }],
+      rng
+    )
+    expect(result.isRight() && result.value.result.results[0]).toMatchObject({
+      targetLevel: 6,
+      roll: 6,
+      d20Bonus: 2,
+      threshold: 8,
+      success: true,
+    })
+
+    expect(
+      workshop({ gold: 999, inventory: [sword(at(5)), ore(5)] }, [
+        { operation: 'refine', target: inv(0) },
+        { operation: 'refine', target: inv(0) },
+      ]).value
+    ).toEqual({
+      reason: 'refineLevelTooHigh',
+      operationIndex: 1,
+      cardId: SWORD.id,
+    })
+    expect(
+      workshop({ gold: 999, inventory: [sword(at(10)), ore(5)] }, [
+        { operation: 'refine', target: inv(0) },
+      ]).value
+    ).toEqual({ reason: 'refineLevelMax', operationIndex: 0, cardId: SWORD.id })
+  })
+
+  it('REQ-153, D-140: enchant na Oficina → enchantNotAvailable, mesmo com alvo inexistente', () => {
+    expect(
+      workshop({ inventory: [] }, [
+        { operation: 'enchant', target: inv(5), enchantmentId: EMBER.id },
+      ]).value
+    ).toEqual({ reason: 'enchantNotAvailable', operationIndex: 0 })
+  })
+
+  it('REQ-153: zona sem ferreiro com Artífice ativo → só workshop (zoneId null, sem encantamentos), refineSteps até +6 com desconto', () => {
+    const view = describeBlacksmith({
+      config,
+      player: makePlayerState({
+        playerClasses: ARTIFICER,
+        inventory: [sword(at(4)), sword(at(4, { broken: true }))],
+      }),
+      cards: CARDS,
+      zone: makeZoneCard(),
+    })
+    expect(view?.zoneId).toBeNull()
+    expect(view?.blacksmith).toBeNull()
+    expect(view?.enchantments).toEqual([])
+    expect(view?.workshop?.equipment).toEqual([
+      {
+        target: inv(0),
+        cardId: SWORD.id,
+        state: at(4),
+        repair: null,
+        refineSteps: [5, 6].map((level) => ({
+          targetLevel: level,
+          materials: SWORD.refinement!.materials,
+          gold: 10 * level,
+          threshold: 8,
+          d20Bonus: 2,
+          breaksOnFailure: false,
+        })),
+        enchantOptions: [],
+      },
+      {
+        target: inv(1),
+        cardId: SWORD.id,
+        state: at(4, { broken: true }),
+        repair: { gold: 7 },
+        refineSteps: [],
+        enchantOptions: [],
+      },
     ])
   })
 })

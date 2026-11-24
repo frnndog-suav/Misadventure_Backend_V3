@@ -17,7 +17,11 @@ import { quantityOf } from '../effect-payment'
 import { abilityMatchesOwner, abilitySourceWorks } from '../effective-modifiers'
 import type { TPlayerState } from '../entities/party-member'
 
-import { applyEquipmentState } from '../equipment-state'
+import {
+  applyEquipmentState,
+  withWornState,
+  wornStateOf,
+} from '../equipment-state'
 import { reconcileHand } from '../random-event'
 
 export function equippedAbility(
@@ -69,8 +73,17 @@ export function applyAbilityEffect(
     activation.some(
       (entry) => entry.kind === 'repairEquipment' && entry.target === 'self'
     )
-  )
-    changed = { ...changed, brokenEquipment: [] }
+  ) {
+    // Cada conserto soma 1 marca de reparo (README 5.1; D-134).
+    for (const slot of changed.brokenEquipment ?? []) {
+      const state = wornStateOf(changed, slot)
+      changed = withWornState(changed, slot, {
+        ...state,
+        broken: false,
+        repairMarks: state.repairMarks + 1,
+      })
+    }
+  }
   const status = abilityEffectStatus(
     effect,
     sourceCardId,

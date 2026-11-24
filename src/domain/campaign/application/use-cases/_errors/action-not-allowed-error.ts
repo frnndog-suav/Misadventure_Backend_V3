@@ -57,6 +57,7 @@ export type TActionNotAllowedReason =
   | 'boosterEmpty'
   | TMarketRefusalReason
   | TBlacksmithRefusalReason
+  | 'artificerInactive'
 
 export class ActionNotAllowedError extends DomainError {
   readonly code = 'ACTION_NOT_ALLOWED'
@@ -74,7 +75,7 @@ export class ActionNotAllowedError extends DomainError {
 
   /**
    * `cardId` só em `notOwned` e `copyLimitExceeded` (CONTRATO FEAT-09);
-   * `operationIndex` só no `useVault`, no `visitMarket` e no `visitBlacksmith` (CONTRATO FEAT-32, FEAT-16 e FEAT-17).
+   * `operationIndex` só no `useVault`, no `visitMarket`, no `visitBlacksmith` e no `artificerWorkshop` (CONTRATO FEAT-32, FEAT-16 e FEAT-17).
    */
   constructor(
     reason: TActionNotAllowedReason | TQuestRefusal,

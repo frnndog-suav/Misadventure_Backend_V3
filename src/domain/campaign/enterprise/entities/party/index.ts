@@ -83,6 +83,7 @@ import {
 import { addToInventory } from '../../inventory'
 import {
   applyBlacksmithOperations,
+  artificerActive,
   describeBlacksmith,
   type TBlacksmithRefusal,
   type TBlacksmithView,
@@ -258,6 +259,13 @@ export type TVisitBlacksmithRefusal =
   | 'sessionNotActive'
   | 'noActionPoints'
   | 'zoneActionUnavailable'
+  | TBlacksmithRefusal
+
+/** Por que a Oficina do Artífice foi recusada (REQ-153). */
+export type TArtificerWorkshopRefusal =
+  | 'sessionNotActive'
+  | 'noActionPoints'
+  | 'artificerInactive'
   | TBlacksmithRefusal
 
 /** Por que o Vasculhar foi recusado (REQ-92; D-88). */
@@ -5314,6 +5322,59 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     this.addDomainEvent({
       type: 'BlacksmithVisited',
       memberId: actor.id,
+      source: result.source,
+      zoneId: result.zoneId,
+      actionPointsSpent: result.actionPointsSpent,
+      results: result.results,
+      occurredAt: at,
+      aggregateId: this.id,
+    })
+    return right(undefined)
+  }
+
+  /**
+   * Oficina do Artífice (README 25.5, 12.2; REQ-153; D-133, D-134). Como o
+   * Ir ao Ferreiro, em qualquer zona, mas gasta **1** ponto e pode repetir.
+   * Ordem das recusas: fora de sessão, sem pontos, sem Artífice ativo, a
+   * primeira operação que falha. `catalog.cards` como no `visitBlacksmith`.
+   */
+  artificerWorkshop(
+    operations: readonly TBlacksmithOperation[],
+    catalog: { cards: readonly TCard[] },
+    at: Date
+  ): Either<TArtificerWorkshopRefusal, void> {
+    if (this.props.status === 'idle') return left('sessionNotActive')
+    if (this.props.turn.actionPoints < 1) return left('noActionPoints')
+    const index = this.actorIndex()
+    const actor = this.props.members[index]
+    if (!artificerActive(actor.player)) return left('artificerInactive')
+
+    const rng = SeededRng.fromState(this.props.rngState)
+    const applied = applyBlacksmithOperations({
+      player: actor.player,
+      config: this.props.config,
+      cards: new Map(catalog.cards.map((card) => [card.id, card])),
+      operations,
+      source: 'workshop',
+      zoneId: actor.player.zoneId,
+      enchantments: [],
+      actionPointsSpent: 1,
+      rng,
+    })
+    if (applied.isLeft()) return left(applied.value)
+    const { player, result } = applied.value
+
+    this.props.rngState = rng.state()
+    this.props.turn = {
+      ...this.props.turn,
+      actionPoints: this.props.turn.actionPoints - 1,
+    }
+    this.replaceActor(index, { ...player, lastBlacksmithVisit: result })
+    this.props.savedAt = at
+    this.addDomainEvent({
+      type: 'BlacksmithVisited',
+      memberId: actor.id,
+      source: result.source,
       zoneId: result.zoneId,
       actionPointsSpent: result.actionPointsSpent,
       results: result.results,
