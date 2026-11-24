@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { activationSchema } from '@/infra/content/effect-schemas'
 import {
+  blacksmithEnchantment,
   cardFileSchemas,
   eventOutcome,
   eventRequirement,
@@ -23,6 +24,13 @@ import {
   noExpansions,
 } from '@/domain/campaign/enterprise/markets'
 import { sortedByCardId } from '@/domain/campaign/enterprise/starting-player'
+import {
+  isDefaultEquipmentState,
+  withWornState,
+  wornStateOf,
+  type TEquipmentState,
+} from '@/domain/campaign/enterprise/equipment-state'
+import type { TInventorySlot } from '@/domain/campaign/enterprise/inventory'
 import { emptyVault } from '@/domain/campaign/enterprise/vault'
 import type { TEventEncounter } from '@/domain/campaign/enterprise/random-event'
 import {
@@ -53,7 +61,7 @@ import {
 } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
 // REQ-107: saves v2 a v6 ganham a lista de status na leitura.
-const SCHEMA_VERSION = 9
+const SCHEMA_VERSION = 10
 
 const uint32 = z
   .number()
@@ -821,6 +829,40 @@ const stateFields = <TConfig extends z.ZodType, TPlayer extends z.ZodType>(
   turnOrder: z.array(id),
 })
 
+// REQ-147, D-131: estado por cópia de equipamento (save v10).
+const equipmentStateSchema = z.strictObject({
+  refinement: z.number().int().min(0).max(10),
+  enchantments: z.array(
+    z.strictObject({
+      enchantment: blacksmithEnchantment,
+      zoneId: id,
+      slotIndex: z.number().int().min(0).nullable(),
+    })
+  ),
+  repairMarks: z.number().int().min(0),
+  broken: z.boolean(),
+})
+const stateSlot = z.strictObject({
+  cardId: id,
+  quantity: z.number().int().min(1),
+  equipmentState: equipmentStateSchema.optional(),
+})
+const v10PlayerFields = {
+  inventory: z.array(stateSlot),
+  vault: z.strictObject({
+    slots: z.array(stateSlot),
+    decks: z.array(cardCopies),
+    gold: z.number().int().min(0),
+  }),
+  equipmentStates: z
+    .strictObject(
+      Object.fromEntries(
+        EQUIPMENT_SLOTS.map((slot) => [slot, equipmentStateSchema.optional()])
+      ) as Record<TEquipmentSlot, z.ZodOptional<typeof equipmentStateSchema>>
+    )
+    .optional(),
+}
+
 // D-31: o banco não valida o jsonb; o mapper valida antes de `SeededRng.fromState` (D-32).
 const v8State = z.strictObject({
   schemaVersion: z.literal(8),
@@ -840,6 +882,56 @@ const v8State = z.strictObject({
   pendingReward: pendingReward.nullable().optional(),
   rewardSequence: count.optional(),
 })
+
+const v9PlayerSchema = playerSchema.extend({
+  expansions: expansionsSchema.optional(),
+  lastMarketVisit: marketVisitSchema.nullable().optional(),
+  lastBoosterOpening: boosterOpeningSchema.nullable().optional(),
+  down: z.boolean().optional(),
+  skipNextTurn: z.boolean().optional(),
+  lastKnockout: z
+    .strictObject({
+      id,
+      combatId: id.nullable(),
+      respawnZoneId: id,
+      healthRestored: count,
+      peakLost: count,
+      vigorLost: count,
+      purseGoldLost: count,
+      roundAtKnockout: count,
+      roundAfterRespawn: count,
+    })
+    .nullable()
+    .optional(),
+  abilityUsage: z
+    .record(id, z.strictObject({ uses: count, cooldown: count }))
+    .optional(),
+  brokenEquipment: z.array(slot).optional(),
+})
+// Campos do save v9 e v10 que não são do jogador nem da configuração.
+const v9Fields = {
+  questRewardDelivery: questRewardDelivery.optional(),
+  boosterQueue: boosterQueue.optional(),
+  questAttempt: z
+    .strictObject({
+      encounterId: id,
+      questId: id,
+      stageIndex: count,
+      reservedCardId: id.optional(),
+    })
+    .optional(),
+  markets: z.array(marketSchema).optional(),
+  marketPool: z
+    .array(z.strictObject({ cardId: id, departed: count }))
+    .optional(),
+  combat: combat.nullable().optional(),
+  combatZone: zoneType.optional(),
+  lastCombatResult: combatResult.nullable().optional(),
+  combatOutcome: combatOutcome.nullable().optional(),
+  pendingTriggeredEffects: triggeredEffects.nullable().optional(),
+  triggeredEffectSequence: count.optional(),
+  upgradedCombatDecks: z.array(zoneType).optional(),
+}
 
 const stateSchema = z
   .discriminatedUnion('schemaVersion', [
@@ -876,56 +968,18 @@ const stateSchema = z
     }),
     v8State,
     v8State.extend({
+      schemaVersion: z.literal(9),
+      ...v9Fields,
+      ...stateFields(currentConfigSchema, v9PlayerSchema),
+    }),
+    // D-131: o `broken` passa para o estado de cada cópia; `brokenEquipment` sai.
+    v8State.extend({
       schemaVersion: z.literal(SCHEMA_VERSION),
-      questRewardDelivery: questRewardDelivery.optional(),
-      boosterQueue: boosterQueue.optional(),
-      questAttempt: z
-        .strictObject({
-          encounterId: id,
-          questId: id,
-          stageIndex: count,
-          reservedCardId: id.optional(),
-        })
-        .optional(),
+      ...v9Fields,
       ...stateFields(
         currentConfigSchema,
-        playerSchema.extend({
-          expansions: expansionsSchema.optional(),
-          lastMarketVisit: marketVisitSchema.nullable().optional(),
-          lastBoosterOpening: boosterOpeningSchema.nullable().optional(),
-          down: z.boolean().optional(),
-          skipNextTurn: z.boolean().optional(),
-          lastKnockout: z
-            .strictObject({
-              id,
-              combatId: id.nullable(),
-              respawnZoneId: id,
-              healthRestored: count,
-              peakLost: count,
-              vigorLost: count,
-              purseGoldLost: count,
-              roundAtKnockout: count,
-              roundAfterRespawn: count,
-            })
-            .nullable()
-            .optional(),
-          abilityUsage: z
-            .record(id, z.strictObject({ uses: count, cooldown: count }))
-            .optional(),
-          brokenEquipment: z.array(slot).optional(),
-        })
+        v9PlayerSchema.omit({ brokenEquipment: true }).extend(v10PlayerFields)
       ),
-      markets: z.array(marketSchema).optional(),
-      marketPool: z
-        .array(z.strictObject({ cardId: id, departed: count }))
-        .optional(),
-      combat: combat.nullable().optional(),
-      combatZone: zoneType.optional(),
-      lastCombatResult: combatResult.nullable().optional(),
-      combatOutcome: combatOutcome.nullable().optional(),
-      pendingTriggeredEffects: triggeredEffects.nullable().optional(),
-      triggeredEffectSequence: count.optional(),
-      upgradedCombatDecks: z.array(zoneType).optional(),
     }),
   ])
   .refine((state) => state.members.some((m) => m.id === state.hostMemberId), {
@@ -998,6 +1052,7 @@ export class DrizzlePartyMapper {
         // D-87: save antigo fica sem decks de recompensas.
         rewardDecks: 'rewardDecks' in state ? (state.rewardDecks ?? []) : [],
         ...((state.schemaVersion === 8 ||
+          state.schemaVersion === 9 ||
           state.schemaVersion === SCHEMA_VERSION) && {
           eventDecks: state.eventDecks,
           eventEncounter: state.eventEncounter as
@@ -1005,7 +1060,7 @@ export class DrizzlePartyMapper {
           pendingReward: state.pendingReward,
           rewardSequence: state.rewardSequence,
         }),
-        ...(state.schemaVersion === SCHEMA_VERSION
+        ...(state.schemaVersion === 9 || state.schemaVersion === SCHEMA_VERSION
           ? {
               markets: state.markets,
               marketPool: state.marketPool,
@@ -1075,9 +1130,9 @@ export class DrizzlePartyMapper {
             playerClasses: m.player.playerClasses.map((c) => ({ ...c })),
             build: m.player.build.map((e) => ({ ...e })),
             tcgFolder: m.player.tcgFolder.map((e) => ({ ...e })),
-            inventory: m.player.inventory.map((e) => ({ ...e })),
+            inventory: m.player.inventory.map(storedSlot),
             vault: {
-              slots: m.player.vault.slots.map((e) => ({ ...e })),
+              slots: m.player.vault.slots.map(storedSlot),
               decks: m.player.vault.decks.map((deck) =>
                 deck.map((e) => ({ ...e }))
               ),
@@ -1154,9 +1209,7 @@ export class DrizzlePartyMapper {
             ...(m.player.abilityUsage && {
               abilityUsage: { ...m.player.abilityUsage },
             }),
-            ...(m.player.brokenEquipment && {
-              brokenEquipment: [...m.player.brokenEquipment],
-            }),
+            ...storedEquipmentStates(m.player),
           },
         })),
         hostMemberId: party.hostMemberId.toString(),
@@ -1239,8 +1292,32 @@ export class DrizzlePartyMapper {
   }
 }
 
-type TStoredPlayer = z.infer<typeof legacyPlayerSchema> &
-  Partial<
+type TStoredEquipmentState = z.infer<typeof equipmentStateSchema>
+
+// Só leitura: o tipo do domínio é `readonly`; o save nunca o altera.
+const storedState = (state: TEquipmentState): TStoredEquipmentState =>
+  state as unknown as TStoredEquipmentState
+
+const storedSlot = ({ equipmentState, ...slot }: TInventorySlot) => ({
+  ...slot,
+  ...(equipmentState && { equipmentState: storedState(equipmentState) }),
+})
+
+/** D-131: o `broken` vai no estado de cada slot em uso; só grava o que não é padrão. */
+function storedEquipmentStates(player: TPlayerState) {
+  const entries = EQUIPMENT_SLOTS.flatMap((slot) => {
+    const state = wornStateOf(player, slot)
+    return isDefaultEquipmentState(state) ? [] : [[slot, storedState(state)]]
+  })
+  return entries.length > 0
+    ? { equipmentStates: Object.fromEntries(entries) }
+    : {}
+}
+
+type TStoredPlayer = z.infer<typeof legacyPlayerSchema> & {
+  /** Save v10: estado completo (com `broken`) de cada equipamento em uso. */
+  equipmentStates?: Partial<Record<TEquipmentSlot, TEquipmentState>>
+} & Partial<
     Pick<
       TPlayerState,
       | 'tcgFolder'
@@ -1275,8 +1352,9 @@ function upgradePlayer(
 ): TPlayerState {
   const expansions = player.expansions ?? noExpansions()
   const respawn = player.respawnZoneId
-  return {
-    ...player,
+  const { equipmentStates: stored, ...rest } = player
+  const upgraded: TPlayerState = {
+    ...rest,
     respawnZoneId:
       respawn && dimension.map.zones.some(({ zoneId }) => zoneId === respawn)
         ? respawn
@@ -1294,6 +1372,12 @@ function upgradePlayer(
     statuses: player.statuses ?? [],
     expansions,
   }
+  // O estado completo se divide: `broken` volta para `brokenEquipment` (D-137).
+  return EQUIPMENT_SLOTS.reduce(
+    (current, slot) =>
+      stored?.[slot] ? withWornState(current, slot, stored[slot]) : current,
+    upgraded
+  )
 }
 
 function upgradeScavenge(

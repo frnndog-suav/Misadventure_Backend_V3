@@ -6,6 +6,7 @@ import {
   type TModifier,
 } from '@/domain/catalog/enterprise/value-objects/card'
 
+import { applyEquipmentState, type TWornStates } from '../equipment-state'
 import type { TPlayerState } from '../entities/party-member'
 import type { TPlayerStatus } from '../player-status'
 
@@ -16,6 +17,10 @@ export type TEffectiveModifiersInput = Readonly<{
   /** Cartas dos equipamentos em uso (o agregado não conhece o catálogo, D-76). */
   equipment: readonly TEquipmentCard[]
   statuses?: readonly TPlayerStatus[]
+  /** Estado dos equipamentos em uso (REQ-148); o que falta é o estado padrão. */
+  equipmentStates?: TWornStates
+  /** `refineBonusPercent` do laboratório (README 25.2). */
+  refineBonusPercent?: number
   abilityOwner?: Pick<TPlayerState, 'playerClasses' | 'brokenEquipment'>
   combat?: Readonly<{
     power?: number
@@ -73,14 +78,19 @@ export function effectiveModifiers({
   modifiers,
   peak,
   equipment,
+  equipmentStates,
+  refineBonusPercent = 0,
   statuses = [],
   abilityOwner,
   combat,
 }: TEffectiveModifiersInput): Record<TModifier, number> {
-  const working = equipment.filter(
+  const standing = equipment.filter(
     (card) =>
       equipmentWorks(card, peak) &&
       !abilityOwner?.brokenEquipment?.includes(card.slot)
+  )
+  const working = standing.map((card) =>
+    applyEquipmentState(card, equipmentStates?.[card.slot], refineBonusPercent)
   )
   const equipmentBonuses = working.flatMap((card) => card.modifiers)
   const passives = working.flatMap((card) =>
@@ -95,7 +105,7 @@ export function effectiveModifiers({
     )
   )
   const disabledIds = new Set(
-    equipment.filter((card) => !working.includes(card)).map(({ id }) => id)
+    equipment.filter((card) => !standing.includes(card)).map(({ id }) => id)
   )
   const activeStatuses = statuses.filter(
     ({ sourceCardId }) => !disabledIds.has(sourceCardId)
@@ -134,15 +144,15 @@ export function effectiveModifiers({
   for (const modifier of MODIFIERS) {
     let fixed = equipmentBonuses
       .filter((entry) => entry.modifier === modifier)
-      .reduce((sum, entry) => sum + entry.value, 0)
-    if (modifier === 'attack') fixed += combat?.power ?? 0
+      .reduce((sum, entry) => sum + Math.round(entry.value * 100), 0)
+    if (modifier === 'attack') fixed += (combat?.power ?? 0) * 100
     let percent = -(combat?.exhaustionPenaltyPercent ?? 0)
     if (modifier === 'accuracy')
       percent += combat?.projectileAccuracyBonusPercent ?? 0
     for (const activation of activations) {
       if (activation.kind === 'modifierFlat') {
         for (const change of activation.changes) {
-          if (change.modifier === modifier) fixed += change.amount
+          if (change.modifier === modifier) fixed += change.amount * 100
         }
       }
       if (activation.kind === 'modifierPercent') {
@@ -151,10 +161,13 @@ export function effectiveModifiers({
         }
       }
     }
-    // Divisão única evita perder um inteiro por arredondamento intermediário.
+    // Divisão única evita perder um inteiro por arredondamento intermediário;
+    // o fixo vai em centésimos para o refino (decimais) não depender de ponto flutuante.
     const numerator =
-      (modifiers[modifier] + fixed) * (100 + peak) * Math.max(0, 100 + percent)
-    result[modifier] = Math.floor(Math.max(0, numerator) / 10_000)
+      (modifiers[modifier] * 100 + fixed) *
+      (100 + peak) *
+      Math.max(0, 100 + percent)
+    result[modifier] = Math.floor(Math.max(0, numerator) / 1_000_000)
   }
   return result
 }

@@ -35,6 +35,13 @@ import {
 import { availableActions } from '@/domain/campaign/enterprise/available-actions'
 import { connectedZones } from '@/domain/campaign/enterprise/connected-zones'
 import { effectiveModifiers } from '@/domain/campaign/enterprise/effective-modifiers'
+import {
+  DEFAULT_EQUIPMENT_STATE,
+  enchantmentActive,
+  wornStateOf,
+  type TAppliedEnchantment,
+  type TEquipmentState,
+} from '@/domain/campaign/enterprise/equipment-state'
 import { scavengeTargets } from '@/domain/campaign/enterprise/scavenge'
 import type { TPartyActionType } from '@/domain/campaign/enterprise/party-action'
 import type { TDirection } from '@/domain/campaign/enterprise/map-assembly'
@@ -53,6 +60,8 @@ import type {
   TModifier,
   TPlayerClass,
 } from '@/domain/catalog/enterprise/value-objects/card'
+import { EQUIPMENT_SLOTS } from '@/domain/catalog/enterprise/value-objects/card'
+import type { TInventorySlot } from '@/domain/campaign/enterprise/inventory'
 
 /** Cartas do catálogo que o presenter precisa (D-80 b), por id. */
 export type TPartyCards = ReadonlyMap<string, TCard>
@@ -61,6 +70,22 @@ export type TPartyCards = ReadonlyMap<string, TCard>
 export interface TCardCopiesHttp {
   cardId: string
   copies: number
+}
+
+/** CONTRATO FEAT-17, tipo `EquipmentState`: cada encantamento traz `active`. */
+export interface TEquipmentStateHttp {
+  refinement: number
+  enchantments: (TAppliedEnchantment & { active: boolean })[]
+  repairMarks: number
+  broken: boolean
+}
+
+/** CONTRATO FEAT-10/FEAT-17, tipo `InventorySlot` (e slot do cofre). */
+export interface TInventorySlotHttp {
+  cardId: string
+  quantity: number
+  /** Só em equipamento (sempre presente ali). */
+  equipmentState?: TEquipmentStateHttp
 }
 
 /** CONTRATO FEAT-06/FEAT-09, tipo `PlayerState`. A ordem do deck não trafega (D-42). */
@@ -104,16 +129,18 @@ export interface TPlayerStateHttp {
   tcgFolder: TCardCopiesHttp[]
   tcgFolderCapacity: number
   /** FEAT-10 (REQ-70, REQ-71). */
-  inventory: { cardId: string; quantity: number }[]
+  inventory: TInventorySlotHttp[]
   inventoryCapacity: number
   equipment: Record<TEquipmentSlot, string | null>
+  /** FEAT-17 (REQ-147): estado do equipamento em uso; `null` onde não há. */
+  equipmentStates: Record<TEquipmentSlot, TEquipmentStateHttp | null>
   purseCapacity: number
   effectiveModifiers: Record<TModifier, number>
   statuses: readonly TPlayerStatus[]
   activatableEffects: TActivatableEffect[]
   /** FEAT-32 (REQ-83, REQ-90, REQ-96). */
   vault: {
-    slots: { cardId: string; quantity: number }[]
+    slots: TInventorySlotHttp[]
     decks: TCardCopiesHttp[][]
     gold: number
   }
@@ -183,6 +210,40 @@ export interface TPartyHttp {
   lastCombatResult: Party['lastCombatResult']
   createdAt: string
   savedAt: string
+}
+
+function stateToHTTP(
+  card: TCard | undefined,
+  state: TEquipmentState
+): TEquipmentStateHttp {
+  return {
+    refinement: state.refinement,
+    enchantments: state.enchantments.map((applied) => ({
+      ...applied,
+      active:
+        card?.type === 'equipment' && enchantmentActive(applied, card, state),
+    })),
+    repairMarks: state.repairMarks,
+    broken: state.broken,
+  }
+}
+
+/** Equipamento sempre leva `equipmentState` (o padrão preenchido); as demais cartas, nunca. */
+function slotToHTTP(
+  { cardId, quantity, equipmentState }: TInventorySlot,
+  cards: TPartyCards
+): TInventorySlotHttp {
+  const card = cards.get(cardId)
+  return {
+    cardId,
+    quantity,
+    ...(card?.type === 'equipment' && {
+      equipmentState: stateToHTTP(
+        card,
+        equipmentState ?? DEFAULT_EQUIPMENT_STATE
+      ),
+    }),
+  }
 }
 
 function playerToHTTP(
@@ -299,14 +360,22 @@ function playerToHTTP(
     buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),
     tcgFolder: copiesToHTTP(player.tcgFolder),
     tcgFolderCapacity: capacities.tcgFolder,
-    inventory: player.inventory.map(({ cardId, quantity }) => ({
-      cardId,
-      quantity,
-    })),
+    inventory: player.inventory.map((slot) => slotToHTTP(slot, cards)),
     statuses: player.statuses,
     activatableEffects: effects,
     inventoryCapacity: party.config.inventoryCapacity,
     equipment: { ...player.equipment },
+    equipmentStates: Object.fromEntries(
+      EQUIPMENT_SLOTS.map((slot) => {
+        const cardId = player.equipment[slot]
+        return [
+          slot,
+          cardId === null
+            ? null
+            : stateToHTTP(cards.get(cardId), wornStateOf(player, slot)),
+        ]
+      })
+    ) as Record<TEquipmentSlot, TEquipmentStateHttp | null>,
     purseCapacity: capacities.purse,
     effectiveModifiers:
       (party.turn.memberId.equals(member.id)
@@ -316,14 +385,13 @@ function playerToHTTP(
         modifiers: player.modifiers,
         peak: player.peak,
         equipment: equipmentCards,
+        equipmentStates: player.equipmentStates,
+        refineBonusPercent: party.config.refineBonusPercent,
         statuses: player.statuses,
         abilityOwner: player,
       }),
     vault: {
-      slots: player.vault.slots.map(({ cardId, quantity }) => ({
-        cardId,
-        quantity,
-      })),
+      slots: player.vault.slots.map((slot) => slotToHTTP(slot, cards)),
       decks: player.vault.decks.map(copiesToHTTP),
       gold: player.vault.gold,
     },
@@ -371,6 +439,7 @@ export async function findPartyCards(
       for (const cardId of player.hand) cardIds.add(cardId)
     }
     for (const { cardId } of player.inventory) cardIds.add(cardId)
+    for (const { cardId } of player.vault.slots) cardIds.add(cardId)
     for (const cardId of Object.values(player.equipment)) {
       if (cardId !== null) cardIds.add(cardId)
     }

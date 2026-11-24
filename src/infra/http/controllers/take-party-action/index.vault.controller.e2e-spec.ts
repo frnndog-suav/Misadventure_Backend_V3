@@ -580,7 +580,7 @@ describe('Cofre e Vasculhar (e2e)', () => {
       delivery: 'none',
     })
     const rewritten = await rawState(party.id)
-    expect(rewritten.schemaVersion).toBe(9)
+    expect(rewritten.schemaVersion).toBe(10)
     expect(rewritten.rewardDecks).toEqual([])
   })
 })

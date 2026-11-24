@@ -25,6 +25,14 @@ const P = 'fixture.healing-potion'
 const K = 'fixture.pickaxe'
 const A = 'fixture.guardian-armor'
 
+/** FEAT-17: todo equipamento no inventário traz o estado (padrão). */
+const DEFAULT_STATE = {
+  refinement: 0,
+  enchantments: [],
+  repairMarks: 0,
+  broken: false,
+}
+
 const EMPTY_EQUIPMENT = {
   head: null,
   torso: null,
@@ -235,7 +243,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
       shield: D,
     })
     expect(shielded.body.members[0].player.inventory).toEqual([
-      { cardId: B, quantity: 1 },
+      { cardId: B, quantity: 1, equipmentState: DEFAULT_STATE },
     ])
 
     await give(party, K, 9)
@@ -255,8 +263,8 @@ describe('Preparar — equip e unequip (e2e)', () => {
     const { player } = swapped.body.members[0] as { player: TPlayer }
     expect(player.equipment).toMatchObject({ weapon: B, shield: null })
     expect(player.inventory.slice(-2)).toEqual([
-      { cardId: W, quantity: 1 },
-      { cardId: D, quantity: 1 },
+      { cardId: W, quantity: 1, equipmentState: DEFAULT_STATE },
+      { cardId: D, quantity: 1, equipmentState: DEFAULT_STATE },
     ])
     expect(player.inventory).toHaveLength(10)
   })
@@ -295,7 +303,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
     expect(player.equipment.weapon).toBeNull()
     expect(player.inventory).toEqual([
       { cardId: P, quantity: 1 },
-      { cardId: B, quantity: 1 },
+      { cardId: B, quantity: 1, equipmentState: DEFAULT_STATE },
     ])
     expect(player.effectiveModifiers.attack).toBe(6)
     expect(response.body.turn.actionPoints).toBe(3)
@@ -415,7 +423,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
 
     await act(party.id, { type: 'endTurn' }).expect(200)
     expect(await rawState(party.id)).toMatchObject({
-      schemaVersion: 9,
+      schemaVersion: 10,
       config: { inventoryCapacity: 10, purseCapacity: 300 },
       members: [{ player: { inventory: [], gold: 300 } }],
     })

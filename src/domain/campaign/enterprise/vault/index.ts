@@ -13,6 +13,7 @@ import {
   type TBoosterOpeningResult,
 } from '../booster'
 import type { TPlayerState } from '../entities/party-member'
+import { copySlot } from '../equipment-state'
 import { addToInventory, type TInventorySlot } from '../inventory'
 import { capacitiesOf } from '../markets'
 import type { TVaultOperation } from '../party-action'
@@ -76,59 +77,99 @@ export type TVaultOutcome = Readonly<{
 
 type TSlots = readonly TInventorySlot[]
 
-/** Soma `quantity` ao slot de `cardId` ou abre um no fim; sem espaço → `null`. */
+/**
+ * Acrescenta uma entrada (REQ-147): a de estado padrão soma ao slot padrão de
+ * `cardId` ou abre um no fim; a de estado diferente ocupa slot próprio (D-131).
+ * Sem espaço → `null`.
+ */
+function addEntryToSlots(
+  slots: TSlots,
+  entry: TInventorySlot,
+  capacity: number
+): TSlots | null {
+  if (entry.equipmentState === undefined) {
+    const index = slots.findIndex(
+      (slot) =>
+        slot.cardId === entry.cardId && slot.equipmentState === undefined
+    )
+    if (index >= 0) {
+      return slots.map((slot, i) =>
+        i === index
+          ? { cardId: slot.cardId, quantity: slot.quantity + entry.quantity }
+          : slot
+      )
+    }
+  }
+  if (slots.length >= capacity) return null
+  return [...slots, entry]
+}
+
+/** Soma `quantity` ao slot padrão de `cardId` ou abre um no fim; sem espaço → `null`. */
 function addToSlots(
   slots: TSlots,
   cardId: string,
   quantity: number,
   capacity: number
 ): TSlots | null {
-  const index = slots.findIndex((slot) => slot.cardId === cardId)
-  if (index >= 0) {
-    return slots.map((slot, i) =>
-      i === index ? { cardId, quantity: slot.quantity + quantity } : slot
-    )
-  }
-  if (slots.length >= capacity) return null
-  return [...slots, { cardId, quantity }]
+  return addEntryToSlots(slots, { cardId, quantity }, capacity)
 }
 
-/** Tira `quantity` do slot de `cardId` (o slot sai se esvaziar); faltando → `null`. */
+/**
+ * Separa `quantity` unidades de `cardId`: primeiro as de estado padrão e depois
+ * as modificadas, na ordem dos slots (REQ-147). Devolve o que sobra e o que
+ * saiu (cada entrada com o estado da cópia); faltando → `null`.
+ */
+export function pickFromSlots(
+  slots: TSlots,
+  cardId: string,
+  quantity: number
+): { rest: TSlots; picked: TSlots } | null {
+  const order = slots
+    .flatMap((slot, i) => (slot.cardId === cardId ? [i] : []))
+    .sort(
+      (a, b) =>
+        Number(slots[a].equipmentState !== undefined) -
+          Number(slots[b].equipmentState !== undefined) || a - b
+    )
+  const owned = order.reduce((sum, i) => sum + slots[i].quantity, 0)
+  if (owned < quantity) return null
+  let remaining = quantity
+  const taken = new Map<number, number>()
+  for (const i of order) {
+    if (remaining === 0) break
+    const amount = Math.min(remaining, slots[i].quantity)
+    taken.set(i, amount)
+    remaining -= amount
+  }
+  return {
+    rest: slots.flatMap((slot, i) => {
+      const amount = taken.get(i) ?? 0
+      return slot.quantity > amount
+        ? [{ ...slot, quantity: slot.quantity - amount }]
+        : []
+    }),
+    picked: order.flatMap((i) =>
+      taken.has(i) ? [{ ...slots[i], quantity: taken.get(i) ?? 0 }] : []
+    ),
+  }
+}
+
+/** Tira `quantity` do cofre ou do inventário (as de estado padrão primeiro; o slot sai se esvaziar); faltando → `null`. */
 function removeFromSlots(
   slots: TSlots,
   cardId: string,
   quantity: number
 ): TSlots | null {
-  const index = slots.findIndex((slot) => slot.cardId === cardId)
-  if (index < 0 || slots[index].quantity < quantity) return null
-  return slots.flatMap((slot, i) =>
-    i !== index
-      ? [slot]
-      : slot.quantity > quantity
-        ? [{ cardId, quantity: slot.quantity - quantity }]
-        : []
-  )
+  return pickFromSlots(slots, cardId, quantity)?.rest ?? null
 }
 
-/** Tira `quantity` unidades de `cardId` do inventário, dos primeiros slots (REQ-85); faltando → `null`. */
+/** Tira `quantity` unidades de `cardId` do inventário (REQ-85, REQ-147); faltando → `null`. */
 export function removeFromInventory(
   inventory: TSlots,
   cardId: string,
   quantity: number
 ): TSlots | null {
-  const owned = inventory
-    .filter((slot) => slot.cardId === cardId)
-    .reduce((sum, slot) => sum + slot.quantity, 0)
-  if (owned < quantity) return null
-  let remaining = quantity
-  return inventory.flatMap((slot) => {
-    if (slot.cardId !== cardId || remaining === 0) return [slot]
-    const taken = Math.min(remaining, slot.quantity)
-    remaining -= taken
-    return slot.quantity > taken
-      ? [{ cardId, quantity: slot.quantity - taken }]
-      : []
-  })
+  return removeFromSlots(inventory, cardId, quantity)
 }
 
 const folderSize = (folder: readonly TStarterDeckEntry[]): number =>
@@ -217,19 +258,23 @@ export function applyVaultOperations(input: {
                 : []
           )
         } else {
-          const removed = removeFromInventory(inventory, cardId, quantity)
-          if (removed === null) return refuse('notInInventory')
-          const added = addToSlots(slots, cardId, quantity, capacity.vaultSlots)
-          if (added === null) return refuse('vaultFull')
-          slots = added
-          inventory = removed
+          const picked = pickFromSlots(inventory, cardId, quantity)
+          if (picked === null) return refuse('notInInventory')
+          let stored: TSlots | null = slots
+          for (const entry of picked.picked) {
+            stored = addEntryToSlots(stored, entry, capacity.vaultSlots)
+            if (stored === null) return refuse('vaultFull')
+          }
+          slots = stored
+          inventory = picked.rest
         }
         break
       }
       case 'take': {
         const { cardId, quantity } = operation
-        const removed = removeFromSlots(slots, cardId, quantity)
-        if (removed === null) return refuse('notInVault')
+        const picked = pickFromSlots(slots, cardId, quantity)
+        if (picked === null) return refuse('notInVault')
+        const removed = picked.rest
         const card = cardOf(cardId)
         if (!card) return refuse('notStorable')
         if (card.type === 'attribute') {
@@ -241,7 +286,18 @@ export function applyVaultOperations(input: {
             ...tcgFolder.filter((e) => e.cardId !== cardId),
             { cardId, copies: (existing?.copies ?? 0) + quantity },
           ])
-        } else if (card.type === 'equipment' || card.type === 'item') {
+        } else if (card.type === 'equipment') {
+          // Cada cópia volta com o estado que tinha (REQ-147).
+          if (config.inventoryCapacity - inventory.length < quantity) {
+            return refuse('inventoryFull')
+          }
+          inventory = [
+            ...inventory,
+            ...picked.picked.flatMap(({ quantity: n, equipmentState }) =>
+              Array.from({ length: n }, () => copySlot(cardId, equipmentState))
+            ),
+          ]
+        } else if (card.type === 'item') {
           const added = addToInventory(
             inventory,
             card,

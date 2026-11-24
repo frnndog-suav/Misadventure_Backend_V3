@@ -125,6 +125,17 @@ describe('POST /parties (e2e)', () => {
               shield: null,
               accessory: null,
             },
+            // FEAT-17 (REQ-147): sem equipamento em uso, nenhum estado.
+            equipmentStates: {
+              head: null,
+              torso: null,
+              legs: null,
+              feet: null,
+              cape: null,
+              weapon: null,
+              shield: null,
+              accessory: null,
+            },
             purseCapacity: 300,
             effectiveModifiers: {
               attack: 6,

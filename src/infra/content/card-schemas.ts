@@ -103,7 +103,7 @@ const blacksmithEnchantmentBase = {
   name: text,
   materials: z.array(materialRequirement),
 }
-const blacksmithEnchantment = z.discriminatedUnion('kind', [
+export const blacksmithEnchantment = z.discriminatedUnion('kind', [
   z.strictObject({
     ...blacksmithEnchantmentBase,
     kind: z.literal('element'),

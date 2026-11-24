@@ -377,13 +377,18 @@ export function requirementProgress(
 export function failedMinimums(
   card: TExecutableEvent,
   player: TPlayerState,
-  cards: TCards
+  cards: TCards,
+  refineBonusPercent: number
 ): TMinimumCheck[] {
   const equipment = Object.values(player.equipment).flatMap((id) => {
     const card = id ? cards.get(id) : undefined
     return card?.type === 'equipment' ? [card] : []
   })
-  const modifiers = effectiveModifiers({ ...player, equipment })
+  const modifiers = effectiveModifiers({
+    ...player,
+    equipment,
+    refineBonusPercent,
+  })
   return card.requirements.flatMap((requirement) => {
     if (requirement.kind !== 'minimum') return []
     const { id, stat, value } = requirement

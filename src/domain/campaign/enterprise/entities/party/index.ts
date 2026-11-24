@@ -73,7 +73,14 @@ import { describeAbilityPayment, payAbility } from '../../combat/payment'
 import { effectiveModifiers, equipmentWorks } from '../../effective-modifiers'
 import { applyActivations } from '../../effect-activation'
 import type { TPartyEvent } from '../../events/party-events'
-import { addToInventory, type TInventorySlot } from '../../inventory'
+import {
+  applyEquipmentState,
+  copySlot,
+  elementBonusesOf,
+  withWornState,
+  wornStateOf,
+} from '../../equipment-state'
+import { addToInventory } from '../../inventory'
 import { assembleMap, type TMapZone, type TPartyMap } from '../../map-assembly'
 import {
   applyMarketOperations,
@@ -658,9 +665,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       ),
       abilityStates: [
         ...EQUIPMENT_SLOTS.flatMap((slot) => {
-          const id = player.equipment[slot]
-          const card = id ? cards.get(id) : null
-          return card?.type === 'equipment'
+          const card = this.equippedCard(player, slot, cards)
+          return card
             ? card.abilities.flatMap((ability) =>
                 ability.id === undefined
                   ? []
@@ -769,9 +775,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       state?.enemies.filter(({ health }) => health > 0).map(({ id }) => id) ??
       []
     return EQUIPMENT_SLOTS.flatMap((equipmentSlot) => {
-      const cardId = player.equipment[equipmentSlot]
-      const card = cardId ? cards.get(cardId) : undefined
-      if (card?.type !== 'equipment') return []
+      const card = this.equippedCard(player, equipmentSlot, cards)
+      if (!card) return []
       return card.abilities.flatMap((ability) => {
         if (
           ability.id === undefined ||
@@ -856,9 +861,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         }
       ),
       ...EQUIPMENT_SLOTS.flatMap((equipmentSlot) => {
-        const cardId = player.equipment[equipmentSlot]
-        const card = cardId ? cards.get(cardId) : null
-        return card?.type === 'equipment' &&
+        const card = this.equippedCard(player, equipmentSlot, cards)
+        return card &&
           !player.brokenEquipment?.includes(equipmentSlot) &&
           (card.peakRequirement === null || player.peak >= card.peakRequirement)
           ? [{ card, equipmentSlot }]
@@ -1653,6 +1657,26 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       )
   }
 
+  /**
+   * A carta em uso no `slot` com o estado dela aplicado (REQ-148): refino no
+   * modificador principal e efeitos e habilidades dos encantamentos ligados.
+   */
+  private equippedCard(
+    player: TPlayerState,
+    slot: TEquipmentSlot,
+    cards: ReadonlyMap<string, TCard>
+  ): TEquipmentCard | undefined {
+    const id = player.equipment[slot]
+    const card = id ? cards.get(id) : undefined
+    return card?.type === 'equipment'
+      ? applyEquipmentState(
+          card,
+          player.equipmentStates?.[slot],
+          this.config.refineBonusPercent
+        )
+      : undefined
+  }
+
   private combatPlayer(
     player: TPlayerState,
     cards: ReadonlyMap<string, TCard>,
@@ -1678,6 +1702,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       statuses: player.statuses,
       projectileAccuracyIncluded: projectile,
       brokenEquipment: player.brokenEquipment,
+      elementBonuses: elementBonusesOf(
+        equipment.filter((card) => equipmentWorks(card, player.peak)),
+        player.equipmentStates
+      ),
       equippedSlots: EQUIPMENT_SLOTS.filter(
         (slot) => player.equipment[slot] !== null
       ),
@@ -1718,6 +1746,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       modifiers: effectiveModifiers({
         ...player,
         equipment,
+        refineBonusPercent: this.config.refineBonusPercent,
         statuses: [...player.statuses, ...conditional],
         abilityOwner: player,
         combat: {
@@ -2942,10 +2971,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           : []
       }),
       ...EQUIPMENT_SLOTS.flatMap((slot) => {
-        const id = player.equipment[slot]
-        const equipped = id ? cards.get(id) : undefined
+        const equipped = this.equippedCard(player, slot, cards)
         if (
-          equipped?.type !== 'equipment' ||
+          !equipped ||
           player.brokenEquipment?.includes(slot) ||
           player.peak < (equipped.peakRequirement ?? 0)
         )
@@ -3231,7 +3259,12 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       changed: TPlayerState,
       paid: TEventEncounter['payments']
     ) => {
-      const checks = failedMinimums(card, changed, cards)
+      const checks = failedMinimums(
+        card,
+        changed,
+        cards,
+        this.config.refineBonusPercent
+      )
       return checks.length
         ? left<TEventRefusal, void>({ reason: 'eventMinimumNotMet', checks })
         : finish(changed, 'requirementsMet', null, paid)
@@ -4649,9 +4682,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const solo = this.turnOrder.length === 1
     const roundAtKnockout = this.turn.round
     const equipped = EQUIPMENT_SLOTS.flatMap((slot) => {
-      const id = player.equipment[slot]
-      const card = id ? cards.get(id) : undefined
-      return card?.type === 'equipment' ? [card] : []
+      const card = this.equippedCard(player, slot, cards)
+      return card ? [card] : []
     })
     const inactiveSources = new Set(
       equipped
@@ -5425,7 +5457,6 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const actor = this.props.members[index]
     const { player } = actor
     const base = { memberId: actor.id, occurredAt: at, aggregateId: this.id }
-    const asSlot = (cardId: string): TInventorySlot => ({ cardId, quantity: 1 })
 
     switch (operation.operation) {
       case 'activate': {
@@ -5552,10 +5583,13 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         }
 
         const previous = player.equipment[card.slot]
+        const previousState = wornStateOf(player, card.slot)
         const shield =
           card.slot === 'weapon' && card.blocksShield
             ? player.equipment.shield
             : null
+        const shieldState = wornStateOf(player, 'shield')
+        const incomingState = player.inventory[position].equipmentState
         const removed = player.inventory.flatMap((slot, i) =>
           i !== position
             ? [slot]
@@ -5565,15 +5599,18 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         )
         const inventory = [
           ...removed,
-          ...(previous !== null ? [asSlot(previous)] : []),
-          ...(shield !== null ? [asSlot(shield)] : []),
+          ...(previous !== null ? [copySlot(previous, previousState)] : []),
+          ...(shield !== null ? [copySlot(shield, shieldState)] : []),
         ]
         // B J1: o escudo precisa de slot livre depois de E sair e da arma antiga entrar.
         if (inventory.length > capacity)
           return left({ reason: 'inventoryFull' })
 
+        // O estado vai com a cópia (REQ-147): sai o do que estava em uso, entra o da nova.
+        const cleared =
+          shield !== null ? withWornState(player, 'shield', undefined) : player
         this.replaceActor(index, {
-          ...player,
+          ...withWornState(cleared, card.slot, incomingState),
           inventory,
           equipment: {
             ...player.equipment,
@@ -5690,8 +5727,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         }
 
         this.replaceActor(index, {
-          ...player,
-          inventory: [...player.inventory, asSlot(cardId)],
+          ...withWornState(player, slot, undefined),
+          inventory: [
+            ...player.inventory,
+            copySlot(cardId, wornStateOf(player, slot)),
+          ],
           equipment: { ...player.equipment, [slot]: null },
         })
         this.props.savedAt = at

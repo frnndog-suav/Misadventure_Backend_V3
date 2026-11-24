@@ -136,3 +136,34 @@ describe('T-46 — dano de combate', () => {
     expect(roll).not.toHaveBeenCalled()
   })
 })
+
+describe('REQ-148 — bônus de elemento dos encantamentos (README 16.1)', () => {
+  const effect = (
+    bonusPercent: number | undefined,
+    targetElement: 'fire' | null
+  ) =>
+    resolveCombatDamage({
+      kind: 'effect',
+      amount: 20,
+      element: 'water',
+      targets: [{ ...target, element: targetElement }],
+      config: GAME_CONFIG_DEFAULTS,
+      roll: () => 0,
+      elemental: {
+        inverted: false,
+        ignoreDisadvantage: false,
+        advantagePercent: undefined,
+        bonusPercent,
+      },
+    })[0].damage
+
+  it('REQ-148: o bônus soma à vantagem num fator só (+25% e +10% → ×1,35)', () => {
+    expect(effect(undefined, 'fire')).toBe(25)
+    expect(effect(10, 'fire')).toBe(27)
+  })
+
+  it('REQ-148: sem relação (neutro) o bônus vale sozinho', () => {
+    expect(effect(undefined, null)).toBe(20)
+    expect(effect(10, null)).toBe(22)
+  })
+})

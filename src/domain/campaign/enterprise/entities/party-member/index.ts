@@ -9,6 +9,7 @@ import {
 } from '@/domain/catalog/enterprise/value-objects/card'
 
 import type { TBoosterOpeningResult } from '../../booster'
+import type { TWornStates } from '../../equipment-state'
 import type { TInventorySlot } from '../../inventory'
 import type { TMarketVisitResult } from '../../market-trade'
 import type { TExpansions } from '../../markets'
@@ -86,7 +87,10 @@ export type TPlayerState = Readonly<{
   hand: readonly string[]
   handCopies?: readonly THandCopy[]
   abilityUsage?: Readonly<Record<string, { uses: number; cooldown: number }>>
+  /** Equipamento em uso que está quebrado (README 5.1); o `broken` do estado da cópia (D-137). */
   brokenEquipment?: readonly TEquipmentSlot[]
+  /** Refino, encantamentos e marcas do equipamento em uso, por slot (REQ-147); ausente = padrão. */
+  equipmentStates?: TWornStates
   handCopySequence?: number
   nextTurnActionPointDebt?: number
   lastRandomEvent?: TEventResult | null

@@ -293,4 +293,94 @@ describe('effectiveModifiers (REQ-71)', () => {
       effectiveModifiers({ modifiers: BASE, peak: 5, equipment: [] }).defense
     ).toBe(3)
   })
+
+  describe('refino e encantamentos (REQ-148)', () => {
+    const sword = makeEquipmentCard({
+      modifiers: [{ modifier: 'attack', value: 12 }],
+      refinement: { maxLevel: 10, materials: [] },
+      enchantment: { slots: [{ kind: 'effect', minRefinement: 3 }] },
+    })
+    const worn = { refinement: 5, enchantments: [], repairMarks: 0 }
+
+    it('REQ-148: +12 Ataque em +5 vira +15 (Ataque 5 → 20)', () => {
+      const input = { modifiers: BASE, peak: 0, equipment: [sword] }
+      expect(effectiveModifiers(input).attack).toBe(17)
+      expect(
+        effectiveModifiers({
+          ...input,
+          equipmentStates: { weapon: worn },
+          refineBonusPercent: 5,
+        }).attack
+      ).toBe(20)
+    })
+
+    it('REQ-148: equipamento quebrado não conta, nem com refino', () => {
+      expect(
+        effectiveModifiers({
+          modifiers: BASE,
+          peak: 0,
+          equipment: [sword],
+          equipmentStates: { weapon: worn },
+          refineBonusPercent: 5,
+          abilityOwner: { playerClasses: [], brokenEquipment: ['weapon'] },
+        }).attack
+      ).toBe(5)
+    })
+
+    it('REQ-148: o refino arredonda só no fim (7 em +3 = 8,05; Pico 20: ⌊(3 + 8,05) × 1,2⌋ = 13)', () => {
+      const armor = makeEquipmentCard({
+        slot: 'torso',
+        modifiers: [{ modifier: 'defense', value: 7 }],
+      })
+      expect(
+        effectiveModifiers({
+          modifiers: BASE,
+          peak: 20,
+          equipment: [armor],
+          equipmentStates: {
+            torso: { refinement: 3, enchantments: [], repairMarks: 0 },
+          },
+          refineBonusPercent: 5,
+        }).defense
+      ).toBe(13)
+    })
+
+    it('REQ-148: encantamento de efeito ligado soma o passivo; desligado, nada', () => {
+      const enchantment = {
+        id: 'warding',
+        name: 'Proteção',
+        kind: 'effect' as const,
+        effects: [
+          {
+            text: '+20% de Defesa.',
+            trigger: null,
+            cost: [],
+            activation: [
+              {
+                kind: 'modifierPercent' as const,
+                changes: [{ modifier: 'defense' as const, percent: 20 }],
+              },
+            ],
+            duration: { kind: 'whileSourceActive' as const },
+            mark: 'buff' as const,
+          },
+        ],
+        abilities: [],
+        materials: [],
+      }
+      const applied = [{ enchantment, zoneId: 'z', slotIndex: 0 }]
+      const run = (refinement: number) =>
+        effectiveModifiers({
+          modifiers: { ...BASE, defense: 10 },
+          peak: 0,
+          equipment: [sword],
+          equipmentStates: {
+            weapon: { refinement, enchantments: applied, repairMarks: 0 },
+          },
+          refineBonusPercent: 5,
+        }).defense
+      expect(run(2)).toBe(10)
+      expect(run(3)).toBe(12) // passivo de +20% de Defesa
+    })
+  })
 })

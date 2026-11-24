@@ -120,6 +120,8 @@ type DamageInput = {
     inverted: boolean
     ignoreDisadvantage: boolean
     advantagePercent: number | undefined
+    /** Bônus de efetividade do elemento por encantamento ligado (README 16.1, 25.3). */
+    bonusPercent?: number
   }
 } & (
   | { kind: 'effect'; amount: number }
@@ -174,14 +176,15 @@ export function resolveCombatDamage(input: DamageInput) {
           target.element,
           input.elemental?.inverted
         )
+        // Vantagem ou desvantagem e o bônus de equipamento somam num fator só (16.1).
+        let percent = input.elemental?.bonusPercent ?? 0
         if (relation === 1 || target.vulnerable)
-          damage *=
-            (100 +
-              (input.elemental?.advantagePercent ??
-                config.elementAdvantageBonusPercent)) /
-            100
+          percent +=
+            input.elemental?.advantagePercent ??
+            config.elementAdvantageBonusPercent
         else if (relation === -1 && !input.elemental?.ignoreDisadvantage)
-          damage *= (100 - config.elementDisadvantagePenaltyPercent) / 100
+          percent -= config.elementDisadvantagePenaltyPercent
+        if (percent !== 0) damage *= (100 + percent) / 100
       }
       const rounded = Math.floor(damage)
       const reflectedDamage =
@@ -209,9 +212,13 @@ function elementalRelation(
   return inverted ? -relation : relation
 }
 
-function elementalRules(statuses: readonly TPlayerStatus[]) {
+function elementalRules(
+  statuses: readonly TPlayerStatus[],
+  bonusPercent?: number
+) {
   const entries = statuses.flatMap(({ activation }) => activation)
   return {
+    bonusPercent,
     inverted: entries.some(({ kind }) => kind === 'invertElementalRelations'),
     ignoreDisadvantage: entries.some(
       ({ kind }) => kind === 'ignoreElementalDisadvantage'
@@ -326,6 +333,8 @@ type CombatPlayer = {
   projectileAccuracyIncluded?: boolean
   statuses?: readonly TPlayerStatus[]
   brokenEquipment?: readonly TEquipmentSlot[]
+  /** Bônus de efetividade por elemento dos encantamentos ligados (REQ-148). */
+  elementBonuses?: Readonly<Partial<Record<TElement, number>>>
   equippedSlots?: readonly TEquipmentSlot[]
   snapshot?: TPlayerState
   update?: (update: TCombatUpdate) => void
@@ -904,7 +913,10 @@ export function resolvePlayerAbility(
         config,
         roll,
         targets: [target],
-        elemental: elementalRules(player.statuses ?? []),
+        elemental: elementalRules(
+          player.statuses ?? [],
+          ability.element ? player.elementBonuses?.[ability.element] : undefined
+        ),
       })
       attacked = true
       missed ||= result.hit === false
@@ -964,7 +976,12 @@ export function resolvePlayerAbility(
             ],
             config,
             roll,
-            elemental: elementalRules(player.statuses ?? []),
+            elemental: elementalRules(
+              player.statuses ?? [],
+              ability.element
+                ? player.elementBonuses?.[ability.element]
+                : undefined
+            ),
           })
           current = damageEnemy(
             current,

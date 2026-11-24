@@ -4,8 +4,17 @@ import type {
   TItemCategory,
 } from '@/domain/catalog/enterprise/value-objects/card'
 
-/** Um slot do inventário (README 6.2; D-75): sem estado por cópia. */
-export type TInventorySlot = Readonly<{ cardId: string; quantity: number }>
+import type { TEquipmentState } from '../equipment-state'
+
+/**
+ * Um slot do inventário (README 6.2; D-75). Equipamento não empilha, então o
+ * estado da cópia (REQ-147) mora no próprio slot; ausente = estado padrão.
+ */
+export type TInventorySlot = Readonly<{
+  cardId: string
+  quantity: number
+  equipmentState?: TEquipmentState
+}>
 
 /** Categorias de item que empilham num único slot (README 6.2; REQ-70). */
 const STACKING_CATEGORIES: readonly TItemCategory[] = [

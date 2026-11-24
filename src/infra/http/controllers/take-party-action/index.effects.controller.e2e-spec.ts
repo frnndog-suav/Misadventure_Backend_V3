@@ -682,7 +682,7 @@ describe('FEAT-11 — efeitos e status (e2e)', () => {
       config: { escapeVigorPercent?: number; reserveDeck?: unknown }
       members: { player: { statuses?: unknown } }[]
     }
-    expect(state.schemaVersion).toBe(9)
+    expect(state.schemaVersion).toBe(10)
     expect(state.members[0].player.statuses).toEqual(activeStatuses)
 
     state.schemaVersion = 6
@@ -702,7 +702,7 @@ describe('FEAT-11 — efeitos e status (e2e)', () => {
       .from(parties)
       .where(eq(parties.id, party.id))
     expect(rewritten.state).toMatchObject({
-      schemaVersion: 9,
+      schemaVersion: 10,
       members: [{ player: { statuses: [] } }],
     })
   })

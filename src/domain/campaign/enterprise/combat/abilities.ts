@@ -17,6 +17,7 @@ import { quantityOf } from '../effect-payment'
 import { abilityMatchesOwner, abilitySourceWorks } from '../effective-modifiers'
 import type { TPlayerState } from '../entities/party-member'
 
+import { applyEquipmentState } from '../equipment-state'
 import { reconcileHand } from '../random-event'
 
 export function equippedAbility(
@@ -30,7 +31,9 @@ export function equippedAbility(
   const card = cardId ? cards.get(cardId) : undefined
   if (card?.type !== 'equipment' || !abilitySourceWorks(card, slot, player))
     return null
-  const ability = card.abilities.find(
+  // As habilidades dos encantamentos ligados contam como as da carta (REQ-148).
+  const resolved = applyEquipmentState(card, player.equipmentStates?.[slot], 0)
+  const ability = resolved.abilities.find(
     (entry): entry is TExecutableAbility => entry.id === abilityId
   )
   if (!ability || !abilityMatchesOwner(ability, player.playerClasses, inCombat))
@@ -42,7 +45,7 @@ export function equippedAbility(
       ability.form === 'channeled')
   )
     return null
-  return { card, ability }
+  return { card: resolved, ability }
 }
 
 export function applyAbilityEffect(
