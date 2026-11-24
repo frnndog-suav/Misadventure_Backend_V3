@@ -99,6 +99,7 @@ O `/health` deve mostrar `contractVersion` 0.86. O preparador imprime uma linha 
 - Testes: unitário do encantar (o `replaced` exato), mapper (ida e volta e save sem `active`) e e2e `REQ-151, CONTRATO v0.86` no ferreiro.
 - Arquivos: `src/domain/campaign/enterprise/blacksmith/index.ts` e `index.test.ts`, `src/infra/database/drizzle/mappers/drizzle-party-mapper.ts` e `.test.ts`, `index.blacksmith.controller.e2e-spec.ts`.
 - As 7 campanhas foram geradas de novo.
+- 2º retorno (2026-11-24): a correção passou e as 7 campanhas bateram por HTTP. Para a conferência das telas no navegador (MSW desligado), 3ª geração: ferreiro `345d1d9c-aa52-4860-bd8e-048638548aaf`, quebra-mais-6 `c044ac05-ba84-464e-9c84-ede529288078`, substituir `92676001-6c70-44b4-8064-516a00e92b6a`, conserto-receita `e442177e-5fc4-4217-9469-49b2b6b8a952`, oficina `e92c7324-ed26-4139-85f3-0567a650dec4`, ferreiro-arcano `5f35a6b8-7662-4368-b723-6ab61ee92a64`, venda `69620f85-f238-41b4-925d-10d22e857d4c`.
 
 ## Checks
 
