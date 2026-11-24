@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.90 · **Data:** 2026-11-24
+> **Versão da spec:** 0.91 · **Data:** 2026-11-24
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -767,7 +767,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 - [x] **T-70 — Encantar (REQ-151).** Slots por tipo e requisito, substituição com `replaceIndex`, Ferreiro Arcano (`extra`), definição copiada da zona, testes 10/13.
 - [x] **T-71 — Oficina do Artífice (REQ-153, D-133, D-134).** Ação universal com Artífice ativo, 1 PA, desconto de 50%, teto +6, sem encantar, repetível; efeito `repairEquipment` com marca de reparo.
 - [x] **T-72 — Venda de equipamento modificado (REQ-154).** Valor de venda e projeção do mercado com refino, encantamentos ligados, marcas de reparo e quebra.
-- [ ] **T-73 — Campanhas e validação integrada (REQ-145 a REQ-154).** Catálogo temporário e campanhas no padrão da T-66 (ferreiro com encantamentos de elemento e de efeito, equipamento em +6 para testar a quebra, receita, Artífice ativo e com Ferreiro Arcano). Depois das verificações do autor, `implementado (BE)`; `validado` após o retorno integrado. Preparador e campanhas no devlog 089 (FEAT-17 `implementado (BE)` no CONTRATO v0.86); fecha com o retorno do frontend.
+- [x] **T-73 — Campanhas e validação integrada (REQ-145 a REQ-154).** Catálogo temporário e campanhas no padrão da T-66 (ferreiro com encantamentos de elemento e de efeito, equipamento em +6 para testar a quebra, receita, Artífice ativo e com Ferreiro Arcano). Depois das verificações do autor, `implementado (BE)`; `validado` após o retorno integrado. Preparador e campanhas no devlog 089 (FEAT-17 `implementado (BE)` no CONTRATO v0.86); Concluída no devlog 090 (FEAT-17 `validado`, CONTRATO v0.87).
 
 ## 8. Histórico
 
@@ -863,6 +863,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.88 | 2026-11-24 | T-72 concluída (devlog 088): preço de venda do equipamento com refino, encantamentos ligados, marcas de reparo e quebra (REQ-154), `sellOffers` por cópia com `inventorySlotIndex` e `equipmentState`, `sell` com `inventorySlotIndex` opcional (inventário de antes do lote). D-141. |
 | 0.89 | 2026-11-24 | T-73 em andamento: preparador das campanhas da FEAT-17 (devlog 089); FEAT-17 `implementado (BE)` no CONTRATO v0.86. A T-73 fecha após o retorno integrado do frontend. |
 | 0.90 | 2026-11-24 | T-73: retorno do frontend; `replaced` do encantar passa a trazer `active` (D-139 h). Campanhas geradas de novo (devlog 089). |
+| 0.91 | 2026-11-24 | T-73 concluída (devlog 090): FEAT-17 `validado` pelo frontend (CONTRATO v0.87, ROADMAP v0.80); o cenário "Lote com falha e quebra" do contrato passou a dizer 5 operações, nenhuma `skipped` (D-139 g). |
 
 ## Apêndice A — Conteúdo de teste
 

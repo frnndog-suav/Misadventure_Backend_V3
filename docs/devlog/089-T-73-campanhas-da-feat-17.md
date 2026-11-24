@@ -1,7 +1,7 @@
 # 089 — T-73 — Campanhas determinísticas da FEAT-17
 
 - Data — 2026-11-24
-- Status — aguardando validação do frontend
+- Status — concluída (FEAT-17 `validado`, devlog 090)
 - Spec — v0.89, T-73, REQ-145 a REQ-154
 - Contrato — v0.86, FEAT-17 `implementado (BE)`
 - Horas — registro automático
