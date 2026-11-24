@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.88 · **Data:** 2026-11-24
+> **Versão do contrato:** 0.90 · **Data:** 2026-11-24
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -3496,7 +3496,7 @@ Seja `G` criado com `{ "name": "Os Teimosos", "characterName": "Lia", "playerCla
 
 Só nos e2e do backend: rolagens exatas com `fixedRng` (limiares padrão, +2 do Artífice, quebra a partir de +7); encantamento de efeito, substituição com `replaceIndex` e Ferreiro Arcano (`extra`); Oficina com Artífice ativo (1 PA, desconto, teto +6, `enchantNotAvailable`, repetição); estado no cofre; bônus de refino nos `effectiveModifiers` e de elemento no combate; saves v2 a v9. Para a validação integrada (T-73), o backend entrega campanhas preparadas com Artífice ativo e com Ferreiro Arcano, os IDs e os resultados esperados.
 
-### FEAT-18 — Montarias e Estábulo — `proposto (BE)`
+### FEAT-18 — Montarias e Estábulo — `acordado`
 
 Regras: README 3.4 (a carta de zona lista as montarias do Estábulo), 5.1 (equipamento guardado não funciona), 6.2, 6.3, 6.5, 6.6, 12.2 (Movimentar; Ir ao Mercado inclui o Estábulo), 24, 24.5, 26 e Apêndice A (linha "Montaria"); Apêndice B 26, D2, E5, E6, E21, J1, K6, M4, O2, S3, U1 e U2 (B.20, 2026-11-24). Base no backend: SPEC-BACKEND REQ-155 a REQ-163, D-142 a D-147.
 
@@ -3512,6 +3512,9 @@ Regras: README 3.4 (a carta de zona lista as montarias do Estábulo), 5.1 (equip
 - **Movimentar com montaria:** até 2 zonas por 1 PA. `moveTargets` passa a incluir as zonas a 2 travessias; `moveRoutes` diz, para cada destino, se há travessia direta e as zonas do meio possíveis. `viaZoneId` é opcional; sem ele, a 1 travessia é movimento simples e, só a 2, o backend usa a primeira zona do meio em ordem de id.
 - **Montaria ganha com montaria em uso** não é recebida e não abre escolha: volta ao deck de recompensas ou vai ao limbo (`lastRewardDelivery.disposition`).
 - **Perder a montaria** (ativação `loseMount`): montaria, inventário extra e pasta extra vão ao limbo, sem escolha.
+- **v0.89 (pedido do FE) — a montaria como origem:** efeitos e habilidades da montaria chegam com origem própria (`source: 'mount'`, `{ type: 'mount' }`, `{ type: 'mountAbility' }`) e a habilidade da montaria é usada sem `equipmentSlot` (`mountAbility: true`).
+- **v0.89 (pedido do FE) — destino pronto:** todo campo de destino que hoje diz `inventory`/`tcgFolder` ganha `mountInventory`/`mountTcgFolder`, para a tela dizer onde a carta foi parar sem recalcular espaço.
+- **v0.89 (pedido do FE) — descarte da recompensa pendente:** como o espaço é somado, `discardOptions` e o `keep` indicam de qual espaço sai cada cópia (`space`).
 
 **Mudanças em outras seções:**
 - **FEAT-03 (`validado`):** `GameConfigValues` ganha as 7 chaves abaixo.
@@ -3519,9 +3522,10 @@ Regras: README 3.4 (a carta de zona lista as montarias do Estábulo), 5.1 (equip
 - **FEAT-07 (`validado`):** `MoveAction` ganha `viaZoneId?`; `PlayerState` ganha `moveRoutes`.
 - **FEAT-09 (`validado`):** `adjustDeck` usa a pasta extra (acima); `notOwned` passa a contar build + pasta + pasta extra, e `tcgFolderFull` vale quando o que sai não cabe nas duas.
 - **FEAT-10 (`validado`):** `PlayerState` ganha `mount`; `PrepareAction` ganha `transferMount`; a doação do laboratório aceita carta `mount` (`LabGrantNoSpaceDetails.reason` ganha `mountAlreadyOwned`) e, com montaria, o que não cabe no inventário/pasta vai à montaria.
-- **FEAT-11 (`validado`):** `Activation` ganha `{ kind: 'loseMount' }` (sem parâmetros; alvo: o próprio jogador). Pode ir em efeitos e habilidades de qualquer carta que aceite ativações.
-- **FEAT-12 e FEAT-15 (`validado`):** recompensas (deck de recompensas, recompensas fixas de eventos e missões) aceitam carta `mount`. Montaria nunca gera `PendingReward`.
-- **FEAT-16 (`validado`):** `MarketView` ganha `stable`; `MarketOperation` e `MarketOperationResult` ganham `buyMount` e `sellMount`. `sellOffers` continua só com inventário e pasta.
+- **FEAT-11 (`validado`):** `Activation` ganha `{ kind: 'loseMount' }` (sem parâmetros; alvo: o próprio jogador). Pode ir em efeitos e habilidades de qualquer carta que aceite ativações. v0.89: `ActivatableEffect.source` ganha `'mount'`; `PrepareAction` `activate` aceita a carta da montaria.
+- **FEAT-12 e FEAT-15 (`validado`):** recompensas (deck de recompensas, recompensas fixas de eventos e missões) aceitam carta `mount`. Montaria nunca gera `PendingReward`. v0.89: `PendingReward.destination`, `discardOptions` e `ResolveRewardAction` `keep` ganham os espaços da montaria (tipos abaixo).
+- **FEAT-13 (`validado`):** v0.89: `CombatEffectOption.origin` e `TriggeredEffectOrigin` ganham as variantes da montaria; `CombatState.abilities`, `usableAbilities` e `abilityStates` ganham `mountAbility`; `useAbility` (combate) e `prepare` `useAbility` aceitam `mountAbility: true` no lugar de `equipmentSlot`.
+- **FEAT-16 (`validado`):** `MarketView` ganha `stable`; `MarketOperation` e `MarketOperationResult` ganham `buyMount` e `sellMount`. `sellOffers` continua só com inventário e pasta. v0.89: `showcase[].offer.destination`, `MarketOperationResult` `buySingle`/`buyStock`/`buyBooster` e `BoosterOpeningResult.cards[].destination` ganham os espaços da montaria.
 - **FEAT-31 (`validado`):** o editor valida a carta `mount` e `market.mounts`; montaria citada em `market.mounts` → `CONTENT_REFERENCED` ao excluir ou renomear.
 - Saves de antes desta versão leem `mount: null`.
 
@@ -3534,6 +3538,8 @@ Ordem das conferências novas:
 - `buyMount` (dentro do lote do `visitMarket`): `mountNotOffered` (zona sem Estábulo ou `cardId` fora de `market.mounts`) → `mountAlreadyOwned` (inclusive comprada antes no mesmo lote) → `notEnoughGold`.
 - `sellMount`: `noMount` → `mountNotEmpty`.
 - `transferMount`: as da Preparar (vez, combate, escolha pendente) → `noMount` → `notOwned` (cópias insuficientes na origem; `inventorySlotIndex` vazio, de outra carta ou com `quantity` ≠ 1) → `inventoryFull` / `tcgFolderFull` (destino sem espaço).
+- v0.89, `useAbility` com `mountAbility: true` (combate e Preparar): forma — enviar `equipmentSlot` e `mountAbility` juntos, ou nenhum dos dois → 400 `ACTION_INVALID`; regra — sem montaria → `noMount`; depois as conferências da FEAT-13.
+- v0.89, `resolveReward` `keep`: `discard[].space` fora dos espaços do destino da recompensa → 400 `unknownOption`; cópias acima do que há naquele espaço → 409 `rewardDoesNotFit`.
 
 #### Tipos
 
@@ -3636,6 +3642,51 @@ interface LabGrantNoSpaceDetails {
   reason: 'inventoryFull' | 'tcgFolderFull' | 'mountAlreadyOwned' // FEAT-18
 }
 
+// ---------- v0.89 (pedidos do FE) ----------
+
+/** Espaço onde a carta chegou ou de onde sai. */
+type ReceiveSpace = 'inventory' | 'tcgFolder' | 'mountInventory' | 'mountTcgFolder'
+
+/** 1. A montaria como origem de efeitos e habilidades (FEATs 11 e 13). */
+interface ActivatableEffect {
+  // … campos da FEAT-11 …
+  /** `'mount'`: efeito da carta de montaria (em uso). O `activate` envia o `cardId` da montaria. */
+  source: 'inventory' | 'equipment' | 'mount'
+}
+type CombatEffectOrigin = /* origens da FEAT-13 */
+  | { type: 'mount'; cardId: string; effectIndex: number }
+type TriggeredEffectOrigin = /* origens da FEAT-13 */
+  | { type: 'mount'; cardId: string; effectIndex: number }
+  | { type: 'mountAbility'; cardId: string; abilityId: string; effectIndex: number }
+/** Opção de habilidade (CombatState.abilities, usableAbilities): exatamente um dos dois. */
+type AbilitySource = { equipmentSlot: EquipmentSlot; mountAbility?: never } | { equipmentSlot?: never; mountAbility: true }
+// CombatState.abilities e PlayerState.usableAbilities: (CombatOption & AbilitySource & { abilityId: string })[]
+// CombatState.abilityStates[].equipmentSlot continua `EquipmentSlot | null` e ganha `mountAbility: boolean`.
+// CombatUpdate `combatAbilityUsed` ganha `mountAbility: boolean`.
+// Ações: `useAbility` (combate) e `{ type: 'prepare'; operation: 'useAbility' }` enviam `equipmentSlot` OU `mountAbility: true`.
+
+/** 2. Destinos prontos (FEATs 12 e 16). */
+// MarketView.showcase[].offer.destination: ReceiveSpace
+// MarketOperationResult: `buySingle.destination: ReceiveSpace`; `buyStock` e `buyBooster` ganham
+//   `received: { space: 'inventory' | 'mountInventory'; quantity: number }[]` (quanto entrou em cada espaço).
+// BoosterOpeningResult.cards[].destination: ReceiveSpace | 'vault' | 'pending'
+// PendingReward.destination: ReceiveSpace — o espaço onde a cópia entra se o jogador mantiver
+//   (`inventory`/`mountInventory` para recursos; `tcgFolder`/`mountTcgFolder` para atributos;
+//   o backend escolhe o primeiro em que ela caberia depois do descarte, U2).
+// lastRewardDelivery ganha `space: ReceiveSpace | null` (`null` quando não ficou com o jogador).
+// lastScavenge.delivery ganha `'mountInventory'`.
+
+/** 3. Descarte da recompensa pendente com o espaço somado (FEAT-12). */
+interface PendingReward {
+  // … demais campos …
+  /** Uma entrada por carta e espaço: as cópias elegíveis no inventário e no inventário extra (ou na pasta e na pasta extra). */
+  discardOptions: { cardId: string; space: ReceiveSpace; maxCopies: number }[]
+}
+type ResolveRewardAction = { type: 'resolveReward'; rewardId: string } & (
+  | { choice: 'leave' }
+  | { choice: 'keep'; discard: { cardId: string; space: ReceiveSpace; copies: number }[] }
+)
+
 interface ActionNotAllowedDetails {
   reason: /* … motivos existentes … */
     | 'noMount'           // FEAT-18: sellMount, transferMount ou viaZoneId sem montaria
@@ -3684,6 +3735,11 @@ Seja `G` criado com `{ "name": "Os Teimosos", "characterName": "Lia", "playerCla
 | Formato | `transferMount` com `direction: "up"` → 400 `[{ "field": "direction", "reason": "unknownOption" }]`; `quantity: 0` → `notPositiveInteger`. |
 | Laboratório | GET inclui `values.mountPriceRare: 280`, `defaults.mountFolderCapacity: 10`. PATCH `{ "mountInventorySlots": 101 }` → 400 `outOfRange`. |
 | Editor | PUT `fixture.plow-horse` com `mountTypes: []` → 400 `CONTENT_INVALID` `{ "path": "mountTypes", "message": "A montaria precisa de ao menos um tipo, sem repetição." }`. PUT `fixture.gray-harbor` com `market.mounts: [H]` → `{ "path": "market.mounts", "message": "Só zonas Rurais e Habitadas têm Estábulo." }`. `DELETE /lab/content/cards/fixture.plow-horse` → 409 `CONTENT_REFERENCED`. |
+| Destino pronto (v0.89) | Com o inventário ocupado: um `buyStock` de `P` num mercado com estoque traz `lastMarketVisit.results[0].received = [{ "space": "mountInventory", "quantity": 1 }]`; um booster aberto com o inventário cheio traz em `lastBoosterOpening.cards` o destino `mountInventory` ou `mountTcgFolder` das cartas que foram à montaria. |
+| Descarte com montaria (v0.89) | Com `W` no inventário, `P` em `mount.inventory`, inventário e inventário extra cheios e uma recompensa fixa de recurso pendente: `discardOptions` traz `{ "cardId": W, "space": "inventory", "maxCopies": 1 }` e `{ "cardId": P, "space": "mountInventory", "maxCopies": <cópias de P> }`. `{ "type": "resolveReward", "rewardId": <id>, "choice": "keep", "discard": [{ "cardId": P, "space": "mountInventory", "copies": <todas> }] }` → 200, `P` no limbo e a recompensa em `mount.inventory` (`lastRewardDelivery.space: "mountInventory"`). |
+| Habilidade da montaria (v0.89) | Por HTTP com a montaria de teste `fixture.war-pony` (abaixo), doada: `activatableEffects` com `source: "mount"`, `usableAbilities` com `mountAbility: true`; `useAbility` com `equipmentSlot` e `mountAbility` juntos → 400; sem montaria → 409 `noMount`. |
+
+Montaria de teste (v0.90, aceita a oferta do FE): o backend acrescenta à `fixture` `fixture.war-pony` (Pônei de Guerra, `mount`, `common`, `mountTypes: ["beast"]`, `creature: "Pônei"`) com 1 efeito ativável e 1 habilidade fora de combate; os textos e valores exatos vão no aviso da `implementado (BE)`. `cardCounts.mount` da `fixture` passa a 2. Não entra em `market.mounts` (só por doação).
 
 Só nos e2e do backend: abrir booster e comprar single somando o espaço da montaria; arma que bloqueia escudo com o escudo indo ao inventário extra; Ajustar deck com a pasta extra; equipamento com estado no inventário extra; montaria como recompensa (sem montaria; com montaria → volta ao deck ou limbo); `loseMount` com conteúdo; efeitos passivos da montaria nos `effectiveModifiers`; saves v2 a v10. Para a validação integrada (T-80), o backend entrega campanhas preparadas (Estábulo, montaria com conteúdo, inventário cheio, mapa com dois caminhos a 2 zonas), os IDs e os resultados esperados.
 
@@ -3805,3 +3861,5 @@ Só nos e2e do backend: abrir booster e comprar single somando o espaço da mont
 | 0.86 | 2026-11-24 | BE | FEAT-17 `implementado (BE)` (SPEC-BACKEND T-67 a T-73; e2e do ferreiro, da Oficina, do mercado e do laboratório passando). Sem mudança de forma. Campanhas da validação integrada pelo preparador `test/prepare-feat-17.cjs` (devlog 089). |
 | 0.87 | 2026-11-24 | FE | FEAT-17 `validado` (T-79): campanhas do backend conferidas na tela com MSW desligado (ferreiro, quebra +7, substituir, conserto e receita, Oficina, Ferreiro Arcano com extra, venda por cópia) e cenários Formato, Oficina sem Artífice e Laboratório por HTTP. Cenário "Lote com falha e quebra" corrigido: 5 operações, nenhuma `skipped` (resposta do BE). Sem mudança de forma. |
 | 0.88 | 2026-11-24 | BE | FEAT-18 `proposto (BE)`: carta `mount`, `market.mounts` (Estábulo só em Rural/Habitada), `PlayerState.mount` e `moveRoutes`, `MoveAction.viaZoneId`, `buyMount`/`sellMount` em `visitMarket` com `market.stable`, `prepare` `transferMount`, ativação `loseMount`, doação de montaria, 7 chaves do laboratório e motivos novos; destino automático e transferência na Preparar (README Apêndice B U1/U2). `fixture.old-mine` vira Rural com Estábulo. |
+| 0.89 | 2026-11-24 | FE | FEAT-18 → `proposto (FE)`, três pedidos (princípio "o backend decide"): (1) montaria como origem de efeitos e habilidades (`source: 'mount'`, origens `mount`/`mountAbility`, `mountAbility: true` no lugar de `equipmentSlot`); (2) destinos `mountInventory`/`mountTcgFolder` (`ReceiveSpace`) na vitrine, no mercado (`received`), no booster, em `PendingReward.destination`, `lastRewardDelivery.space` e `lastScavenge.delivery`; (3) `space` em `discardOptions` e no `keep`. Cenários novos. |
+| 0.90 | 2026-11-24 | BE | FEAT-18 `acordado`: os três pedidos da v0.89 aceitos sem mudança de forma. O backend acrescenta à `fixture` a montaria `fixture.war-pony` (1 efeito ativável e 1 habilidade fora de combate) para o cenário "Habilidade da montaria" rodar por HTTP; `cardCounts.mount` da `fixture` = 2. |
