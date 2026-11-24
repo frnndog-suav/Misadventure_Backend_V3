@@ -168,7 +168,7 @@ export interface TPlayerStateHttp {
   vaultGoldCapacity: number
   scavengeTargets: string[]
   /** FEAT-16 (REQ-140). Só para o membro da vez numa zona com mercado. */
-  market: TMarketView | null
+  market: TMarketViewHttp | null
   /** FEAT-16 (REQ-143). Contagem de cada expansão comprada; as capacidades acima já são as efetivas. */
   expansions: Record<TMarketExpansion, number>
   lastMarketVisit: TMarketVisitResult | null
@@ -248,6 +248,34 @@ function stateToHTTP(
     })),
     repairMarks: state.repairMarks,
     broken: state.broken,
+  }
+}
+
+/** FEAT-17 (REQ-154): o estado das ofertas de equipamento sai como no `InventorySlot` (com `active`). */
+type TMarketViewHttp = Omit<TMarketView, 'sellOffers'> & {
+  sellOffers: (Omit<TMarketView['sellOffers'][number], 'equipmentState'> & {
+    equipmentState?: TEquipmentStateHttp
+  })[]
+}
+
+function marketToHTTP(
+  view: TMarketView | null,
+  cards: TPartyCards
+): TMarketViewHttp | null {
+  if (view === null) return null
+  return {
+    ...view,
+    sellOffers: view.sellOffers.map(({ equipmentState, ...offer }) =>
+      equipmentState === undefined
+        ? offer
+        : {
+            ...offer,
+            equipmentState: stateToHTTP(
+              cards.get(offer.cardId),
+              equipmentState
+            ),
+          }
+    ),
   }
 }
 
@@ -441,7 +469,7 @@ function playerToHTTP(
     vaultDeckSlots: capacities.deckSlots,
     vaultGoldCapacity: capacities.vaultGold,
     scavengeTargets: targets,
-    market: party.describeMarket(member, cards),
+    market: marketToHTTP(party.describeMarket(member, cards), cards),
     expansions: { ...expansions },
     lastMarketVisit: player.lastMarketVisit ?? null,
     blacksmith: blacksmithToHTTP(

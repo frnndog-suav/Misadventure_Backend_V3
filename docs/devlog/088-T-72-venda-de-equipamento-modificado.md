@@ -31,8 +31,17 @@ Preço de venda do equipamento com refino, encantamentos ligados, marcas de repa
 
 - typecheck, format e domain-guard: ok. `npx eslint src`: ok (`npm run lint` só com os 73 erros antigos de `test/prepare-feat-13.cjs` e `prepare-feat-14.cjs`).
 - `npm test`: 123 arquivos, 1657 testes, verdes.
-- `npm run test:e2e`: pendente — Postgres fora do ar no fechamento (ver revisão abaixo).
+- `npm run test:e2e`: pendente no fechamento (Postgres fora); ver a revisão abaixo.
+
+## Revisão 2026-11-24
+
+- **spec-reviewer:** aprovado. Os dois pontos não bloqueantes foram aplicados: o crédito da venda passou a um só lugar (`credit`) e o `grow` ganhou um comentário sobre a suposição (compras só acrescentam no fim ou empilham).
+- **e2e com o Postgres no ar:** o cenário "Venda valorizada" achou um bug. O `equipmentState` de `sellOffers` saía sem o `active` de cada encantamento, diferente do `InventorySlot`. Correção: `marketToHTTP` em `src/infra/http/presenters/party-presenter/index.ts` usa o mesmo `stateToHTTP` do inventário.
+- **Checks finais:** `npm test` 123 arquivos e 1657 testes; `npm run test:e2e` 56 arquivos e 290 testes; typecheck, build, format:check, `npx eslint src` e domain-guard ok.
+- **Roteiro ao vivo:** não executável. O conteúdo `content/base` não tem zona com mercado nem ferreiro. A verificação manual fica para as campanhas da T-73.
 
 ## Commit sugerido
 
-`feat/add modified equipment sale price (t-72)`
+`feat/add modified equipment sale price (t-72)` (feito pelo autor)
+
+Correção do presenter: `fix/present equipment state in market sell offers (t-72)`
