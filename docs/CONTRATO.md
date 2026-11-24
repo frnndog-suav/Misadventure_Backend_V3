@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.87 · **Data:** 2026-11-24
+> **Versão do contrato:** 0.88 · **Data:** 2026-11-24
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -3496,6 +3496,197 @@ Seja `G` criado com `{ "name": "Os Teimosos", "characterName": "Lia", "playerCla
 
 Só nos e2e do backend: rolagens exatas com `fixedRng` (limiares padrão, +2 do Artífice, quebra a partir de +7); encantamento de efeito, substituição com `replaceIndex` e Ferreiro Arcano (`extra`); Oficina com Artífice ativo (1 PA, desconto, teto +6, `enchantNotAvailable`, repetição); estado no cofre; bônus de refino nos `effectiveModifiers` e de elemento no combate; saves v2 a v9. Para a validação integrada (T-73), o backend entrega campanhas preparadas com Artífice ativo e com Ferreiro Arcano, os IDs e os resultados esperados.
 
+### FEAT-18 — Montarias e Estábulo — `proposto (BE)`
+
+Regras: README 3.4 (a carta de zona lista as montarias do Estábulo), 5.1 (equipamento guardado não funciona), 6.2, 6.3, 6.5, 6.6, 12.2 (Movimentar; Ir ao Mercado inclui o Estábulo), 24, 24.5, 26 e Apêndice A (linha "Montaria"); Apêndice B 26, D2, E5, E6, E21, J1, K6, M4, O2, S3, U1 e U2 (B.20, 2026-11-24). Base no backend: SPEC-BACKEND REQ-155 a REQ-163, D-142 a D-147.
+
+**Fora desta FEAT:** negociar o conteúdo da montaria e qualquer coisa com montaria de outro jogador (grupo, README 22); saque de PvP (não existe); `moveDistanceBonus` e os efeitos "ao entrar nesta zona" continuam sem execução (a zona do meio do movimento só fica registrada); benefícios secundários que dependam de gatilhos ainda não executados ficam publicáveis e inertes.
+
+**Decisões que o frontend precisa saber:**
+- **Montaria é um tipo de carta novo** (`mount`): raridade, tipos, criatura, efeitos e habilidades. Sem categoria e sem `priceMultiplier`. Nunca aparece em booster nem na vitrine de singles.
+- **O jogador tem no máximo 1** (`PlayerState.mount`), com inventário extra (+4 slots) e pasta extra (10 cartas). Os efeitos e habilidades da montaria valem como os de um equipamento em uso. Equipamento no inventário extra não funciona e guarda o seu `equipmentState`.
+- **Estábulo dentro do Ir ao Mercado:** operações `buyMount` e `sellMount` no mesmo lote do `visitMarket` (1 PA, repetível, lote atômico). Só em zona Rural ou Habitada cujo `market.mounts` não esteja vazio. Preços prontos em `market.stable`.
+- **Destino automático (Apêndice B U2):** o que chega (compra, single, booster, recompensa, doação, Vasculhar, Criar) vai ao inventário ou à pasta; o que não couber vai à montaria. O frontend não pergunta o destino. Para reorganizar, o jogador usa a transferência.
+- **Transferir (Apêndice B U1):** operação gratuita da Preparar, só na própria vez, também com 0 PA, repetível. Vender, guardar no cofre, consumir materiais/itens e equipar usam **só** o inventário e a pasta: o jogador transfere antes.
+- **Espaço somado:** as regras de espaço livre contam inventário + inventário extra e pasta + pasta extra (abrir booster, comprar single, arma que bloqueia escudo). Em Ajustar deck, as cartas da pasta extra entram no conjunto disponível; o que sai da build vai à pasta e, cheia, à pasta extra.
+- **Movimentar com montaria:** até 2 zonas por 1 PA. `moveTargets` passa a incluir as zonas a 2 travessias; `moveRoutes` diz, para cada destino, se há travessia direta e as zonas do meio possíveis. `viaZoneId` é opcional; sem ele, a 1 travessia é movimento simples e, só a 2, o backend usa a primeira zona do meio em ordem de id.
+- **Montaria ganha com montaria em uso** não é recebida e não abre escolha: volta ao deck de recompensas ou vai ao limbo (`lastRewardDelivery.disposition`).
+- **Perder a montaria** (ativação `loseMount`): montaria, inventário extra e pasta extra vão ao limbo, sem escolha.
+
+**Mudanças em outras seções:**
+- **FEAT-03 (`validado`):** `GameConfigValues` ganha as 7 chaves abaixo.
+- **FEAT-04 (`validado`):** `CardType` ganha `mount`; `Card` ganha `MountCard`; `CollectionSummary.cardCounts.mount`. `ZoneCard.market` ganha `mounts` (conteúdo legado lê `[]`).
+- **FEAT-07 (`validado`):** `MoveAction` ganha `viaZoneId?`; `PlayerState` ganha `moveRoutes`.
+- **FEAT-09 (`validado`):** `adjustDeck` usa a pasta extra (acima); `notOwned` passa a contar build + pasta + pasta extra, e `tcgFolderFull` vale quando o que sai não cabe nas duas.
+- **FEAT-10 (`validado`):** `PlayerState` ganha `mount`; `PrepareAction` ganha `transferMount`; a doação do laboratório aceita carta `mount` (`LabGrantNoSpaceDetails.reason` ganha `mountAlreadyOwned`) e, com montaria, o que não cabe no inventário/pasta vai à montaria.
+- **FEAT-11 (`validado`):** `Activation` ganha `{ kind: 'loseMount' }` (sem parâmetros; alvo: o próprio jogador). Pode ir em efeitos e habilidades de qualquer carta que aceite ativações.
+- **FEAT-12 e FEAT-15 (`validado`):** recompensas (deck de recompensas, recompensas fixas de eventos e missões) aceitam carta `mount`. Montaria nunca gera `PendingReward`.
+- **FEAT-16 (`validado`):** `MarketView` ganha `stable`; `MarketOperation` e `MarketOperationResult` ganham `buyMount` e `sellMount`. `sellOffers` continua só com inventário e pasta.
+- **FEAT-31 (`validado`):** o editor valida a carta `mount` e `market.mounts`; montaria citada em `market.mounts` → `CONTENT_REFERENCED` ao excluir ou renomear.
+- Saves de antes desta versão leem `mount: null`.
+
+#### Endpoints
+
+Nenhuma rota nova. `POST /parties/:partyId/actions` (FEAT-07) com `MoveAction` (alterada), `VisitMarketAction` (operações novas) e `PrepareAction` `transferMount`; `POST /lab/parties/:partyId/members/:memberId/grants` (FEAT-10) com carta `mount`; rotas do catálogo e do editor (FEAT-04, FEAT-31) com o tipo `mount`.
+
+Ordem das conferências novas:
+- `move`: as da FEAT-08 → `viaZoneId` sem montaria → `noMount` → destino fora de `moveTargets`, ou `viaZoneId` sem travessia com a zona atual e com o destino → `notConnected`. `viaZoneId` fora do mapa → 400 `zoneNotInMap` no campo `viaZoneId`.
+- `buyMount` (dentro do lote do `visitMarket`): `mountNotOffered` (zona sem Estábulo ou `cardId` fora de `market.mounts`) → `mountAlreadyOwned` (inclusive comprada antes no mesmo lote) → `notEnoughGold`.
+- `sellMount`: `noMount` → `mountNotEmpty`.
+- `transferMount`: as da Preparar (vez, combate, escolha pendente) → `noMount` → `notOwned` (cópias insuficientes na origem; `inventorySlotIndex` vazio, de outra carta ou com `quantity` ≠ 1) → `inventoryFull` / `tcgFolderFull` (destino sem espaço).
+
+#### Tipos
+
+```ts
+type CardType = /* … */ | 'mount'
+type Card = /* … */ | MountCard
+
+/** FEAT-18 (README 26). Sem categoria; o tipo não tem mecânica própria. */
+interface MountCard {
+  type: 'mount'
+  id: string
+  collectionId: string
+  name: string
+  flavorText: string | null
+  rarity: Rarity
+  /** 1 ou mais, sem repetição. */
+  mountTypes: EnemyType[]
+  /** Ex.: "Dragão Artefato". Não vazio. */
+  creature: string
+  /** Mesmas regras dos efeitos e habilidades de equipamento (FEATs 11 e 13). */
+  effects: Effect[]
+  abilities: Ability[]
+}
+
+interface ZoneCard {
+  // … campos anteriores …
+  /** FEAT-18: `mounts` = ids de cartas `mount` do Estábulo, de qualquer coleção, sem repetição; não vazia só em zona `rural` ou `inhabited`. */
+  market: { stock: string[]; singles: boolean; mounts: string[] } | null
+}
+
+interface GameConfigValues {
+  // … chaves das FEATs 03 a 17 …
+  // FEAT-18
+  mountPriceCommon: number; mountPriceUncommon: number; mountPriceRare: number; mountPriceEpic: number; mountPriceLegendary: number
+  mountInventorySlots: number
+  mountFolderCapacity: number
+}
+
+interface PlayerState {
+  // … campos das FEATs 06 a 17 …
+  /** FEAT-18. `null` = sem montaria. */
+  mount: MountState | null
+  /**
+   * FEAT-18. Para cada destino de `moveTargets` (mesma ordem): `direct` = há travessia com a zona atual;
+   * `via` = zonas do meio possíveis (travessia com a atual e com o destino), em ordem de id. Sem montaria, `via` é sempre `[]`.
+   */
+  moveRoutes: { zoneId: string; direct: boolean; via: string[] }[]
+}
+
+interface MountState {
+  cardId: string
+  /** Inventário extra: empilha como `inventory`; equipamento com `equipmentState`. */
+  inventory: InventorySlot[]
+  inventoryCapacity: number // mountInventorySlots
+  /** Pasta extra: só atributos, como `tcgFolder`. */
+  tcgFolder: { cardId: string; copies: number }[]
+  tcgFolderCapacity: number // mountFolderCapacity (a expansão da pasta não muda)
+}
+
+/** FEAT-07, alterado. */
+interface MoveAction {
+  type: 'move'
+  zoneId: string
+  /** FEAT-18. Zona do meio; só com montaria. */
+  viaZoneId?: string
+}
+
+type PrepareAction = /* … equip, unequip, activate, openBooster … */
+  /**
+   * FEAT-18 (Apêndice B U1). Gratuita. `toMount`: inventário → inventário extra ou pasta → pasta extra; `fromMount`: o contrário.
+   * `inventorySlotIndex` (só `space: 'inventory'`): escolhe a cópia de equipamento pelo índice no espaço de origem; exige `quantity: 1`.
+   * Sem ele, saem primeiro as cópias de estado padrão. O `equipmentState` vai junto.
+   */
+  | { type: 'prepare'; operation: 'transferMount'; direction: 'toMount' | 'fromMount'; space: 'inventory' | 'tcgFolder'; cardId: string; quantity: number; inventorySlotIndex?: number }
+
+interface MarketView {
+  // … campos das FEATs 16 e 17 …
+  /** FEAT-18. Só em zona com Estábulo (`market.mounts` não vazio); senão `null`. */
+  stable: {
+    /** Na ordem de `market.mounts`. `price` = ⌈preço base da raridade × fator⌉. */
+    offers: { cardId: string; price: number }[]
+    /** Montaria atual: `price` = ⌊50% × preço base⌋, sem fator; `sellable` = inventário extra e pasta extra vazios. `null` sem montaria. */
+    currentMount: { cardId: string; price: number; sellable: boolean } | null
+  } | null
+}
+
+type MarketOperation = /* … */
+  /** A montaria chega vazia. */
+  | { operation: 'buyMount'; cardId: string }
+  /** A montaria sai do jogo (não muda a oferta). */
+  | { operation: 'sellMount' }
+
+type MarketOperationResult = /* … */
+  | { operation: 'buyMount'; cardId: string; gold: number }
+  | { operation: 'sellMount'; cardId: string; gold: number }
+
+type Activation = /* … */ | { kind: 'loseMount' }
+
+interface LabGrantNoSpaceDetails {
+  reason: 'inventoryFull' | 'tcgFolderFull' | 'mountAlreadyOwned' // FEAT-18
+}
+
+interface ActionNotAllowedDetails {
+  reason: /* … motivos existentes … */
+    | 'noMount'           // FEAT-18: sellMount, transferMount ou viaZoneId sem montaria
+    | 'mountAlreadyOwned' // FEAT-18: buyMount com montaria
+    | 'mountNotOffered'   // FEAT-18: zona sem Estábulo ou montaria fora da lista
+    | 'mountNotEmpty'     // FEAT-18: sellMount com algo no inventário extra ou na pasta extra
+  // reusados: notOwned, inventoryFull, tcgFolderFull, notEnoughGold, notConnected
+  cardId?: string
+  operationIndex?: number
+}
+```
+
+**Laboratório:** chaves inteiras, nos formatos de `values`, `defaults` e `limits` da FEAT-03. Snapshots de grupos existentes ganham os padrões nas chaves ausentes.
+
+| Chave | Padrão | Limites |
+|---|---:|---|
+| `mountPriceCommon` … `Legendary` | 80 / 150 / 280 / 550 / 1100 | 0–1000000 cada |
+| `mountInventorySlots` | 4 | 0–100 |
+| `mountFolderCapacity` | 10 | 0–1000 |
+
+**`CONTENT_INVALID` dos campos novos** (editor, import e boot; mensagens pt-BR prontas do backend). Textos usados nos cenários:
+- `mountTypes`: "A montaria precisa de ao menos um tipo, sem repetição."
+- `creature`: "A montaria precisa da criatura."
+- `market.mounts`: "Só zonas Rurais e Habitadas têm Estábulo."
+- `market.mounts.i`: "A carta do Estábulo precisa ser uma montaria." / "Montaria repetida no Estábulo."
+
+Mensagem de `CONTENT_REFERENCED` para o Estábulo: "Esta montaria está no Estábulo de uma zona.".
+
+#### Cenários de validação
+
+Contra a `fixture` com as mudanças desta FEAT:
+- Carta nova `fixture.plow-horse` (Cavalo de Arado, `mount`, `rare`, `mountTypes: ["beast"]`, `creature: "Cavalo"`, `effects: []`, `abilities: []`). `cardCounts.mount` da `fixture` = 1.
+- `fixture.old-mine` passa a `zoneType: "rural"`, `zoneActions = ["startEvent", "visitMarket"]` e `market = { "stock": [], "singles": false, "mounts": ["fixture.plow-horse"] }`. `fixture.gray-harbor` ganha `mounts: []`; as demais zonas continuam `market: null`. *(Muda o tipo de zona e as ações de `fixture.old-mine` nos cenários antigos que a citam; o mercado novo consome 1 sorteio de fator na criação do grupo, então cenários antigos com semente fixa podem ter outros resultados. O backend confere os e2e antigos na T-74 e avisa se algum cenário do contrato mudar.)*
+
+Seja `G` criado com `{ "name": "Os Teimosos", "characterName": "Lia", "playerClass": "warrior" }` com o laboratório em `{ "initialGold": 0, "marketFactorMinPercent": 115, "marketFactorMaxPercent": 115, "mountInventorySlots": 1, "inventoryCapacity": 1 }`, posto em sessão; `M` o membro e `/grants` a doação (FEAT-10). `H` = `fixture.plow-horse`, `P` = `fixture.healing-potion`, `W` = `fixture.short-sword`, `STR` = `fixture.strength-basic`. Para chegar a `fixture.old-mine`, `move` pelas zonas de `moveTargets` (o mapa é o da FEAT-06).
+
+| Cenário | Requisição e recorte esperado |
+|---|---|
+| Estado inicial | `player.mount: null`; cada item de `moveRoutes` com `direct: true` e `via: []`. Em Porto Cinzento, `market.stable: null`. |
+| Estábulo | Em `fixture.old-mine` com `gold: 400` (doação): `market.stable = { "offers": [{ "cardId": H, "price": 322 }], "currentMount": null }`. `{ "type": "visitMarket", "operations": [{ "operation": "buyMount", "cardId": H }] }` → 200, `gold: 78`, `mount = { "cardId": H, "inventory": [], "inventoryCapacity": 1, "tcgFolder": [], "tcgFolderCapacity": 10 }`, `lastMarketVisit.results = [{ "operation": "buyMount", "cardId": H, "gold": -322 }]`, `stable.currentMount = { "cardId": H, "price": 140, "sellable": true }`. |
+| Estábulo recusado | Com montaria: `[{ buyMount H }]` → 409 `{ "reason": "mountAlreadyOwned", "operationIndex": 0, "cardId": H }`. Em Porto Cinzento: `[{ buyMount H }]` → 409 `mountNotOffered`. Sem montaria: `[{ "operation": "sellMount" }]` → 409 `noMount`. Nada muda. |
+| Transbordo | Com `H` e o inventário (1 slot) com `W`, doação de `P` → 200, `P` em `mount.inventory`. Outra `P` → empilha em `mount.inventory`. Doação de `W` → 409 `LAB_GRANT_NO_SPACE` `inventoryFull`. |
+| Transferir | `{ "type": "prepare", "operation": "transferMount", "direction": "fromMount", "space": "inventory", "cardId": P, "quantity": 2 }` → 409 `inventoryFull` (inventário ocupado por `W`). `{ …, "direction": "toMount", "space": "tcgFolder", "cardId": STR, "quantity": 1 }` sem `STR` na pasta → 409 `notOwned`. Com `STR` na pasta (doação): → 200, `STR` em `mount.tcgFolder`, `actionPoints` igual. |
+| Vender com conteúdo | Com algo na montaria: `stable.currentMount.sellable: false`; `[{ sellMount }]` → 409 `mountNotEmpty`. Esvaziada (transferências e vendas): `[{ sellMount }, { buyMount H }]` → 200, `gold` −322 +140, `mount` vazia de novo. |
+| Movimentar | Com `H`: `moveTargets` inclui as zonas a 2 travessias; cada item de `moveRoutes` traz `direct` e `via` (em ordem de id). `move` para um destino com `direct: false`, sem `viaZoneId` → 200, `zoneId` = destino, 1 PA gasto. Com `viaZoneId` que não está no `via` do destino → 409 `notConnected`. Sem montaria, `move` com `viaZoneId` → 409 `noMount`; `viaZoneId: "x"` → 400 `[{ "field": "viaZoneId", "reason": "zoneNotInMap" }]`. |
+| Formato | `transferMount` com `direction: "up"` → 400 `[{ "field": "direction", "reason": "unknownOption" }]`; `quantity: 0` → `notPositiveInteger`. |
+| Laboratório | GET inclui `values.mountPriceRare: 280`, `defaults.mountFolderCapacity: 10`. PATCH `{ "mountInventorySlots": 101 }` → 400 `outOfRange`. |
+| Editor | PUT `fixture.plow-horse` com `mountTypes: []` → 400 `CONTENT_INVALID` `{ "path": "mountTypes", "message": "A montaria precisa de ao menos um tipo, sem repetição." }`. PUT `fixture.gray-harbor` com `market.mounts: [H]` → `{ "path": "market.mounts", "message": "Só zonas Rurais e Habitadas têm Estábulo." }`. `DELETE /lab/content/cards/fixture.plow-horse` → 409 `CONTENT_REFERENCED`. |
+
+Só nos e2e do backend: abrir booster e comprar single somando o espaço da montaria; arma que bloqueia escudo com o escudo indo ao inventário extra; Ajustar deck com a pasta extra; equipamento com estado no inventário extra; montaria como recompensa (sem montaria; com montaria → volta ao deck ou limbo); `loseMount` com conteúdo; efeitos passivos da montaria nos `effectiveModifiers`; saves v2 a v10. Para a validação integrada (T-80), o backend entrega campanhas preparadas (Estábulo, montaria com conteúdo, inventário cheio, mapa com dois caminhos a 2 zonas), os IDs e os resultados esperados.
+
 ## 4. Códigos de erro
 
 | Código | Quando acontece | FEAT |
@@ -3613,3 +3804,4 @@ Só nos e2e do backend: rolagens exatas com `fixedRng` (limiares padrão, +2 do 
 | 0.85 | 2026-11-24 | BE | FEAT-17 `acordado`: os cinco pedidos da v0.84 aceitos sem mudança (`refineSteps`, `requiresRefinement`, `choicePending`/`combatInProgress` no lugar de `eventActionBlock`, tipo de `sellOffers`, `craft` sem alvo no mesmo lote, agora confirmado). Devolvidas ao glossário §2.7 as duas linhas da v0.83 (estado do equipamento; receita, lista do ferreiro e encantamento extra), que a cópia do FE não trazia. |
 | 0.86 | 2026-11-24 | BE | FEAT-17 `implementado (BE)` (SPEC-BACKEND T-67 a T-73; e2e do ferreiro, da Oficina, do mercado e do laboratório passando). Sem mudança de forma. Campanhas da validação integrada pelo preparador `test/prepare-feat-17.cjs` (devlog 089). |
 | 0.87 | 2026-11-24 | FE | FEAT-17 `validado` (T-79): campanhas do backend conferidas na tela com MSW desligado (ferreiro, quebra +7, substituir, conserto e receita, Oficina, Ferreiro Arcano com extra, venda por cópia) e cenários Formato, Oficina sem Artífice e Laboratório por HTTP. Cenário "Lote com falha e quebra" corrigido: 5 operações, nenhuma `skipped` (resposta do BE). Sem mudança de forma. |
+| 0.88 | 2026-11-24 | BE | FEAT-18 `proposto (BE)`: carta `mount`, `market.mounts` (Estábulo só em Rural/Habitada), `PlayerState.mount` e `moveRoutes`, `MoveAction.viaZoneId`, `buyMount`/`sellMount` em `visitMarket` com `market.stable`, `prepare` `transferMount`, ativação `loseMount`, doação de montaria, 7 chaves do laboratório e motivos novos; destino automático e transferência na Preparar (README Apêndice B U1/U2). `fixture.old-mine` vira Rural com Estábulo. |
