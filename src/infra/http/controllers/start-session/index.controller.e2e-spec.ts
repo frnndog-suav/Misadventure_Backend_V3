@@ -48,6 +48,7 @@ describe('POST /parties/:partyId/session (e2e)', () => {
               'recover',
               'adjustDeck',
               'useVault',
+              'visitBlacksmith',
               'visitMarket',
               'saveRespawnPoint',
               'startEvent',

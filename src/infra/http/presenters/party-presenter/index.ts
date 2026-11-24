@@ -26,6 +26,11 @@ import type {
   TMarketView,
   TMarketVisitResult,
 } from '@/domain/campaign/enterprise/market-trade'
+import type {
+  TBlacksmithView,
+  TBlacksmithVisitResult,
+  TServiceEquipment,
+} from '@/domain/campaign/enterprise/blacksmith'
 import type { TPlayerStatus } from '@/domain/campaign/enterprise/player-status'
 import { findMarketBoosters } from '@/domain/campaign/application/market-catalog'
 import {
@@ -78,6 +83,20 @@ export interface TEquipmentStateHttp {
   enchantments: (TAppliedEnchantment & { active: boolean })[]
   repairMarks: number
   broken: boolean
+}
+
+/** CONTRATO FEAT-17, tipo `BlacksmithView`: o estado de cada equipamento com `active`. */
+export type TBlacksmithViewHttp = Omit<
+  TBlacksmithView,
+  'blacksmith' | 'workshop'
+> & {
+  blacksmith: TServiceViewHttp | null
+  workshop: TServiceViewHttp | null
+}
+type TServiceViewHttp = {
+  equipment: (Omit<TServiceEquipment, 'state'> & {
+    state: TEquipmentStateHttp
+  })[]
 }
 
 /** CONTRATO FEAT-10/FEAT-17, tipo `InventorySlot` (e slot do cofre). */
@@ -153,6 +172,10 @@ export interface TPlayerStateHttp {
   /** FEAT-16 (REQ-143). Contagem de cada expansão comprada; as capacidades acima já são as efetivas. */
   expansions: Record<TMarketExpansion, number>
   lastMarketVisit: TMarketVisitResult | null
+  /** FEAT-17 (REQ-149). Só para o membro da vez numa zona com ferreiro. */
+  blacksmith: TBlacksmithViewHttp | null
+  /** FEAT-17 (REQ-149). */
+  lastBlacksmithVisit: TBlacksmithVisitResult | null
   /** FEAT-16 (REQ-144). */
   lastBoosterOpening: TBoosterOpeningResult | null
   lastScavenge:
@@ -225,6 +248,25 @@ function stateToHTTP(
     })),
     repairMarks: state.repairMarks,
     broken: state.broken,
+  }
+}
+
+function blacksmithToHTTP(
+  view: TBlacksmithView | null,
+  cards: TPartyCards
+): TBlacksmithViewHttp | null {
+  if (view === null) return null
+  const service = (entry: TBlacksmithView['blacksmith']) =>
+    entry && {
+      equipment: entry.equipment.map((item) => ({
+        ...item,
+        state: stateToHTTP(cards.get(item.cardId), item.state),
+      })),
+    }
+  return {
+    ...view,
+    blacksmith: service(view.blacksmith),
+    workshop: service(view.workshop),
   }
 }
 
@@ -402,6 +444,11 @@ function playerToHTTP(
     market: party.describeMarket(member, cards),
     expansions: { ...expansions },
     lastMarketVisit: player.lastMarketVisit ?? null,
+    blacksmith: blacksmithToHTTP(
+      party.describeBlacksmith(member, cards),
+      cards
+    ),
+    lastBlacksmithVisit: player.lastBlacksmithVisit ?? null,
     lastBoosterOpening: player.lastBoosterOpening ?? null,
     lastScavenge:
       player.lastScavenge === null

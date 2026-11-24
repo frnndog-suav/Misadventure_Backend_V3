@@ -1,4 +1,5 @@
 import { DomainError } from '@/core/error/domain-error'
+import type { TBlacksmithRefusalReason } from '../../../enterprise/blacksmith'
 import type { TMarketRefusalReason } from '../../../enterprise/market-trade'
 import type { TCombatRefusal } from '../../../enterprise/combat'
 import type { TTriggeredEffectRefusal } from '../../../enterprise/entities/party'
@@ -55,6 +56,7 @@ export type TActionNotAllowedReason =
   | 'notBooster'
   | 'boosterEmpty'
   | TMarketRefusalReason
+  | TBlacksmithRefusalReason
 
 export class ActionNotAllowedError extends DomainError {
   readonly code = 'ACTION_NOT_ALLOWED'
@@ -72,7 +74,7 @@ export class ActionNotAllowedError extends DomainError {
 
   /**
    * `cardId` só em `notOwned` e `copyLimitExceeded` (CONTRATO FEAT-09);
-   * `operationIndex` só no `useVault` e no `visitMarket` (CONTRATO FEAT-32 e FEAT-16).
+   * `operationIndex` só no `useVault`, no `visitMarket` e no `visitBlacksmith` (CONTRATO FEAT-32, FEAT-16 e FEAT-17).
    */
   constructor(
     reason: TActionNotAllowedReason | TQuestRefusal,

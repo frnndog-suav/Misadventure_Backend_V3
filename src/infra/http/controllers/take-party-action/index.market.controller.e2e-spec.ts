@@ -157,6 +157,7 @@ describe('Ir ao Mercado (e2e)', () => {
       'recover',
       'adjustDeck',
       'useVault',
+      'visitBlacksmith',
       'visitMarket',
       'startEvent',
       'endTurn',

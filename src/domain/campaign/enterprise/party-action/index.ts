@@ -102,6 +102,27 @@ export type TMarketOperation =
     }
   | { operation: 'buyExpansion'; expansion: TMarketExpansion }
 
+/** Onde está o equipamento que a operação do ferreiro atende (REQ-149). */
+export type TEquipmentTarget =
+  | { location: 'equipment'; slot: TEquipmentSlot }
+  | { location: 'inventory'; inventorySlotIndex: number }
+
+/**
+ * Uma operação do Ir ao Ferreiro (README 25; REQ-149 a REQ-152). Os índices de
+ * inventário valem para o inventário de antes do lote.
+ */
+export type TBlacksmithOperation =
+  | { operation: 'repair'; target: TEquipmentTarget }
+  | { operation: 'refine'; target: TEquipmentTarget }
+  | {
+      operation: 'enchant'
+      target: TEquipmentTarget
+      enchantmentId: string
+      replaceIndex?: number
+      extra?: boolean
+    }
+  | { operation: 'craft'; inventorySlotIndex: number }
+
 /** Intenção de jogo (CONTRATO §1.6). União por `type`; as FEATs 10+ acrescentam variantes. */
 export type TPartyAction =
   | TRandomEventAction
@@ -117,6 +138,7 @@ export type TPartyAction =
   | ({ type: 'prepare' } & TPrepareOperation)
   | { type: 'useVault'; operations: TVaultOperation[] }
   | { type: 'visitMarket'; operations: TMarketOperation[] }
+  | { type: 'visitBlacksmith'; operations: TBlacksmithOperation[] }
   | { type: 'scavenge'; cardId: string }
 
 /** Os `type` possíveis, para `availableActions` (REQ-58). */
@@ -209,6 +231,8 @@ export function parsePartyAction(
       return parseUseVault(body)
     case 'visitMarket':
       return parseVisitMarket(body)
+    case 'visitBlacksmith':
+      return parseVisitBlacksmith(body)
     case 'takeQuest':
     case 'continueQuest':
     case 'finishQuest':
@@ -1128,6 +1152,186 @@ function parseMarketOperation(
       extras(['expansion'])
       if (issues.length > before || expansion === undefined) return null
       return { operation, expansion }
+    }
+    default:
+      issues.push({ field: `${path}.operation`, reason: 'unknownOperation' })
+      return null
+  }
+}
+
+/**
+ * REQ-149. Mesmas regras de `operations` do Ir ao Mercado (1 a 50). Em cada
+ * operação: `operation` ausente/inválida/desconhecida vem sozinha; `target`
+ * não objeto → `notObject`; `location` ou `slot` desconhecidos e `extra` não
+ * booleano → `unknownOption`; índices → `notNonNegativeInteger` (D-138).
+ */
+function parseVisitBlacksmith(
+  body: Record<string, unknown>
+): Either<TActionIssue[], TPartyAction> {
+  const { operations } = body
+  const issues: TActionIssue[] = []
+  const parsed: TBlacksmithOperation[] = []
+
+  if (operations === undefined) {
+    issues.push({ field: 'operations', reason: 'required' })
+  } else if (!Array.isArray(operations)) {
+    issues.push({ field: 'operations', reason: 'notArray' })
+  } else if (
+    operations.length < 1 ||
+    operations.length > VAULT_MAX_OPERATIONS
+  ) {
+    issues.push({ field: 'operations', reason: 'invalidLength' })
+  } else {
+    operations.forEach((item: unknown, index) => {
+      const operation = parseBlacksmithOperation(
+        item,
+        `operations.${index}`,
+        issues
+      )
+      if (operation !== null) parsed.push(operation)
+    })
+  }
+  issues.push(...extraKeys(body, ['type', 'operations']))
+  if (issues.length > 0) return left(issues)
+  return right({ type: 'visitBlacksmith', operations: parsed })
+}
+
+function parseBlacksmithOperation(
+  item: unknown,
+  path: string,
+  issues: TActionIssue[]
+): TBlacksmithOperation | null {
+  if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+    issues.push({ field: path, reason: 'invalidItem' })
+    return null
+  }
+  const entry = item as Record<string, unknown>
+  const { operation } = entry
+  if (operation === undefined) {
+    issues.push({ field: `${path}.operation`, reason: 'required' })
+    return null
+  }
+  if (typeof operation !== 'string') {
+    issues.push({ field: `${path}.operation`, reason: 'notString' })
+    return null
+  }
+
+  const before = issues.length
+  const index = (
+    source: Record<string, unknown>,
+    key: string,
+    prefix: string,
+    required: boolean
+  ): number | null => {
+    const value = source[key]
+    if (value === undefined) {
+      if (required)
+        issues.push({ field: `${prefix}${key}`, reason: 'required' })
+      return null
+    }
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+      issues.push({
+        field: `${prefix}${key}`,
+        reason: 'notNonNegativeInteger',
+      })
+      return null
+    }
+    return value
+  }
+  const target = (): TEquipmentTarget | null => {
+    const value = entry.target
+    const at = `${path}.target`
+    if (value === undefined) {
+      issues.push({ field: at, reason: 'required' })
+      return null
+    }
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      issues.push({ field: at, reason: 'notObject' })
+      return null
+    }
+    const raw = value as Record<string, unknown>
+    const { location } = raw
+    if (location === undefined) {
+      issues.push({ field: `${at}.location`, reason: 'required' })
+      return null
+    }
+    if (typeof location !== 'string') {
+      issues.push({ field: `${at}.location`, reason: 'notString' })
+      return null
+    }
+    switch (location) {
+      case 'equipment': {
+        const { slot } = raw
+        let parsedSlot: TEquipmentSlot | undefined
+        if (slot === undefined) {
+          issues.push({ field: `${at}.slot`, reason: 'required' })
+        } else if (typeof slot !== 'string') {
+          issues.push({ field: `${at}.slot`, reason: 'notString' })
+        } else {
+          parsedSlot = EQUIPMENT_SLOTS.find((name) => name === slot)
+          if (parsedSlot === undefined)
+            issues.push({ field: `${at}.slot`, reason: 'unknownOption' })
+        }
+        issues.push(...extraKeys(raw, ['location', 'slot'], `${at}.`))
+        return parsedSlot === undefined ? null : { location, slot: parsedSlot }
+      }
+      case 'inventory': {
+        const slotIndex = index(raw, 'inventorySlotIndex', `${at}.`, true)
+        issues.push(
+          ...extraKeys(raw, ['location', 'inventorySlotIndex'], `${at}.`)
+        )
+        return slotIndex === null
+          ? null
+          : { location, inventorySlotIndex: slotIndex }
+      }
+      default:
+        issues.push({ field: `${at}.location`, reason: 'unknownOption' })
+        return null
+    }
+  }
+  const extras = (allowed: readonly string[]) =>
+    issues.push(...extraKeys(entry, ['operation', ...allowed], `${path}.`))
+
+  switch (operation) {
+    case 'repair':
+    case 'refine': {
+      const parsedTarget = target()
+      extras(['target'])
+      if (issues.length > before || parsedTarget === null) return null
+      return { operation, target: parsedTarget }
+    }
+    case 'enchant': {
+      const parsedTarget = target()
+      const { enchantmentId, extra } = entry
+      if (enchantmentId === undefined) {
+        issues.push({ field: `${path}.enchantmentId`, reason: 'required' })
+      } else if (typeof enchantmentId !== 'string') {
+        issues.push({ field: `${path}.enchantmentId`, reason: 'notString' })
+      }
+      const replaceIndex = index(entry, 'replaceIndex', `${path}.`, false)
+      if (extra !== undefined && typeof extra !== 'boolean') {
+        issues.push({ field: `${path}.extra`, reason: 'unknownOption' })
+      }
+      extras(['target', 'enchantmentId', 'replaceIndex', 'extra'])
+      if (
+        issues.length > before ||
+        parsedTarget === null ||
+        typeof enchantmentId !== 'string'
+      )
+        return null
+      return {
+        operation,
+        target: parsedTarget,
+        enchantmentId,
+        ...(replaceIndex !== null && { replaceIndex }),
+        ...(typeof extra === 'boolean' && { extra }),
+      }
+    }
+    case 'craft': {
+      const slotIndex = index(entry, 'inventorySlotIndex', `${path}.`, true)
+      extras(['inventorySlotIndex'])
+      if (issues.length > before || slotIndex === null) return null
+      return { operation, inventorySlotIndex: slotIndex }
     }
     default:
       issues.push({ field: `${path}.operation`, reason: 'unknownOperation' })

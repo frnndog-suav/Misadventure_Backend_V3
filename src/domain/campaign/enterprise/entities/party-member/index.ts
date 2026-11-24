@@ -8,6 +8,7 @@ import {
   type TStarterDeckEntry,
 } from '@/domain/catalog/enterprise/value-objects/card'
 
+import type { TBlacksmithVisitResult } from '../../blacksmith'
 import type { TBoosterOpeningResult } from '../../booster'
 import type { TWornStates } from '../../equipment-state'
 import type { TInventorySlot } from '../../inventory'
@@ -69,6 +70,8 @@ export type TPlayerState = Readonly<{
   expansions?: TExpansions
   /** Resultado do último Ir ao Mercado aceito (REQ-140); ausente/`null` até o primeiro. */
   lastMarketVisit?: TMarketVisitResult | null
+  /** Resultado do último Ir ao Ferreiro aceito (REQ-149); ausente/`null` até o primeiro. */
+  lastBlacksmithVisit?: TBlacksmithVisitResult | null
   /** Resultado do último `openBooster` aceito (REQ-144); ausente/`null` até o primeiro. */
   lastBoosterOpening?: TBoosterOpeningResult | null
   /** Resultado do último Vasculhar aceito (REQ-96); `null` até o primeiro. */

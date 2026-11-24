@@ -101,7 +101,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 081 | T-66 | [Campanhas da FEAT-16](081-T-66-campanhas-da-feat-16.md) | concluída |
 | 082 | FEAT-16 | [FEAT-16 validada](082-FEAT-16-validada.md) | concluída |
 | 083 | T-67 | [Conteúdo, editor e laboratório do ferreiro](083-T-67-conteudo-editor-e-laboratorio-do-ferreiro.md) | aguardando revisão |
-| 084 | T-68 | [Estado do equipamento e save v10](084-T-68-estado-do-equipamento-e-save-v10.md) | aguardando revisão |
+| 084 | T-68 | [Estado do equipamento e save v10](084-T-68-estado-do-equipamento-e-save-v10.md) | concluída |
+| 085 | T-69 | [Ir ao Ferreiro: consertar, refinar e criar](085-T-69-ir-ao-ferreiro.md) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

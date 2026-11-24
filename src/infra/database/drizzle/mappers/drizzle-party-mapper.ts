@@ -847,7 +847,59 @@ const stateSlot = z.strictObject({
   quantity: z.number().int().min(1),
   equipmentState: equipmentStateSchema.optional(),
 })
+// REQ-149: resultado do último Ir ao Ferreiro (save v10; ausente = `null`).
+const equipmentTarget = z.discriminatedUnion('location', [
+  z.strictObject({
+    location: z.literal('equipment'),
+    slot: z.enum(EQUIPMENT_SLOTS),
+  }),
+  z.strictObject({
+    location: z.literal('inventory'),
+    inventorySlotIndex: count,
+  }),
+])
+const blacksmithVisitSchema = z.strictObject({
+  source: z.literal('blacksmith'),
+  zoneId: id,
+  actionPointsSpent: z.number().int().min(1),
+  results: z
+    .array(
+      z.discriminatedUnion('operation', [
+        z.strictObject({
+          operation: z.literal('repair'),
+          target: equipmentTarget,
+          cardId: id,
+          gold: z.number().int(),
+          repairMarks: count,
+          skipped: z.boolean(),
+        }),
+        z.strictObject({
+          operation: z.literal('refine'),
+          target: equipmentTarget,
+          cardId: id,
+          targetLevel: z.number().int().min(1).max(10),
+          gold: z.number().int(),
+          roll: z.number().int().min(1).max(20).nullable(),
+          d20Bonus: count,
+          threshold: count,
+          success: z.boolean(),
+          broke: z.boolean(),
+          skipped: z.boolean(),
+        }),
+        z.strictObject({
+          operation: z.literal('craft'),
+          recipeCardId: id,
+          equipmentId: id,
+          gold: z.number().int(),
+          inventorySlotIndex: count,
+          skipped: z.boolean(),
+        }),
+      ])
+    )
+    .readonly(),
+})
 const v10PlayerFields = {
+  lastBlacksmithVisit: blacksmithVisitSchema.nullable().optional(),
   inventory: z.array(stateSlot),
   vault: z.strictObject({
     slots: z.array(stateSlot),
@@ -1148,6 +1200,9 @@ export class DrizzlePartyMapper {
             }),
             ...(m.player.lastBoosterOpening !== undefined && {
               lastBoosterOpening: m.player.lastBoosterOpening,
+            }),
+            ...(m.player.lastBlacksmithVisit !== undefined && {
+              lastBlacksmithVisit: m.player.lastBlacksmithVisit,
             }),
             deck: [...m.player.deck],
             hand: [...m.player.hand],

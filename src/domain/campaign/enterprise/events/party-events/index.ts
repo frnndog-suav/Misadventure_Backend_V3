@@ -7,6 +7,7 @@ import type {
   TPlayerClass,
 } from '@/domain/catalog/enterprise/value-objects/card'
 
+import type { TBlacksmithOperationResult } from '../../blacksmith'
 import type { TMarketOperationResult } from '../../market-trade'
 import type { TRecoverOption } from '../../party-action'
 
@@ -134,6 +135,15 @@ export interface MarketVisitedEvent extends DomainEvent {
   readonly goldLost: number
 }
 
+/** Ir ao Ferreiro aceito (README 12.2, 25; REQ-149): o que cada operação fez, na ordem. */
+export interface BlacksmithVisitedEvent extends DomainEvent {
+  readonly type: 'BlacksmithVisited'
+  readonly memberId: UniqueEntityID
+  readonly zoneId: string
+  readonly actionPointsSpent: number
+  readonly results: readonly TBlacksmithOperationResult[]
+}
+
 /** Carta destruída pelo Descartar do cofre (README 6.5; REQ-86); nada volta do limbo. */
 export interface SentToLimboEvent extends DomainEvent {
   readonly type: 'SentToLimbo'
@@ -195,6 +205,7 @@ export type TPartyEvent =
   | LabGrantAppliedEvent
   | VaultUsedEvent
   | MarketVisitedEvent
+  | BlacksmithVisitedEvent
   | SentToLimboEvent
   | ScavengedEvent
   | StatusExpiredEvent

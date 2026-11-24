@@ -406,6 +406,37 @@ export class TakePartyActionUseCase {
         }
         break
       }
+      case 'visitBlacksmith': {
+        const visited = party.visitBlacksmith(
+          action.operations,
+          await this.findBlacksmithCatalog(party),
+          this.clock.now()
+        )
+        if (visited.isLeft()) {
+          const refusal = visited.value
+          if (typeof refusal === 'object') {
+            return left(
+              new ActionNotAllowedError(
+                refusal.reason,
+                refusal.cardId,
+                refusal.operationIndex
+              )
+            )
+          }
+          switch (refusal) {
+            case 'sessionNotActive':
+              return left(new PartySessionNotActiveError())
+            case 'noActionPoints':
+            case 'zoneActionUnavailable':
+              return left(new ActionNotAllowedError(refusal))
+            default: {
+              const _exhaustive: never = refusal
+              return _exhaustive
+            }
+          }
+        }
+        break
+      }
       case 'scavenge': {
         const scavenged = party.scavenge(
           action.cardId,
@@ -754,6 +785,37 @@ export class TakePartyActionUseCase {
       zone: zone?.type === 'zone' ? zone : null,
       cards: [...cards.values()],
       collectionId,
+    }
+  }
+
+  /**
+   * O que o Ir ao Ferreiro precisa do catálogo (REQ-149): a carta da zona atual
+   * do membro da vez, o equipamento em uso, o inventário e os equipamentos que
+   * as receitas do inventário criam.
+   */
+  private async findBlacksmithCatalog(
+    party: Party
+  ): Promise<{ zone: TZoneCard | null; cards: TCard[] }> {
+    const player = party.members.find(({ id }) =>
+      id.equals(party.turn.memberId)
+    )?.player
+    if (!player) return { zone: null, cards: [] }
+    const zone = await this.cardCatalog.findCard(player.zoneId)
+    const cards = new Map<string, TCard>()
+    const load = async (cardId: string) => {
+      if (cards.has(cardId)) return
+      const card = await this.cardCatalog.findCard(cardId)
+      if (card) cards.set(cardId, card)
+    }
+    for (const cardId of Object.values(player.equipment))
+      if (cardId !== null) await load(cardId)
+    for (const { cardId } of player.inventory) await load(cardId)
+    for (const card of [...cards.values()])
+      if (card.type === 'item' && card.recipe)
+        await load(card.recipe.equipmentId)
+    return {
+      zone: zone?.type === 'zone' ? zone : null,
+      cards: [...cards.values()],
     }
   }
 

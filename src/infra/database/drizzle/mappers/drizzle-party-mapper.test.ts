@@ -1010,6 +1010,73 @@ describe('DrizzlePartyMapper', () => {
     ).toBeUndefined()
   })
 
+  it('REQ-149: ida e volta preserva lastBlacksmithVisit no save v10; save sem ele lê undefined', () => {
+    const lastBlacksmithVisit = {
+      source: 'blacksmith' as const,
+      zoneId: 'fixture.gray-harbor',
+      actionPointsSpent: 3,
+      results: [
+        {
+          operation: 'refine' as const,
+          target: { location: 'inventory' as const, inventorySlotIndex: 0 },
+          cardId: 'fixture.short-sword',
+          targetLevel: 7,
+          gold: -70,
+          roll: 11,
+          d20Bonus: 2,
+          threshold: 12,
+          success: true,
+          broke: false,
+          skipped: false,
+        },
+        {
+          operation: 'repair' as const,
+          target: { location: 'equipment' as const, slot: 'weapon' as const },
+          cardId: 'fixture.blade-of-dusk',
+          gold: 0,
+          repairMarks: 0,
+          skipped: true,
+        },
+        {
+          operation: 'craft' as const,
+          recipeCardId: 'fixture.sword-blueprint',
+          equipmentId: 'fixture.short-sword',
+          gold: -15,
+          inventorySlotIndex: 2,
+          skipped: false,
+        },
+      ],
+    }
+    const toRow = (party: Party) =>
+      ({
+        ...JSON.parse(JSON.stringify(DrizzlePartyMapper.toDrizzle(party))),
+        createdAt: party.createdAt,
+        savedAt: party.savedAt,
+      }) as TPartyRow
+    const withVisit = makeParty({
+      status: 'inSession',
+      members: [
+        PartyMember.create(
+          {
+            characterName: 'Lia',
+            kind: 'human',
+            player: makePlayerState({ lastBlacksmithVisit }),
+          },
+          new UniqueEntityID('member-1')
+        ),
+      ],
+    })
+
+    expect(
+      DrizzlePartyMapper.toDomain(toRow(withVisit)).members[0].player
+        .lastBlacksmithVisit
+    ).toEqual(lastBlacksmithVisit)
+    expect(
+      DrizzlePartyMapper.toDomain(toRow(makeParty({ status: 'inSession' })))
+        .members[0].player.lastBlacksmithVisit
+    ).toBeUndefined()
+  })
+
   it('REQ-144: ida e volta preserva lastBoosterOpening, a entrega pendente do booster e a fila; save sem eles lê undefined', () => {
     const lastBoosterOpening = {
       boosterCardId: 'fixture.booster',

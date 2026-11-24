@@ -81,6 +81,12 @@ import {
   wornStateOf,
 } from '../../equipment-state'
 import { addToInventory } from '../../inventory'
+import {
+  applyBlacksmithOperations,
+  describeBlacksmith,
+  type TBlacksmithRefusal,
+  type TBlacksmithView,
+} from '../../blacksmith'
 import { assembleMap, type TMapZone, type TPartyMap } from '../../map-assembly'
 import {
   applyMarketOperations,
@@ -117,6 +123,7 @@ import {
 import type {
   TPrepareOperation,
   TRecoverOption,
+  TBlacksmithOperation,
   TMarketOperation,
   TVaultOperation,
   TRandomEventAction,
@@ -245,6 +252,13 @@ export type TVisitMarketRefusal =
   | 'noActionPoints'
   | 'zoneActionUnavailable'
   | TMarketRefusal
+
+/** Por que o Ir ao Ferreiro foi recusado (REQ-149; D-132). */
+export type TVisitBlacksmithRefusal =
+  | 'sessionNotActive'
+  | 'noActionPoints'
+  | 'zoneActionUnavailable'
+  | TBlacksmithRefusal
 
 /** Por que o Vasculhar foi recusado (REQ-92; D-88). */
 export type TScavengeRefusal =
@@ -5252,6 +5266,80 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       collectionId:
         dimension?.type === 'dimension' ? dimension.collectionId : null,
       state: { markets: this.markets, pool: this.marketPool },
+    })
+  }
+
+  /**
+   * Ir ao Ferreiro (README 12.2, 25; REQ-149, REQ-150, REQ-152; D-132). Quem
+   * age é o membro da vez; gasta **todos** os pontos restantes. `catalog.zone`
+   * é a carta da zona atual; `cards`, os equipamentos, receitas e o que as
+   * receitas criam. Ordem das recusas: fora de sessão, sem pontos, zona sem
+   * `visitBlacksmith`, a primeira operação que falha (conferida sem rolar, com
+   * `operationIndex`). Recusado, nada muda: nem ponto, ouro, cartas ou RNG.
+   * Aceito: grava `lastBlacksmithVisit` e registra `BlacksmithVisited`.
+   */
+  visitBlacksmith(
+    operations: readonly TBlacksmithOperation[],
+    catalog: { zone: TZoneCard | null; cards: readonly TCard[] },
+    at: Date
+  ): Either<TVisitBlacksmithRefusal, void> {
+    if (this.props.status === 'idle') return left('sessionNotActive')
+    const actionPoints = this.props.turn.actionPoints
+    if (actionPoints < 1) return left('noActionPoints')
+    const { zone } = catalog
+    if (!zone?.zoneActions.includes('visitBlacksmith') || !zone.blacksmith) {
+      return left('zoneActionUnavailable')
+    }
+
+    const index = this.actorIndex()
+    const actor = this.props.members[index]
+    const rng = SeededRng.fromState(this.props.rngState)
+    const applied = applyBlacksmithOperations({
+      player: actor.player,
+      config: this.props.config,
+      cards: new Map(catalog.cards.map((card) => [card.id, card])),
+      operations,
+      zoneId: zone.id,
+      actionPointsSpent: actionPoints,
+      rng,
+    })
+    if (applied.isLeft()) return left(applied.value)
+    const { player, result } = applied.value
+
+    this.props.rngState = rng.state()
+    this.props.turn = { ...this.props.turn, actionPoints: 0 }
+    this.replaceActor(index, { ...player, lastBlacksmithVisit: result })
+    this.props.savedAt = at
+    this.addDomainEvent({
+      type: 'BlacksmithVisited',
+      memberId: actor.id,
+      zoneId: result.zoneId,
+      actionPointsSpent: result.actionPointsSpent,
+      results: result.results,
+      occurredAt: at,
+      aggregateId: this.id,
+    })
+    return right(undefined)
+  }
+
+  /**
+   * Projeção do ferreiro para o membro da vez numa zona com ferreiro
+   * (REQ-149); `null` para os demais, ou se a carta da zona não está em
+   * `cards`. `cards` precisa trazer o equipamento em uso e o inventário do
+   * membro, e as cartas que as receitas criam não são necessárias.
+   */
+  describeBlacksmith(
+    member: PartyMember,
+    cards: ReadonlyMap<string, TCard>
+  ): TBlacksmithView | null {
+    if (!this.props.turn.memberId.equals(member.id)) return null
+    const zone = cards.get(member.player.zoneId)
+    if (zone?.type !== 'zone') return null
+    return describeBlacksmith({
+      config: this.props.config,
+      player: member.player,
+      cards,
+      zone,
     })
   }
 

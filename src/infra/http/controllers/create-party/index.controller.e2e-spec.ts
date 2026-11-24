@@ -102,6 +102,7 @@ describe('POST /parties (e2e)', () => {
               'recover',
               'adjustDeck',
               'useVault',
+              'visitBlacksmith',
               'visitMarket',
               'startEvent',
               'endTurn',
@@ -155,6 +156,11 @@ describe('POST /parties (e2e)', () => {
             // FEAT-16 (REQ-140): o fator e a vitrine são sorteados; os valores ficam no e2e do mercado.
             market: expect.objectContaining({ zoneId: 'fixture.gray-harbor' }),
             lastMarketVisit: null,
+            // FEAT-17 (REQ-149): os valores ficam no e2e do ferreiro.
+            blacksmith: expect.objectContaining({
+              zoneId: 'fixture.gray-harbor',
+            }),
+            lastBlacksmithVisit: null,
             lastBoosterOpening: null,
             statuses: [],
             activatableEffects: [],

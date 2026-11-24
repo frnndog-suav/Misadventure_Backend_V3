@@ -287,3 +287,39 @@ describe('availableActions — scavenge (REQ-93)', () => {
     ])
   })
 })
+
+describe('availableActions — visitBlacksmith (REQ-149)', () => {
+  const memberId = new UniqueEntityID('member-1')
+  const inSession = () => makeParty({ status: 'inSession' })
+
+  it('REQ-149: zona com visitBlacksmith e pontos → entra logo antes de visitMarket', () => {
+    expect(
+      availableActions(inSession(), memberId, new Set(), [
+        'useVault',
+        'visitBlacksmith',
+        'visitMarket',
+      ])
+    ).toEqual([
+      'move',
+      'recover',
+      'adjustDeck',
+      'useVault',
+      'visitBlacksmith',
+      'visitMarket',
+      'endTurn',
+    ])
+  })
+
+  it('REQ-149: sem visitBlacksmith na zona ou com 0 pontos → não entra', () => {
+    expect(
+      availableActions(inSession(), memberId, new Set(), ['visitMarket'])
+    ).not.toContain('visitBlacksmith')
+    const party = inSession()
+    party.move(MINE, party.savedAt)
+    party.move(HARBOR, party.savedAt)
+    party.move(MINE, party.savedAt)
+    expect(
+      availableActions(party, memberId, new Set(), ['visitBlacksmith'])
+    ).toEqual(['endTurn'])
+  })
+})
