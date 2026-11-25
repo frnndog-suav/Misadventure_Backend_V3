@@ -151,6 +151,36 @@ describe('TakePartyActionUseCase', () => {
     expect(moved.memberId.equals(party.hostMemberId)).toBe(true)
   })
 
+  it('REQ-161: viaZoneId sem montaria → 409 noMount, sem gravar', async () => {
+    const partyId = await seed()
+    const save = vi.spyOn(repository, 'save')
+
+    const result = await sut.execute({
+      partyId,
+      body: { type: 'move', zoneId: MINE, viaZoneId: HARBOR },
+    })
+
+    expect(result.isLeft() && result.value).toMatchObject({
+      code: 'ACTION_NOT_ALLOWED',
+      details: { reason: 'noMount' },
+    })
+    expect(save).not.toHaveBeenCalled()
+  })
+
+  it('REQ-161: viaZoneId fora do mapa → 400 zoneNotInMap no campo viaZoneId', async () => {
+    const partyId = await seed()
+
+    const result = await sut.execute({
+      partyId,
+      body: { type: 'move', zoneId: MINE, viaZoneId: 'x' },
+    })
+
+    expect(result.isLeft() && result.value).toMatchObject({
+      code: 'ACTION_INVALID',
+      details: { fields: [{ field: 'viaZoneId', reason: 'zoneNotInMap' }] },
+    })
+  })
+
   it('REQ-51: mover de novo na sequência, inclusive de volta, é aceito', async () => {
     const partyId = await seed()
 

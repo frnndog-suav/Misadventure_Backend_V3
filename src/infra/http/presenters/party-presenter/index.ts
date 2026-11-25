@@ -38,7 +38,10 @@ import {
   type TBoosterOpeningResult,
 } from '@/domain/campaign/enterprise/booster'
 import { availableActions } from '@/domain/campaign/enterprise/available-actions'
-import { connectedZones } from '@/domain/campaign/enterprise/connected-zones'
+import {
+  moveRoutes,
+  type TMoveRoute,
+} from '@/domain/campaign/enterprise/connected-zones'
 import { effectiveModifiers } from '@/domain/campaign/enterprise/effective-modifiers'
 import { mountCardOf } from '@/domain/campaign/enterprise/mount'
 import {
@@ -141,6 +144,7 @@ export interface TPlayerStateHttp {
   zoneId: string
   respawnZoneId: string
   moveTargets: string[]
+  moveRoutes: TMoveRoute[]
   /** FEAT-08 (REQ-58, D-65). */
   availableActions: TPartyActionType[]
   /** FEAT-09 (REQ-62, D-69). */
@@ -352,6 +356,7 @@ function playerToHTTP(
   // Zona e Carta de Dimensão lidas no catálogo (D-81, D-92, D-93).
   const zoneCard = cards.get(player.zoneId)
   const zone = zoneCard?.type === 'zone' ? zoneCard : null
+  const routes = moveRoutes(map, player.zoneId, player.mount !== null)
   const dimensionCard = cards.get(party.dimension.dimensionCardId)
   const dimension = dimensionCard?.type === 'dimension' ? dimensionCard : null
   const catalogCards = [...cards.values()]
@@ -419,7 +424,8 @@ function playerToHTTP(
     attributeDiscardPileCount: player.discard.length,
     zoneId: player.zoneId,
     respawnZoneId: player.respawnZoneId,
-    moveTargets: connectedZones(map, player.zoneId),
+    moveTargets: routes.map((route) => route.zoneId),
+    moveRoutes: routes,
     availableActions: availableActions(
       party,
       member.id,

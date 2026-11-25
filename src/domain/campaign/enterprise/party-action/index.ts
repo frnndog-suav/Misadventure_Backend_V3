@@ -151,7 +151,7 @@ export type TPartyAction =
   | TResolveTriggeredEffectAction
   | TCombatAction
   | TResolveRewardAction
-  | { type: 'move'; zoneId: string }
+  | { type: 'move'; zoneId: string; viaZoneId?: string }
   | { type: 'endTurn' }
   | { type: 'saveRespawnPoint' }
   | { type: 'recover'; option: TRecoverOption }
@@ -166,11 +166,12 @@ export type TPartyAction =
 /** Os `type` possíveis, para `availableActions` (REQ-58). */
 export type TPartyActionType = TPartyAction['type']
 
-/** Motivos de CONTRATO FEAT-07 e FEAT-09 (`ActionInvalidDetails`). `zoneNotInMap` vem de `Party.move`. */
+/** Motivos de CONTRATO FEAT-07, FEAT-09 e FEAT-18 (`ActionInvalidDetails`). `zoneNotInMap` vem de `Party.move`. */
 export type TActionIssue =
   | { field: null; reason: 'invalidBody' }
   | { field: 'type'; reason: 'required' | 'notString' | 'unknownAction' }
   | { field: 'zoneId'; reason: 'required' | 'notString' | 'zoneNotInMap' }
+  | { field: 'viaZoneId'; reason: 'notString' | 'zoneNotInMap' }
   | { field: 'option'; reason: 'required' | 'notString' | 'unknownOption' }
   | { field: 'build'; reason: 'required' | 'notArray' }
   | {
@@ -1440,19 +1441,26 @@ function parseMove(
   body: Record<string, unknown>
 ): Either<TActionIssue[], TPartyAction> {
   const issues: TActionIssue[] = []
-  const { zoneId } = body
+  const { zoneId, viaZoneId } = body
   if (zoneId === undefined) {
     issues.push({ field: 'zoneId', reason: 'required' })
   } else if (typeof zoneId !== 'string') {
     issues.push({ field: 'zoneId', reason: 'notString' })
   }
+  if (viaZoneId !== undefined && typeof viaZoneId !== 'string') {
+    issues.push({ field: 'viaZoneId', reason: 'notString' })
+  }
   for (const key of Object.keys(body)) {
-    if (key !== 'type' && key !== 'zoneId') {
+    if (key !== 'type' && key !== 'zoneId' && key !== 'viaZoneId') {
       issues.push({ field: key, reason: 'unknownKey' })
     }
   }
   if (issues.length > 0 || typeof zoneId !== 'string') return left(issues)
-  return right({ type: 'move', zoneId })
+  return right(
+    typeof viaZoneId === 'string'
+      ? { type: 'move', zoneId, viaZoneId }
+      : { type: 'move', zoneId }
+  )
 }
 
 const RECEIVE_SPACES: readonly TReceiveSpace[] = [

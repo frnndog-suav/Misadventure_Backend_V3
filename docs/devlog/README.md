@@ -109,9 +109,10 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 089 | T-73 | [Campanhas da FEAT-17](089-T-73-campanhas-da-feat-17.md) | concluída |
 | 090 | FEAT-17 | [FEAT-17 validada](090-FEAT-17-validada.md) | concluída |
 | 091 | T-74 | [Conteúdo da montaria](091-T-74-conteudo-da-montaria.md) | aguardando revisão |
-| 092 | T-75 | [Estado da montaria e save v11](092-T-75-estado-da-montaria.md) | aguardando revisão |
-| 093 | T-76 | [Estábulo](093-T-76-estabulo.md) | aguardando revisão |
+| 092 | T-75 | [Estado da montaria e save v11](092-T-75-estado-da-montaria.md) | concluída |
+| 093 | T-76 | [Estábulo](093-T-76-estabulo.md) | concluída |
 | 094 | T-77 | [Espaço da montaria e transferência](094-T-77-espaco-da-montaria.md) | concluída |
+| 095 | T-78 | [Movimentar com montaria](095-T-78-movimentar-com-montaria.md) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

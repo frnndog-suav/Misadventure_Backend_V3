@@ -112,6 +112,32 @@ describe('parsePartyAction', () => {
     expect(result.isRight()).toBe(true)
   })
 
+  it('REQ-161: move com viaZoneId texto → a ação com viaZoneId', () => {
+    const result = parsePartyAction({
+      type: 'move',
+      zoneId: 'a',
+      viaZoneId: 'b',
+    })
+
+    expect(result.isRight()).toBe(true)
+    if (result.isRight())
+      expect(result.value).toEqual({
+        type: 'move',
+        zoneId: 'a',
+        viaZoneId: 'b',
+      })
+  })
+
+  it('REQ-161: viaZoneId que não é texto → notString', () => {
+    const result = parsePartyAction({ type: 'move', zoneId: 'a', viaZoneId: 3 })
+
+    expect(result.isLeft()).toBe(true)
+    if (result.isLeft())
+      expect(result.value).toEqual([
+        { field: 'viaZoneId', reason: 'notString' },
+      ])
+  })
+
   describe('recover (REQ-64)', () => {
     it.each(['drawToHand', 'shuffleHand', 'shuffleDiscard'])(
       'REQ-64: option %s → a ação',

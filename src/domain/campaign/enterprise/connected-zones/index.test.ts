@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { TPartyMap } from '../map-assembly'
-import { connectedZones } from '.'
+import { connectedZones, moveRoutes } from '.'
 
 const zone = (zoneId: string, x: number, y: number) => ({
   zoneId,
@@ -64,5 +64,74 @@ describe('connectedZones', () => {
 
   it('REQ-50: zona fora do mapa → lista vazia', () => {
     expect(connectedZones(MAP, 'nowhere')).toEqual([])
+  })
+})
+
+// Mapa de dois caminhos: a—b—d e a—c—d, mais e—a; f isolada (T-78; README 26, E21).
+const TWO_PATHS: TPartyMap = {
+  zones: ['a', 'b', 'c', 'd', 'e', 'f'].map((id, i) => zone(id, i, 0)),
+  crossings: [
+    { zoneIds: ['b', 'a'] },
+    { zoneIds: ['d', 'b'] },
+    { zoneIds: ['a', 'c'] },
+    { zoneIds: ['c', 'd'] },
+    { zoneIds: ['e', 'a'] },
+  ],
+}
+
+describe('moveRoutes', () => {
+  it('REQ-161: sem montaria, só as zonas a 1 travessia, direct true e via vazio', () => {
+    expect(moveRoutes(TWO_PATHS, 'a', false)).toEqual([
+      { zoneId: 'b', direct: true, via: [] },
+      { zoneId: 'c', direct: true, via: [] },
+      { zoneId: 'e', direct: true, via: [] },
+    ])
+  })
+
+  it('REQ-161: com montaria, entram as zonas a 2 travessias (exceto a atual), em ordem de id', () => {
+    expect(moveRoutes(TWO_PATHS, 'a', true).map((r) => r.zoneId)).toEqual([
+      'b',
+      'c',
+      'd',
+      'e',
+    ])
+  })
+
+  it('REQ-161 (D-145): dois caminhos para o mesmo destino aparecem em via, em ordem de id', () => {
+    const d = moveRoutes(TWO_PATHS, 'a', true).find((r) => r.zoneId === 'd')
+    expect(d).toEqual({ zoneId: 'd', direct: false, via: ['b', 'c'] })
+  })
+
+  it('REQ-161: destino a 1 travessia sem meio possível; destino a 2 com dois meios', () => {
+    const routes = moveRoutes(TWO_PATHS, 'b', true)
+    expect(routes.find((r) => r.zoneId === 'a')).toEqual({
+      zoneId: 'a',
+      direct: true,
+      via: [],
+    })
+    expect(routes.find((r) => r.zoneId === 'c')).toEqual({
+      zoneId: 'c',
+      direct: false,
+      via: ['a', 'd'],
+    })
+  })
+
+  it('REQ-161: triângulo — destino direto com meio possível', () => {
+    const triangle: TPartyMap = {
+      zones: [zone('a', 0, 0), zone('b', 1, 0), zone('c', 0, 1)],
+      crossings: [
+        { zoneIds: ['a', 'b'] },
+        { zoneIds: ['b', 'c'] },
+        { zoneIds: ['a', 'c'] },
+      ],
+    }
+    expect(moveRoutes(triangle, 'a', true)).toEqual([
+      { zoneId: 'b', direct: true, via: ['c'] },
+      { zoneId: 'c', direct: true, via: ['b'] },
+    ])
+  })
+
+  it('REQ-161: zona isolada não tem destinos', () => {
+    expect(moveRoutes(TWO_PATHS, 'f', true)).toEqual([])
   })
 })

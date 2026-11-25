@@ -45,7 +45,7 @@ import {
   prepareEffect,
   type TActivateRefusal,
 } from '../../activatable-effects'
-import { connectedZones } from '../../connected-zones'
+import { moveRoutes } from '../../connected-zones'
 import {
   combatAttackTargets,
   combatAbilityUsage,
@@ -4732,9 +4732,15 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
    */
   move(
     zoneId: string,
-    at: Date
+    at: Date,
+    viaZoneId?: string
   ): Either<
-    'sessionNotActive' | 'zoneNotInMap' | 'noActionPoints' | 'notConnected',
+    | 'sessionNotActive'
+    | 'zoneNotInMap'
+    | 'viaZoneNotInMap'
+    | 'noActionPoints'
+    | 'noMount'
+    | 'notConnected',
     void
   > {
     switch (this.props.status) {
@@ -4752,6 +4758,12 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     if (!map.zones.some((zone) => zone.zoneId === zoneId)) {
       return left('zoneNotInMap')
     }
+    if (
+      viaZoneId !== undefined &&
+      !map.zones.some((zone) => zone.zoneId === viaZoneId)
+    ) {
+      return left('viaZoneNotInMap')
+    }
 
     if (this.props.turn.actionPoints < 1) {
       return left('noActionPoints')
@@ -4762,8 +4774,19 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     )
     const actor = this.props.members[index]
     const fromZoneId = actor.player.zoneId
-    if (!connectedZones(map, fromZoneId).includes(zoneId)) {
-      return left('notConnected')
+    const withMount = actor.player.mount !== null
+    if (viaZoneId !== undefined && !withMount) return left('noMount')
+    const route = moveRoutes(map, fromZoneId, withMount).find(
+      (candidate) => candidate.zoneId === zoneId
+    )
+    if (!route) return left('notConnected')
+    // D-145: sem via, a 1 travessia é movimento simples; só a 2, o primeiro meio por id.
+    let via: string | null
+    if (viaZoneId !== undefined) {
+      if (!route.via.includes(viaZoneId)) return left('notConnected')
+      via = viaZoneId
+    } else {
+      via = route.direct ? null : route.via[0]
     }
 
     this.props.turn = {
@@ -4777,6 +4800,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       memberId: actor.id,
       fromZoneId,
       toZoneId: zoneId,
+      viaZoneId: via,
       occurredAt: at,
       aggregateId: this.id,
     })

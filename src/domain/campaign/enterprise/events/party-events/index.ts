@@ -56,6 +56,8 @@ export interface PlayerMovedEvent extends DomainEvent {
   readonly memberId: UniqueEntityID
   readonly fromZoneId: string
   readonly toZoneId: string
+  /** REQ-161: zona do meio da montaria; `null` no movimento simples. */
+  readonly viaZoneId: string | null
 }
 
 /** Uma vez começou (REQ-55 na criação, REQ-57 ao encerrar a anterior). */

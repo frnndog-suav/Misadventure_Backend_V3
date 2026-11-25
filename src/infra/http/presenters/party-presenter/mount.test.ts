@@ -243,3 +243,73 @@ describe('PartyPresenter — saves de antes da T-77 (REQ-159; D-152 h)', () => {
     expect(left.lastRewardDelivery?.space).toBeNull()
   })
 })
+
+describe('PartyPresenter — moveTargets e moveRoutes com montaria (REQ-161)', () => {
+  const zone = (zoneId: string, x: number) => ({
+    zoneId,
+    x,
+    y: 0,
+    arrows: [] as const,
+  })
+  // a—b—d e a—c—d.
+  const dimension = {
+    dimensionCardId: 'fixture.test-dimension',
+    startingCityZoneId: 'a',
+    map: {
+      zones: ['a', 'b', 'c', 'd'].map(zone),
+      crossings: [
+        { zoneIds: ['a', 'b'] as const },
+        { zoneIds: ['b', 'd'] as const },
+        { zoneIds: ['a', 'c'] as const },
+        { zoneIds: ['c', 'd'] as const },
+      ],
+    },
+  }
+  function presentMoves(withMount: boolean) {
+    const host = PartyMember.create(
+      {
+        characterName: 'Lia',
+        kind: 'human',
+        player: makePlayerState({
+          zoneId: 'a',
+          mount: withMount
+            ? { cardId: PONY.id, inventory: [], tcgFolder: [] }
+            : null,
+        }),
+      },
+      new UniqueEntityID('member-1')
+    )
+    const party = makeParty({
+      status: 'inSession',
+      members: [host],
+      hostMemberId: host.id,
+      dimension,
+      turn: { round: 1, memberId: host.id, actionPoints: 3 },
+    })
+    return PartyPresenter.toHTTP(party, CARDS, []).members[0].player as {
+      moveTargets: string[]
+      moveRoutes: { zoneId: string; direct: boolean; via: string[] }[]
+    }
+  }
+
+  it('REQ-161: sem montaria, moveTargets só a 1 travessia e moveRoutes com direct true e via vazio, na mesma ordem', () => {
+    const player = presentMoves(false)
+
+    expect(player.moveTargets).toEqual(['b', 'c'])
+    expect(player.moveRoutes).toEqual([
+      { zoneId: 'b', direct: true, via: [] },
+      { zoneId: 'c', direct: true, via: [] },
+    ])
+  })
+
+  it('REQ-161: com montaria, moveTargets inclui a 2 travessias e moveRoutes traz os meios, na mesma ordem', () => {
+    const player = presentMoves(true)
+
+    expect(player.moveTargets).toEqual(['b', 'c', 'd'])
+    expect(player.moveRoutes).toEqual([
+      { zoneId: 'b', direct: true, via: [] },
+      { zoneId: 'c', direct: true, via: [] },
+      { zoneId: 'd', direct: false, via: ['b', 'c'] },
+    ])
+  })
+})

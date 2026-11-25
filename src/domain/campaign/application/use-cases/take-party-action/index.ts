@@ -230,7 +230,11 @@ export class TakePartyActionUseCase {
         break
       }
       case 'move': {
-        const moved = party.move(action.zoneId, this.clock.now())
+        const moved = party.move(
+          action.zoneId,
+          this.clock.now(),
+          action.viaZoneId
+        )
         if (moved.isLeft()) {
           const reason = moved.value
           switch (reason) {
@@ -242,8 +246,16 @@ export class TakePartyActionUseCase {
                   { field: 'zoneId', reason: 'zoneNotInMap' },
                 ])
               )
+            case 'viaZoneNotInMap':
+              return left(
+                new ActionInvalidError([
+                  { field: 'viaZoneId', reason: 'zoneNotInMap' },
+                ])
+              )
             case 'noActionPoints':
               return left(new ActionNotAllowedError('noActionPoints'))
+            case 'noMount':
+              return left(new ActionNotAllowedError('noMount'))
             case 'notConnected':
               return left(new ActionNotAllowedError('notConnected'))
             default: {
