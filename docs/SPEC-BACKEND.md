@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 1.00 · **Data:** 2026-11-25
+> **Versão da spec:** 1.01 · **Data:** 2026-11-25
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -804,7 +804,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 - [x] **T-77 — Espaço da montaria e transferência (REQ-159, REQ-160, D-143, D-144).** Destino automático em todas as chegadas, regras de espaço somadas (booster, singles, J1), Ajustar deck com a pasta extra, operação de transferência, `ReceiveSpace` em todas as saídas e `space` no descarte da recompensa pendente (D-148). Cobrir os cenários "Destino pronto" e "Descarte com montaria" e cada chegada com o espaço principal cheio e as recusas sem efeito. Concluída no devlog 094 (D-152).
 - [x] **T-78 — Movimentar com montaria (REQ-161, D-145).** Destinos a 2 travessias, zonas do meio na projeção, `viaZoneId`, `PlayerMoved`, recusas. Cobrir os dois caminhos possíveis e o padrão por `id`. Concluída no devlog 095 (D-153).
 - [x] **T-79 — Montaria como recompensa (REQ-162).** Conteúdo aceitando `mount` nas recompensas, entrega sem montaria, volta ao deck ou limbo com montaria. Concluída no devlog 096 (D-154).
-- [ ] **T-80 — Campanhas e validação integrada (REQ-155 a REQ-163).** Catálogo temporário e campanhas no padrão da T-73 (Estábulo em zona Rural, montaria com conteúdo para testar `mountNotEmpty`, inventário cheio para ver o transbordo, mapa com dois caminhos a 2 zonas). Depois das verificações do autor, `implementado (BE)`; `validado` após o retorno integrado.
+- [ ] **T-80 — Campanhas e validação integrada (REQ-155 a REQ-163).** Catálogo temporário e campanhas no padrão da T-73 (Estábulo em zona Rural, montaria com conteúdo para testar `mountNotEmpty`, inventário cheio para ver o transbordo, mapa com dois caminhos a 2 zonas). Depois das verificações do autor, `implementado (BE)`; `validado` após o retorno integrado. Preparador e campanhas no devlog 097 (FEAT-18 `implementado (BE)` no CONTRATO v0.93).
 
 ## 8. Histórico
 
@@ -910,6 +910,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.98 | 2026-11-25 | T-77 marcada como concluída após o autor confirmar que a suíte e2e passou (devlog 094). |
 | 0.99 | 2026-11-25 | T-78 concluída (devlog 095): `moveRoutes`, `move` com `viaZoneId` e montaria, `PlayerMoved.viaZoneId`, `moveRoutes` na projeção (D-153). |
 | 1.00 | 2026-11-25 | T-79 concluída (devlog 096): montaria como recompensa (entrega, volta ao deck, limbo) e `isRewardCard` com `mount` (D-154). |
+| 1.01 | 2026-11-25 | T-80: preparador `test/prepare-feat-18.cjs` e campanhas da FEAT-18 (devlog 097); FEAT-18 `implementado (BE)` no CONTRATO v0.93. A T-80 fecha com o `validado`. |
 
 ## Apêndice A — Conteúdo de teste
 

@@ -114,6 +114,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 094 | T-77 | [Espaço da montaria e transferência](094-T-77-espaco-da-montaria.md) | concluída |
 | 095 | T-78 | [Movimentar com montaria](095-T-78-movimentar-com-montaria.md) | concluída |
 | 096 | T-79 | [Montaria como recompensa](096-T-79-montaria-como-recompensa.md) | aguardando revisão |
+| 097 | T-80 | [Campanhas da FEAT-18](097-T-80-campanhas-da-feat-18.md) | aguardando validação do FE |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
