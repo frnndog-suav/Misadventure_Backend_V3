@@ -229,6 +229,31 @@ describe('Party.scavenge (REQ-91, REQ-92, REQ-96)', () => {
     ])
   })
 
+  it('REQ-159: inventário cheio com montaria → o achado vai ao inventário extra; delivery e space mountInventory', () => {
+    const party = partyOf(
+      {
+        mount: {
+          cardId: 'fixture.plow-horse',
+          inventory: [],
+          tcgFolder: [],
+        },
+      },
+      {
+        config: {
+          ...GAME_CONFIG_DEFAULTS,
+          inventoryCapacity: 1,
+          mountInventorySlots: 1,
+        },
+      }
+    )
+    expect(run(party, FISH.id).isRight()).toBe(true)
+    const player = playerOf(party)
+    expect(player.inventory).toEqual([slot(ROD.id)])
+    expect(player.mount?.inventory).toEqual([slot(FISH.id)])
+    expect(player.lastScavenge?.delivery).toBe('mountInventory')
+    expect(player.lastRewardDelivery?.space).toBe('mountInventory')
+  })
+
   it('REQ-91: carta que empilha e já tem slot → soma no slot (REQ-70)', () => {
     const party = partyOf({ inventory: [slot(ROD.id), slot(FISH.id, 2)] })
 

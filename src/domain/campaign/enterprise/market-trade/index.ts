@@ -14,8 +14,15 @@ import {
   DEFAULT_EQUIPMENT_STATE,
   type TEquipmentState,
 } from '../equipment-state'
-import { addToInventory } from '../inventory'
-import type { TMountState } from '../mount'
+import {
+  receiveAttribute,
+  receiveCapacitiesOf,
+  receiveCard,
+  receiveResource,
+  type TMountState,
+  type TReceivedPart,
+  type TReceiveSpace,
+} from '../mount'
 import {
   capacitiesOf,
   departSingle,
@@ -27,7 +34,6 @@ import {
   type TMarketsState,
 } from '../markets'
 import type { TMarketOperation } from '../party-action'
-import { sortedByCardId } from '../starting-player'
 import { pickFromSlots } from '../vault'
 
 /**
@@ -338,7 +344,7 @@ export type TMarketView = Readonly<{
         offer: {
           cardId: string
           price: number
-          destination: 'inventory' | 'tcgFolder'
+          destination: TReceiveSpace
         } | null
       }[]
     | null
@@ -403,10 +409,15 @@ export function describeMarket(input: {
                     state.pool.find((entry) => entry.cardId === card.id)
                       ?.departed ?? 0
                   ),
+                  // REQ-159: onde a cópia entraria agora (não cabe → o principal).
                   destination:
-                    card.type === 'attribute'
-                      ? ('tcgFolder' as const)
-                      : ('inventory' as const),
+                    receiveCard(
+                      player,
+                      card,
+                      1,
+                      receiveCapacitiesOf(config, player.expansions)
+                    )?.received[0].space ??
+                    (card.type === 'attribute' ? 'tcgFolder' : 'inventory'),
                 },
         }
       })
@@ -474,14 +485,23 @@ export type TMarketOperationResult =
       cardId: string
       quantity: number
       copiesReceived: number
+      /** REQ-159: quanto entrou em cada espaço; ausente nos saves de antes da T-77 (D-152). */
+      received?: readonly TReceivedPart<'inventory' | 'mountInventory'>[]
       gold: number
     }
-  | { operation: 'buyBooster'; cardId: string; quantity: number; gold: number }
+  | {
+      operation: 'buyBooster'
+      cardId: string
+      quantity: number
+      /** REQ-159: quanto entrou em cada espaço; ausente nos saves de antes da T-77 (D-152). */
+      received?: readonly TReceivedPart<'inventory' | 'mountInventory'>[]
+      gold: number
+    }
   | {
       operation: 'buySingle'
       slotIndex: number
       cardId: string
-      destination: 'inventory' | 'tcgFolder'
+      destination: TReceiveSpace
       gold: number
     }
   | {
@@ -540,9 +560,6 @@ export type TMarketOutcome = Readonly<{
   result: TMarketVisitResult
 }>
 
-const folderSize = (folder: TPlayerState['tcgFolder']): number =>
-  folder.reduce((sum, { copies }) => sum + copies, 0)
-
 /**
  * Aplica as operações em ordem (REQ-140 a REQ-142; D-118), cada uma sobre o
  * resultado da anterior. Devolve o novo estado ou a primeira recusa; o RNG só
@@ -591,6 +608,26 @@ export function applyMarketOperations(input: {
       ),
     ]
     inventory = next
+  }
+  /** REQ-159: chegada de recurso com transbordo para o inventário extra. */
+  const receiveItems = (
+    card: Parameters<typeof receiveResource>[0]['card'],
+    quantity: number
+  ) => {
+    const out = receiveResource({
+      inventory,
+      mount,
+      card,
+      quantity,
+      capacities: {
+        inventory: config.inventoryCapacity,
+        mountInventory: config.mountInventorySlots,
+      },
+    })
+    if (out === null) return null
+    grow(out.inventory)
+    mount = out.mount
+    return out.received
   }
 
   /** Venda: o ouro acima da bolsa é perdido (REQ-142, REQ-158). */
@@ -642,20 +679,15 @@ export function applyMarketOperations(input: {
           stockPurchasePrice(card.stockPrice, factorPercent) * quantity
         if (gold < total) return refuse('notEnoughGold', cardId)
         const copies = card.stockQuantity * quantity
-        const added = addToInventory(
-          inventory,
-          card,
-          copies,
-          config.inventoryCapacity
-        )
+        const added = receiveItems(card, copies)
         if (added === null) return refuse('inventoryFull', cardId)
-        grow(added)
         gold -= total
         results.push({
           operation: 'buyStock',
           cardId,
           quantity,
           copiesReceived: copies,
+          received: added,
           gold: -total,
         })
         break
@@ -668,19 +700,14 @@ export function applyMarketOperations(input: {
         }
         const total = config.boosterPrice * quantity
         if (gold < total) return refuse('notEnoughGold', cardId)
-        const added = addToInventory(
-          inventory,
-          card,
-          quantity,
-          config.inventoryCapacity
-        )
+        const added = receiveItems(card, quantity)
         if (added === null) return refuse('inventoryFull', cardId)
-        grow(added)
         gold -= total
         results.push({
           operation: 'buyBooster',
           cardId,
           quantity,
+          received: added,
           gold: -total,
         })
         break
@@ -709,27 +736,27 @@ export function applyMarketOperations(input: {
           state.pool.find((entry) => entry.cardId === cardId)?.departed ?? 0
         )
         if (gold < price) return refuse('notEnoughGold', cardId)
+        let destination: TReceiveSpace
         if (card.type === 'attribute') {
-          if (
-            folderSize(tcgFolder) + 1 >
-            capacitiesOf(config, expansions).tcgFolder
-          ) {
-            return refuse('tcgFolderFull', cardId)
-          }
-          const existing = tcgFolder.find((entry) => entry.cardId === cardId)
-          tcgFolder = sortedByCardId([
-            ...tcgFolder.filter((entry) => entry.cardId !== cardId),
-            { cardId, copies: (existing?.copies ?? 0) + 1 },
-          ])
+          // REQ-159: a pasta e, cheia, a pasta extra.
+          const added = receiveAttribute({
+            tcgFolder,
+            mount,
+            cardId,
+            quantity: 1,
+            capacities: {
+              tcgFolder: capacitiesOf(config, expansions).tcgFolder,
+              mountTcgFolder: config.mountFolderCapacity,
+            },
+          })
+          if (added === null) return refuse('tcgFolderFull', cardId)
+          tcgFolder = added.tcgFolder
+          mount = added.mount
+          destination = added.received[0].space
         } else {
-          const added = addToInventory(
-            inventory,
-            card,
-            1,
-            config.inventoryCapacity
-          )
+          const added = receiveItems(card, 1)
           if (added === null) return refuse('inventoryFull', cardId)
-          grow(added)
+          destination = added[0].space
         }
         gold -= price
         state = departSingle(
@@ -744,7 +771,7 @@ export function applyMarketOperations(input: {
           operation: 'buySingle',
           slotIndex,
           cardId,
-          destination: card.type === 'attribute' ? 'tcgFolder' : 'inventory',
+          destination,
           gold: -price,
         })
         break

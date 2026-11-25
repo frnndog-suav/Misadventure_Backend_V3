@@ -185,6 +185,7 @@ describe('Party.visitMarket — lote (REQ-140 a REQ-142; D-118)', () => {
           cardId: P.id,
           quantity: 2,
           copiesReceived: 2,
+          received: [{ space: 'inventory', quantity: 2 }],
           gold: -12,
         },
         {

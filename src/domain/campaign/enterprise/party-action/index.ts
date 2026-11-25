@@ -4,6 +4,7 @@ import {
   type TEquipmentSlot,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import { MARKET_EXPANSIONS, type TMarketExpansion } from '../markets'
+import type { TReceiveSpace } from '../mount'
 import type { TResolveRewardAction, TRewardDiscard } from '../rewards'
 import type { TQuestAction, TZoneQuestAction } from '../zone-quests'
 
@@ -20,8 +21,19 @@ export type TPrepareOperation =
   | { operation: 'equip'; cardId: string }
   | { operation: 'unequip'; slot: TEquipmentSlot }
   | { operation: 'openBooster'; cardId: string }
+  | TTransferMountOperation
   | TActivateOperation
   | ({ operation: 'useAbility' } & TAbilityIntent)
+
+/** Transferir entre o jogador e a montaria (Apêndice B U1; REQ-160; D-143). */
+export type TTransferMountOperation = {
+  operation: 'transferMount'
+  direction: 'toMount' | 'fromMount'
+  space: 'inventory' | 'tcgFolder'
+  cardId: string
+  quantity: number
+  inventorySlotIndex?: number
+}
 
 /** A origem da habilidade: exatamente um dos dois (CONTRATO FEAT-18 `AbilitySource`; REQ-157). */
 export type TAbilitySource =
@@ -431,7 +443,7 @@ function parseResolveReward(
       continue
     }
     const entry = item as Record<string, unknown>
-    const { cardId, copies } = entry
+    const { cardId, copies, space } = entry
     if (
       typeof cardId !== 'string' ||
       !cardId.trim() ||
@@ -442,13 +454,22 @@ function parseResolveReward(
       issues.push({ field, reason: 'invalidItem' })
       continue
     }
+    // REQ-159 (D-152): `space` opcional; ausente = o espaço principal.
+    if (space !== undefined && !isReceiveSpace(space)) {
+      issues.push({ field: `${field}.space`, reason: 'unknownOption' })
+      continue
+    }
     issues.push(
-      ...extraKeys(entry, ['cardId', 'copies']).map(({ field: key }) => ({
-        field: `${field}.${key}`,
-        reason: 'unknownKey' as const,
-      }))
+      ...extraKeys(entry, ['cardId', 'space', 'copies']).map(
+        ({ field: key }) => ({
+          field: `${field}.${key}`,
+          reason: 'unknownKey' as const,
+        })
+      )
     )
-    discard.push({ cardId, copies })
+    discard.push(
+      space === undefined ? { cardId, copies } : { cardId, space, copies }
+    )
   }
   issues.push(...extraKeys(body, [...keys, 'discard']))
   return issues.length
@@ -771,6 +792,8 @@ function parsePrepare(
       }
       return right({ type: 'prepare', operation, slot })
     }
+    case 'transferMount':
+      return parseTransferMount(body)
     case 'activate':
       if (effectActivationEnabled) return parseActivate(body)
       return left([{ field: 'operation', reason: 'unknownOperation' }])
@@ -1430,4 +1453,86 @@ function parseMove(
   }
   if (issues.length > 0 || typeof zoneId !== 'string') return left(issues)
   return right({ type: 'move', zoneId })
+}
+
+const RECEIVE_SPACES: readonly TReceiveSpace[] = [
+  'inventory',
+  'tcgFolder',
+  'mountInventory',
+  'mountTcgFolder',
+]
+
+const isReceiveSpace = (value: unknown): value is TReceiveSpace =>
+  RECEIVE_SPACES.includes(value as TReceiveSpace)
+
+/**
+ * Lê o `transferMount` (CONTRATO FEAT-18; REQ-160). Problemas na ordem
+ * `direction`, `space`, `cardId`, `quantity`, `inventorySlotIndex` e os campos a
+ * mais.
+ */
+function parseTransferMount(
+  body: Record<string, unknown>
+): Either<TActionIssue[], TPartyAction> {
+  const { direction, space, cardId, quantity, inventorySlotIndex } = body
+  const issues: TActionIssue[] = []
+  const option = (
+    field: string,
+    value: unknown,
+    allowed: readonly string[]
+  ) => {
+    if (value === undefined) issues.push({ field, reason: 'required' })
+    else if (typeof value !== 'string')
+      issues.push({ field, reason: 'notString' })
+    else if (!allowed.includes(value))
+      issues.push({ field, reason: 'unknownOption' })
+  }
+  option('direction', direction, ['toMount', 'fromMount'])
+  option('space', space, ['inventory', 'tcgFolder'])
+  if (cardId === undefined) issues.push({ field: 'cardId', reason: 'required' })
+  else if (typeof cardId !== 'string')
+    issues.push({ field: 'cardId', reason: 'notString' })
+  const positive = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isInteger(value) && value >= 1
+  if (quantity === undefined)
+    issues.push({ field: 'quantity', reason: 'required' })
+  else if (!positive(quantity))
+    issues.push({ field: 'quantity', reason: 'notPositiveInteger' })
+  if (
+    inventorySlotIndex !== undefined &&
+    (typeof inventorySlotIndex !== 'number' ||
+      !Number.isInteger(inventorySlotIndex) ||
+      inventorySlotIndex < 0)
+  )
+    issues.push({
+      field: 'inventorySlotIndex',
+      reason: 'notNonNegativeInteger',
+    })
+  issues.push(
+    ...extraKeys(body, [
+      'type',
+      'operation',
+      'direction',
+      'space',
+      'cardId',
+      'quantity',
+      'inventorySlotIndex',
+    ])
+  )
+  if (
+    issues.length > 0 ||
+    (direction !== 'toMount' && direction !== 'fromMount') ||
+    (space !== 'inventory' && space !== 'tcgFolder') ||
+    typeof cardId !== 'string' ||
+    !positive(quantity)
+  )
+    return left(issues)
+  return right({
+    type: 'prepare',
+    operation: 'transferMount',
+    direction,
+    space,
+    cardId,
+    quantity,
+    ...(typeof inventorySlotIndex === 'number' && { inventorySlotIndex }),
+  })
 }

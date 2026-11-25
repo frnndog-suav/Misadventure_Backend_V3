@@ -8,13 +8,15 @@ import {
 import type { TGameConfigValues } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
 import type { TPlayerState } from '../entities/party-member'
-import { addToInventory } from '../inventory'
 import { marketCandidatesOf, type TMarketCandidate } from '../markets'
-import { sortedByCardId } from '../starting-player'
+import {
+  receiveCard,
+  type TReceiveAllCapacities,
+  type TReceiveSpace,
+} from '../mount'
 
 /** Para onde foi uma carta do booster (CONTRATO `BoosterOpeningResult`). */
-export type TBoosterDestination =
-  'tcgFolder' | 'inventory' | 'vault' | 'pending'
+export type TBoosterDestination = TReceiveSpace | 'vault' | 'pending'
 
 /** Resultado do `openBooster` aceito (REQ-144): as cartas na ordem do sorteio. */
 export type TBoosterOpeningResult = Readonly<{
@@ -128,35 +130,33 @@ export function drawBoosterCards(
 }
 
 /**
- * Entrega do Preparar (README 6.5, 6.6; REQ-144): atributo → pasta (a vaga já
- * foi conferida); recurso → inventário, e o que não couber é `pending`. Cada
- * carta é conferida em ordem, sobre o resultado da anterior.
+ * Entrega do Preparar (README 6.5, 6.6; REQ-144, REQ-159): atributo → pasta e,
+ * cheia, pasta extra (a vaga já foi conferida); recurso → inventário e, cheio,
+ * inventário extra; o que não couber é `pending`. Cada carta é conferida em
+ * ordem, sobre o resultado da anterior.
  */
 export function placeBoosterInPrepare(input: {
   player: TPlayerState
   cards: readonly TCard[]
   drawn: readonly string[]
-  inventoryCapacity: number
+  capacities: TReceiveAllCapacities
 }): {
   player: TPlayerState
   destinations: TBoosterDestination[]
 } {
-  let { tcgFolder, inventory } = input.player
+  let { player } = input
   const destinations = input.drawn.map((cardId): TBoosterDestination => {
     const card = input.cards.find((c) => c.id === cardId)
-    if (card?.type === 'attribute') {
-      const existing = tcgFolder.find((entry) => entry.cardId === cardId)
-      tcgFolder = sortedByCardId([
-        ...tcgFolder.filter((entry) => entry.cardId !== cardId),
-        { cardId, copies: (existing?.copies ?? 0) + 1 },
-      ])
-      return 'tcgFolder'
-    }
-    if (card?.type !== 'equipment' && card?.type !== 'item') return 'pending'
-    const added = addToInventory(inventory, card, 1, input.inventoryCapacity)
-    if (added === null) return 'pending'
-    inventory = added
-    return 'inventory'
+    if (
+      card?.type !== 'attribute' &&
+      card?.type !== 'equipment' &&
+      card?.type !== 'item'
+    )
+      return 'pending'
+    const received = receiveCard(player, card, 1, input.capacities)
+    if (received === null) return 'pending'
+    player = received.player
+    return received.received[0].space
   })
-  return { player: { ...input.player, tcgFolder, inventory }, destinations }
+  return { player, destinations }
 }

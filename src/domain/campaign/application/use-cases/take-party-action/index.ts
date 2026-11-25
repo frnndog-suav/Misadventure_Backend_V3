@@ -10,6 +10,7 @@ import {
   type TPrepareOperation,
   type TVaultOperation,
 } from '@/domain/campaign/enterprise/party-action'
+import { rewardSpaces } from '@/domain/campaign/enterprise/rewards'
 import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import type {
   TAttributeCard,
@@ -163,6 +164,19 @@ export class TakePartyActionUseCase {
         const pending = party.pendingRewards[0]
         if (pending?.id !== action.rewardId)
           return left(new ActionNotAllowedError('staleReward'))
+        // REQ-159: `space` fora dos espaços do destino → 400 `unknownOption`.
+        if (action.choice === 'keep') {
+          const spaces = rewardSpaces(pending.destination)
+          const invalid = action.discard.findIndex(
+            ({ space }) => space !== undefined && !spaces.includes(space)
+          )
+          if (invalid >= 0)
+            return left(
+              new ActionInvalidError([
+                { field: `discard.${invalid}.space`, reason: 'unknownOption' },
+              ])
+            )
+        }
         const { cards } = await this.findEventCatalog(party)
         const result = party.resolveReward(
           action,

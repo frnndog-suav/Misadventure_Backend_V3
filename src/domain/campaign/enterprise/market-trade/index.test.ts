@@ -368,6 +368,7 @@ describe('applyMarketOperations — compras (REQ-141)', () => {
           cardId: A.id,
           quantity: 2,
           copiesReceived: 20,
+          received: [{ space: 'inventory', quantity: 20 }],
           gold: -8,
         },
       ],
@@ -474,6 +475,42 @@ describe('applyMarketOperations — compras (REQ-141)', () => {
     expect(result.value.result.results.map(({ gold }) => gold)).toEqual([
       -6, -7,
     ])
+  })
+
+  it('REQ-159: com montaria e espaço principal cheio — single de atributo vai à pasta extra e buyBooster ao inventário extra', () => {
+    const market = state({
+      stock: [{ cardId: STR.id, copies: 2 }],
+      showcase: [STR.id, null],
+    })
+    const pool = { ...market, pool: [{ cardId: STR.id, departed: 0 }] }
+    const mount = { cardId: 'fixture.plow-horse', inventory: [], tcgFolder: [] }
+    const single = apply([{ operation: 'buySingle', slotIndex: 0 }], {
+      market: pool,
+      player: {
+        tcgFolder: [
+          { cardId: 'fixture.a-card', copies: config.tcgFolderCapacity },
+        ],
+        mount,
+      },
+      steps: [[0, 0, 0]],
+    }).result
+    expect(single.isRight() && single.value.result.results[0]).toMatchObject({
+      destination: 'mountTcgFolder',
+    })
+    expect(single.isRight() && single.value.player.mount?.tcgFolder).toEqual([
+      { cardId: STR.id, copies: 1 },
+    ])
+
+    const booster = apply(
+      [{ operation: 'buyBooster', cardId: BO.id, quantity: 1 }],
+      {
+        player: { inventory: [{ cardId: W.id, quantity: 1 }], mount },
+        config: { ...config, inventoryCapacity: 1, mountInventorySlots: 1 },
+      }
+    ).result
+    expect(booster.isRight() && booster.value.result.results[0]).toMatchObject({
+      received: [{ space: 'mountInventory', quantity: 1 }],
+    })
   })
 
   it('REQ-141: single de atributo vai para a pasta de TCG (em ordem de id); pasta cheia → tcgFolderFull', () => {

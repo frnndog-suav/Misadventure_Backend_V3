@@ -414,7 +414,7 @@ function playerToHTTP(
     nextTurnActionPointDebt: player.nextTurnActionPointDebt ?? 0,
     lastRandomEvent: player.lastRandomEvent ?? null,
     lastRewardSearch: player.lastRewardSearch ?? null,
-    lastRewardDelivery: player.lastRewardDelivery ?? null,
+    lastRewardDelivery: rewardDeliveryToHTTP(player.lastRewardDelivery, cards),
     attributeDeckCount: player.deck.length,
     attributeDiscardPileCount: player.discard.length,
     zoneId: player.zoneId,
@@ -492,12 +492,12 @@ function playerToHTTP(
     scavengeTargets: targets,
     market: marketToHTTP(party.describeMarket(member, cards), cards),
     expansions: { ...expansions },
-    lastMarketVisit: player.lastMarketVisit ?? null,
+    lastMarketVisit: marketVisitToHTTP(player.lastMarketVisit),
     blacksmith: blacksmithToHTTP(
       party.describeBlacksmith(member, cards),
       cards
     ),
-    lastBlacksmithVisit: player.lastBlacksmithVisit ?? null,
+    lastBlacksmithVisit: blacksmithVisitToHTTP(player.lastBlacksmithVisit),
     lastBoosterOpening: player.lastBoosterOpening ?? null,
     lastScavenge:
       player.lastScavenge === null
@@ -642,5 +642,68 @@ export class PartyPresenter {
       createdAt: party.createdAt.toISOString(),
       savedAt: party.savedAt.toISOString(),
     }
+  }
+}
+
+/** REQ-159 (D-152): save de antes da T-77 sem `space` → o espaço principal (`null` se não ficou). */
+function rewardDeliveryToHTTP(
+  delivery: TRewardDelivery | null | undefined,
+  cards: TPartyCards
+): TRewardDelivery | null {
+  if (!delivery) return null
+  if (delivery.space !== undefined) return delivery
+  return {
+    ...delivery,
+    space:
+      delivery.disposition !== 'kept'
+        ? null
+        : cards.get(delivery.cardId)?.type === 'attribute'
+          ? 'tcgFolder'
+          : 'inventory',
+  }
+}
+
+/** REQ-159 (D-152): compra de save antigo sem `received` → tudo no inventário. */
+function marketVisitToHTTP(
+  visit: TMarketVisitResult | null | undefined
+): TMarketVisitResult | null {
+  if (!visit) return null
+  return {
+    ...visit,
+    results: visit.results.map((result) => {
+      switch (result.operation) {
+        case 'buyStock':
+          return {
+            ...result,
+            received: result.received ?? [
+              { space: 'inventory', quantity: result.copiesReceived },
+            ],
+          }
+        case 'buyBooster':
+          return {
+            ...result,
+            received: result.received ?? [
+              { space: 'inventory', quantity: result.quantity },
+            ],
+          }
+        default:
+          return result
+      }
+    }),
+  }
+}
+
+/** REQ-159 (D-152): Criar de save antigo sem `destination` → inventário. */
+function blacksmithVisitToHTTP(
+  visit: TBlacksmithVisitResult | null | undefined
+): TBlacksmithVisitResult | null {
+  if (!visit) return null
+  return {
+    ...visit,
+    results: visit.results.map((result) =>
+      result.operation === 'craft'
+        ? { ...result, destination: result.destination ?? 'inventory' }
+        : result
+    ),
   }
 }

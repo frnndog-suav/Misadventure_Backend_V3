@@ -73,6 +73,8 @@ export type TBlacksmithOperationResult =
       recipeCardId: string
       equipmentId: string
       gold: number
+      /** REQ-159: o espaço do `inventorySlotIndex`; ausente nos saves de antes da T-77 (D-152). */
+      destination?: 'inventory' | 'mountInventory'
       inventorySlotIndex: number
       skipped: boolean
     }
@@ -209,6 +211,8 @@ type TTrackedSlot = Readonly<{ origin: number | null; slot: TInventorySlot }>
 type TWork = {
   player: TPlayerState
   inventory: TTrackedSlot[]
+  /** REQ-159: o inventário extra recebe o que o Criar não põe no inventário. */
+  mountInventory: TInventorySlot[] | null
   gold: number
 }
 
@@ -516,8 +520,16 @@ function plan(
         return { reason: 'materialsMissing', cardId: recipeCardId }
       if (work.gold < recipe.gold)
         return { reason: 'notEnoughGold', cardId: recipeCardId }
+      // REQ-159: o inventário e, cheio, o inventário extra.
       const after = afterCraft(work.inventory, entry, recipe)
-      if (after.length >= input.config.inventoryCapacity)
+      const destination =
+        after.length < input.config.inventoryCapacity
+          ? ('inventory' as const)
+          : work.mountInventory !== null &&
+              work.mountInventory.length < input.config.mountInventorySlots
+            ? ('mountInventory' as const)
+            : null
+      if (destination === null)
         return { reason: 'inventoryFull', cardId: recipeCardId }
       const base = {
         operation: 'craft' as const,
@@ -528,13 +540,23 @@ function plan(
         reason: null,
         apply: () => {
           work.gold -= recipe.gold
-          work.inventory = [
-            ...afterCraft(work.inventory, entry, recipe),
-            { origin: null, slot: { cardId: equipment.id, quantity: 1 } },
-          ]
+          const crafted = { cardId: equipment.id, quantity: 1 }
+          work.inventory = afterCraft(work.inventory, entry, recipe)
+          if (destination === 'mountInventory' && work.mountInventory) {
+            work.mountInventory = [...work.mountInventory, crafted]
+            return {
+              ...base,
+              gold: -recipe.gold,
+              destination,
+              inventorySlotIndex: work.mountInventory.length - 1,
+              skipped: false,
+            }
+          }
+          work.inventory = [...work.inventory, { origin: null, slot: crafted }]
           return {
             ...base,
             gold: -recipe.gold,
+            destination: 'inventory' as const,
             inventorySlotIndex: work.inventory.length - 1,
             skipped: false,
           }
@@ -542,6 +564,7 @@ function plan(
         skipped: () => ({
           ...base,
           gold: 0,
+          destination: 'inventory' as const,
           inventorySlotIndex: operation.inventorySlotIndex,
           skipped: true,
         }),
@@ -568,6 +591,7 @@ function afterCraft(
 const startWork = (player: TPlayerState): TWork => ({
   player,
   inventory: player.inventory.map((slot, origin) => ({ origin, slot })),
+  mountInventory: player.mount ? [...player.mount.inventory] : null,
   gold: player.gold,
 })
 
@@ -637,6 +661,10 @@ export function applyBlacksmithOperations(input: {
     player: {
       ...work.player,
       inventory: work.inventory.map(({ slot }) => slot),
+      mount:
+        input.player.mount && work.mountInventory
+          ? { ...input.player.mount, inventory: work.mountInventory }
+          : (input.player.mount ?? null),
       gold: work.gold,
     },
     result: {

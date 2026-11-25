@@ -2,12 +2,22 @@ import type { SeededRng } from '@/core/rng/seeded-rng'
 import type { TZoneType } from '@/domain/catalog/enterprise/value-objects/card'
 import type { TReserveDeckEntry } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
+import type { TReceiveSpace } from '../mount'
+
 export type TRewardOrigin =
   | { type: 'rewardDeck'; zoneType: TZoneType }
   | { type: 'reserveDeck' }
   | { type: 'fixed' }
 
-export type TRewardDiscard = { cardId: string; copies: number }
+/**
+ * Descarte da recompensa pendente (REQ-91; REQ-159, D-148): `space` ausente =
+ * o espaço principal do destino.
+ */
+export type TRewardDiscard = {
+  cardId: string
+  space?: TReceiveSpace
+  copies: number
+}
 
 export type TPendingReward = {
   id: string
@@ -21,13 +31,25 @@ export type TPendingReward = {
     | { type: 'scavenge' }
     | { type: 'booster'; boosterCardId: string }
   destination: 'inventory' | 'tcgFolder'
-  discardOptions: { cardId: string; maxCopies: number }[]
+  /** Uma entrada por carta e espaço (REQ-159), em ordem de `cardId` e depois principal → montaria. */
+  discardOptions: { cardId: string; space: TReceiveSpace; maxCopies: number }[]
   decisionDeadlineAt: null
 }
 
 export type TRewardDelivery = Pick<TPendingReward, 'cardId' | 'origin'> & {
   rewardId: string
   disposition: 'kept' | 'returnedToDeck' | 'removed' | 'sentToLimbo'
+  /** REQ-159: onde a cópia ficou; `null` quando não ficou com o jogador; ausente nos saves de antes da T-77 (D-152). */
+  space?: TReceiveSpace | null
+}
+
+/** Os espaços de um destino de recompensa (REQ-159): o principal e o da montaria. */
+export function rewardSpaces(
+  destination: TPendingReward['destination']
+): readonly [TReceiveSpace, TReceiveSpace] {
+  return destination === 'inventory'
+    ? ['inventory', 'mountInventory']
+    : ['tcgFolder', 'mountTcgFolder']
 }
 
 export type TRewardSearch = {

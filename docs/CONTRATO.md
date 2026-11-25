@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.90 · **Data:** 2026-11-24
+> **Versão do contrato:** 0.91 · **Data:** 2026-11-25
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -3675,6 +3675,11 @@ type AbilitySource = { equipmentSlot: EquipmentSlot; mountAbility?: never } | { 
 //   o backend escolhe o primeiro em que ela caberia depois do descarte, U2).
 // lastRewardDelivery ganha `space: ReceiveSpace | null` (`null` quando não ficou com o jogador).
 // lastScavenge.delivery ganha `'mountInventory'`.
+// v0.91 (BE, T-77): BlacksmithOperationResult `craft` ganha `destination: 'inventory' | 'mountInventory'`
+//   (onde o equipamento criado entrou; o Criar também transborda, REQ-159); `inventorySlotIndex` é o índice nesse espaço.
+//   `skipped: true` → `destination: 'inventory'`.
+// v0.91: `PendingReward.destination` é o espaço principal (`inventory`/`tcgFolder`); o espaço final sai em `lastRewardDelivery.space`.
+// v0.91: no `keep`, `discard[].space` ausente = o espaço principal (compatível com a FEAT-12).
 
 /** 3. Descarte da recompensa pendente com o espaço somado (FEAT-12). */
 interface PendingReward {
@@ -3863,3 +3868,4 @@ Só nos e2e do backend: abrir booster e comprar single somando o espaço da mont
 | 0.88 | 2026-11-24 | BE | FEAT-18 `proposto (BE)`: carta `mount`, `market.mounts` (Estábulo só em Rural/Habitada), `PlayerState.mount` e `moveRoutes`, `MoveAction.viaZoneId`, `buyMount`/`sellMount` em `visitMarket` com `market.stable`, `prepare` `transferMount`, ativação `loseMount`, doação de montaria, 7 chaves do laboratório e motivos novos; destino automático e transferência na Preparar (README Apêndice B U1/U2). `fixture.old-mine` vira Rural com Estábulo. |
 | 0.89 | 2026-11-24 | FE | FEAT-18 → `proposto (FE)`, três pedidos (princípio "o backend decide"): (1) montaria como origem de efeitos e habilidades (`source: 'mount'`, origens `mount`/`mountAbility`, `mountAbility: true` no lugar de `equipmentSlot`); (2) destinos `mountInventory`/`mountTcgFolder` (`ReceiveSpace`) na vitrine, no mercado (`received`), no booster, em `PendingReward.destination`, `lastRewardDelivery.space` e `lastScavenge.delivery`; (3) `space` em `discardOptions` e no `keep`. Cenários novos. |
 | 0.90 | 2026-11-24 | BE | FEAT-18 `acordado`: os três pedidos da v0.89 aceitos sem mudança de forma. O backend acrescenta à `fixture` a montaria `fixture.war-pony` (1 efeito ativável e 1 habilidade fora de combate) para o cenário "Habilidade da montaria" rodar por HTTP; `cardCounts.mount` da `fixture` = 2. |
+| 0.91 | 2026-11-25 | BE | FEAT-18 (T-77): resultado do `craft` ganha `destination: 'inventory' \| 'mountInventory'` (Criar transborda para o inventário extra; `inventorySlotIndex` vale nesse espaço). Esclarecimentos: `PendingReward.destination` é o espaço principal; `discard[].space` opcional (ausente = principal). No `keep`, cópias acima do que há no espaço (ou carta fora dele) → 409 `rewardDoesNotFit` (antes `paymentInvalid`). `PendingReward.destination` muda o texto acordado na v0.90 (era "o primeiro espaço em que a cópia caberia depois do descarte"): aguarda aceite do FE. Cenários sem mudança. |

@@ -204,3 +204,42 @@ describe('PartyPresenter — montaria como recurso em uso (REQ-157, D-148)', () 
     expect(player.usableAbilities).toEqual([])
   })
 })
+
+describe('PartyPresenter — saves de antes da T-77 (REQ-159; D-152 h)', () => {
+  it('REQ-159: sem space/received/destination → o espaço principal; não ficou → null', () => {
+    const player = present({
+      lastRewardDelivery: {
+        rewardId: 'r1',
+        cardId: SWORD.id,
+        origin: { type: 'fixed' },
+        disposition: 'kept',
+      },
+      lastMarketVisit: {
+        zoneId: 'fixture.gray-harbor',
+        goldLost: 0,
+        results: [
+          {
+            operation: 'buyStock',
+            cardId: 'fixture.arrows',
+            quantity: 2,
+            copiesReceived: 20,
+            gold: -8,
+          },
+        ],
+      },
+    })
+    expect(player.lastRewardDelivery?.space).toBe('inventory')
+    expect(player.lastMarketVisit?.results[0]).toMatchObject({
+      received: [{ space: 'inventory', quantity: 20 }],
+    })
+    const left = present({
+      lastRewardDelivery: {
+        rewardId: 'r1',
+        cardId: SWORD.id,
+        origin: { type: 'fixed' },
+        disposition: 'sentToLimbo',
+      },
+    })
+    expect(left.lastRewardDelivery?.space).toBeNull()
+  })
+})

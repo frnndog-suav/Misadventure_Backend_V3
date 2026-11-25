@@ -268,7 +268,9 @@ describe('DrizzlePartyMapper', () => {
         source: { type: 'combatEvent', combatId: 'fight' },
         origin: { type: 'rewardDeck', zoneType: 'urban' },
         destination: 'inventory',
-        discardOptions: [{ cardId: 'fixture.silver-fish', maxCopies: 1 }],
+        discardOptions: [
+          { cardId: 'fixture.silver-fish', space: 'inventory', maxCopies: 1 },
+        ],
         decisionDeadlineAt: null,
       },
       eventDecks: [{ zoneType: 'urban', cards: [], discard: [] }],
@@ -1209,7 +1211,9 @@ describe('DrizzlePartyMapper', () => {
         origin: { type: 'fixed' },
         source: { type: 'booster', boosterCardId: 'fixture.booster' },
         destination: 'inventory',
-        discardOptions: [{ cardId: 'fixture.pickaxe', maxCopies: 1 }],
+        discardOptions: [
+          { cardId: 'fixture.pickaxe', space: 'inventory', maxCopies: 1 },
+        ],
         decisionDeadlineAt: null,
       },
       boosterQueue: {
@@ -1242,6 +1246,39 @@ describe('DrizzlePartyMapper', () => {
     const plain = DrizzlePartyMapper.toDomain(toRow(without))
     expect(plain.members[0].player.lastBoosterOpening).toBeUndefined()
     expect(plain.boosterQueue).toBeUndefined()
+  })
+
+  it('REQ-159 (D-152): save de antes da T-77 — opção de descarte sem space lê o espaço principal', () => {
+    const party = makeParty({
+      status: 'inSession',
+      pendingReward: {
+        id: 'reward-1',
+        memberId: 'member-1',
+        cardId: 'fixture.focus',
+        origin: { type: 'fixed' },
+        source: { type: 'scavenge' },
+        destination: 'tcgFolder',
+        discardOptions: [
+          { cardId: 'fixture.focus', space: 'tcgFolder', maxCopies: 2 },
+        ],
+        decisionDeadlineAt: null,
+      },
+    })
+    const row = JSON.parse(
+      JSON.stringify(DrizzlePartyMapper.toDrizzle(party))
+    ) as TPartyRow
+    const state = row.state as unknown as {
+      pendingReward: { discardOptions: Record<string, unknown>[] }
+    }
+    delete state.pendingReward.discardOptions[0].space
+    const restored = DrizzlePartyMapper.toDomain({
+      ...row,
+      createdAt: party.createdAt,
+      savedAt: party.savedAt,
+    })
+    expect(restored.pendingRewards[0].discardOptions).toEqual([
+      { cardId: 'fixture.focus', space: 'tcgFolder', maxCopies: 2 },
+    ])
   })
 
   /** Linha como era gravada antes da FEAT-16: sem `expansions` nos jogadores. */

@@ -84,9 +84,16 @@ import {
   withWornState,
   wornStateOf,
 } from '../../equipment-state'
-import { addToInventory } from '../../inventory'
+import type { TInventorySlot } from '../../inventory'
 import {
+  holdingsIn,
   mountCardOf,
+  adjustFolders,
+  freeFolderCopies,
+  receiveCapacitiesOf,
+  receiveCard,
+  transferMount,
+  type TReceiveSpace,
   type TMountLimboEntry,
   type TMountLimboSink,
 } from '../../mount'
@@ -164,6 +171,7 @@ import {
 } from '../../player-status'
 import {
   drawReserve,
+  rewardSpaces,
   type TPendingReward,
   type TResolveRewardAction,
   type TRewardDelivery,
@@ -250,6 +258,8 @@ export type TPrepareRefusal =
         | 'notBooster'
         | 'tcgFolderFull'
         | 'boosterEmpty'
+        | 'noMount'
+        | 'notOwned'
     }
 
 /** Por que o Usar cofre foi recusado (REQ-88; D-82). */
@@ -3991,12 +4001,13 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         const delivered = this.addReward(player, rewardCard)
         if (delivered) {
           player = {
-            ...delivered,
+            ...delivered.player,
             lastRewardDelivery: {
               rewardId: this.nextRewardId(ids),
               cardId: reward.cardId,
               origin: reward.origin,
               disposition: 'kept',
+              space: delivered.space,
             },
           }
           continue
@@ -4053,31 +4064,17 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   private addReward(
     player: TPlayerState,
     card: TAttributeCard | TItemCard | TEquipmentCard
-  ): TPlayerState | null {
-    if (card.type === 'attribute') {
-      if (
-        player.tcgFolder.reduce((sum, entry) => sum + entry.copies, 0) >=
-        capacitiesOf(this.config, player.expansions).tcgFolder
-      )
-        return null
-      const existing = player.tcgFolder.find(
-        (entry) => entry.cardId === card.id
-      )
-      return {
-        ...player,
-        tcgFolder: sortedByCardId([
-          ...player.tcgFolder.filter((entry) => entry.cardId !== card.id),
-          { cardId: card.id, copies: (existing?.copies ?? 0) + 1 },
-        ]),
-      }
-    }
-    const inventory = addToInventory(
-      player.inventory,
+  ): { player: TPlayerState; space: TReceiveSpace } | null {
+    // REQ-159: inventário/pasta e, cheio, a montaria.
+    const received = receiveCard(
+      player,
       card,
       1,
-      this.config.inventoryCapacity
+      receiveCapacitiesOf(this.config, player.expansions)
     )
-    return inventory ? { ...player, inventory } : null
+    return received
+      ? { player: received.player, space: received.received[0].space }
+      : null
   }
 
   private nextRewardId(ids: IdGenerator | undefined): string {
@@ -4095,16 +4092,17 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     ids: IdGenerator | undefined
   ): void {
     const destination = card.type === 'attribute' ? 'tcgFolder' : 'inventory'
-    const holdings = new Map<string, number>()
-    const entries =
-      destination === 'tcgFolder'
-        ? player.tcgFolder
-        : player.inventory.map(({ cardId, quantity }) => ({
-            cardId,
-            copies: quantity,
-          }))
-    for (const { cardId, copies } of entries)
-      holdings.set(cardId, (holdings.get(cardId) ?? 0) + copies)
+    // REQ-159: uma opção por carta e espaço, principal antes da montaria.
+    const discardOptions = rewardSpaces(destination).flatMap((space) => {
+      const holdings = new Map<string, number>()
+      for (const { cardId, copies } of holdingsIn(player, space))
+        holdings.set(cardId, (holdings.get(cardId) ?? 0) + copies)
+      return [...holdings].map(([cardId, maxCopies]) => ({
+        cardId,
+        space,
+        maxCopies,
+      }))
+    })
     this.props.pendingReward = {
       id: this.nextRewardId(ids),
       memberId: this.turn.memberId.toString(),
@@ -4112,9 +4110,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       origin,
       source,
       destination,
-      discardOptions: sortedByCardId(
-        [...holdings].map(([cardId, maxCopies]) => ({ cardId, maxCopies }))
-      ),
+      discardOptions: sortedByCardId(discardOptions),
       decisionDeadlineAt: null,
     }
   }
@@ -4138,49 +4134,86 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const { cardId, origin, source, destination } = reward
     const delivery = this.props.questRewardDelivery
     if (source.type === 'quest' && !delivery) return left('staleReward')
-    const discarded: TRewardDiscard[] = []
+    const discarded: (TRewardDiscard & { space: TReceiveSpace })[] = []
     let disposition: TRewardDelivery['disposition']
+    let keptSpace: TReceiveSpace | null = null
     if (action.choice === 'keep') {
-      const quantities = new Map<string, number>()
+      const [mainSpace, mountSpace] = rewardSpaces(destination)
+      // REQ-159: cópias por carta em cada espaço; `space` ausente = principal.
+      const quantities = new Map<TReceiveSpace, Map<string, number>>([
+        [mainSpace, new Map()],
+        [mountSpace, new Map()],
+      ])
       for (const entry of action.discard) {
-        if (!Number.isSafeInteger(entry.copies) || entry.copies < 1)
+        const space = entry.space ?? mainSpace
+        const inSpace = quantities.get(space)
+        if (!inSpace || !Number.isSafeInteger(entry.copies) || entry.copies < 1)
           return left('paymentInvalid')
-        const copies = (quantities.get(entry.cardId) ?? 0) + entry.copies
+        const copies = (inSpace.get(entry.cardId) ?? 0) + entry.copies
         const option = reward.discardOptions.find(
-          ({ cardId }) => cardId === entry.cardId
+          (o) => o.cardId === entry.cardId && o.space === space
         )
-        if (!option || copies > option.maxCopies) return left('paymentInvalid')
-        quantities.set(entry.cardId, copies)
+        // REQ-159: cópias acima do que há naquele espaço.
+        if (!option || copies > option.maxCopies)
+          return left('rewardDoesNotFit')
+        inSpace.set(entry.cardId, copies)
       }
-      discarded.push(
-        ...[...quantities].map(([cardId, copies]) => ({ cardId, copies }))
-      )
-      const remaining = (id: string, count: number) => {
-        const removed = Math.min(quantities.get(id) ?? 0, count)
-        quantities.set(id, (quantities.get(id) ?? 0) - removed)
-        return count - removed
-      }
-      const candidate =
+      for (const [space, inSpace] of quantities)
+        discarded.push(
+          ...[...inSpace].map(([cardId, copies]) => ({
+            cardId,
+            space,
+            copies,
+          }))
+        )
+      const remaining =
+        (inSpace: Map<string, number>) => (id: string, count: number) => {
+          const removed = Math.min(inSpace.get(id) ?? 0, count)
+          inSpace.set(id, (inSpace.get(id) ?? 0) - removed)
+          return count - removed
+        }
+      const takeSlots = (
+        slots: readonly TInventorySlot[],
+        inSpace: Map<string, number>
+      ) =>
+        slots
+          .map((slot) => ({
+            ...slot,
+            quantity: remaining(inSpace)(slot.cardId, slot.quantity),
+          }))
+          .filter(({ quantity }) => quantity > 0)
+      const takeFolder = (
+        folder: readonly TStarterDeckEntry[],
+        inSpace: Map<string, number>
+      ) =>
+        folder
+          .map((entry) => ({
+            ...entry,
+            copies: remaining(inSpace)(entry.cardId, entry.copies),
+          }))
+          .filter(({ copies }) => copies > 0)
+      const main = quantities.get(mainSpace) ?? new Map<string, number>()
+      const extra = quantities.get(mountSpace) ?? new Map<string, number>()
+      const mount = player.mount ?? null
+      const candidate: TPlayerState =
         destination === 'inventory'
           ? {
               ...player,
-              inventory: player.inventory
-                .map((slot) => ({
-                  ...slot,
-                  quantity: remaining(slot.cardId, slot.quantity),
-                }))
-                .filter(({ quantity }) => quantity > 0),
+              inventory: takeSlots(player.inventory, main),
+              mount: mount && {
+                ...mount,
+                inventory: takeSlots(mount.inventory, extra),
+              },
             }
           : {
               ...player,
-              tcgFolder: player.tcgFolder
-                .map((entry) => ({
-                  ...entry,
-                  copies: remaining(entry.cardId, entry.copies),
-                }))
-                .filter(({ copies }) => copies > 0),
+              tcgFolder: takeFolder(player.tcgFolder, main),
+              mount: mount && {
+                ...mount,
+                tcgFolder: takeFolder(mount.tcgFolder, extra),
+              },
             }
-      if ([...quantities.values()].some((copies) => copies !== 0))
+      if ([...main.values(), ...extra.values()].some((copies) => copies !== 0))
         return left('paymentInvalid')
       const card = cards.get(cardId)
       if (
@@ -4191,7 +4224,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         return left('paymentInvalid')
       const delivered = this.addReward(candidate, card)
       if (!delivered) return left('rewardDoesNotFit')
-      player = delivered
+      player = delivered.player
+      keptSpace = delivered.space
       disposition = 'kept'
     } else {
       switch (origin.type) {
@@ -4210,7 +4244,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           disposition = 'removed'
           break
         case 'fixed':
-          discarded.push({ cardId, copies: 1 })
+          discarded.push({ cardId, space: destination, copies: 1 })
           disposition = 'sentToLimbo'
           break
       }
@@ -4221,14 +4255,20 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         memberId: actor.id,
         cardId: entry.cardId,
         quantity: entry.copies,
-        from: destination,
+        from: entry.space,
         occurredAt: at,
         aggregateId: this.id,
       })
     }
     player = {
       ...player,
-      lastRewardDelivery: { rewardId: reward.id, cardId, origin, disposition },
+      lastRewardDelivery: {
+        rewardId: reward.id,
+        cardId,
+        origin,
+        disposition,
+        space: keptSpace,
+      },
     }
     this.props.pendingReward = null
     this.props.savedAt = at
@@ -4238,7 +4278,12 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         lastScavenge: {
           cardId,
           found: true,
-          delivery: action.choice === 'keep' ? 'inventory' : 'left',
+          delivery:
+            keptSpace === 'mountInventory'
+              ? 'mountInventory'
+              : action.choice === 'keep'
+                ? 'inventory'
+                : 'left',
         },
       })
     } else if (source.type === 'booster') {
@@ -5167,8 +5212,15 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const actor = this.props.members[index]
     const { player } = actor
 
+    // REQ-159: o conjunto disponível inclui a pasta extra.
+    const mount = player.mount ?? null
+    const extraFolder = mount?.tcgFolder ?? []
     const pool = new Map<string, number>()
-    for (const { cardId, copies } of [...player.build, ...player.tcgFolder]) {
+    for (const { cardId, copies } of [
+      ...player.build,
+      ...player.tcgFolder,
+      ...extraFolder,
+    ]) {
       pool.set(cardId, (pool.get(cardId) ?? 0) + copies)
     }
 
@@ -5193,17 +5245,15 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       return left('buildBelowMinimum')
     }
 
-    const inBuild = new Map(build.map(({ cardId, copies }) => [cardId, copies]))
-    const tcgFolder = sortedByCardId(
-      [...pool].map(([cardId, owned]) => ({
-        cardId,
-        copies: owned - (inBuild.get(cardId) ?? 0),
-      }))
-    ).filter(({ copies }) => copies > 0)
-    const folderSize = tcgFolder.reduce((sum, { copies }) => sum + copies, 0)
-    if (folderSize > capacitiesOf(config, player.expansions).tcgFolder) {
-      return left('tcgFolderFull')
-    }
+    const spaces = adjustFolders({
+      oldBuild: player.build,
+      tcgFolder: player.tcgFolder,
+      mountTcgFolder: mount === null ? null : extraFolder,
+      newBuild: build,
+      capacities: receiveCapacitiesOf(config, player.expansions),
+    })
+    if (spaces === null) return left('tcgFolderFull')
+    const { tcgFolder } = spaces
 
     const newBuild = sortedByCardId(
       build.map(({ cardId, copies }) => ({ cardId, copies }))
@@ -5218,6 +5268,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       ...rebuilt,
       build: newBuild,
       tcgFolder,
+      ...(mount !== null && {
+        mount: { ...mount, tcgFolder: spaces.mountTcgFolder ?? [] },
+      }),
     })
     this.props.savedAt = at
     this.addDeckEvents(actor.id, player, rebuilt, buildSize, at)
@@ -5625,8 +5678,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     ) {
       return left('notScavengeable')
     }
-    const capacity = this.props.config.inventoryCapacity
-    const withCard = addToInventory(player.inventory, card, 1, capacity)
+    // REQ-159: inventário e, cheio, o inventário extra.
+    const withCard = this.addReward(player, card)
     if (!rewardsEnabled && withCard === null) return left('inventoryFull')
     const found = this.searchReward(zone.zoneType, cardId)
     const origin = { type: 'rewardDeck', zoneType: zone.zoneType } as const
@@ -5634,16 +5687,17 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.openReward(player, card, origin, { type: 'scavenge' }, ids)
 
     this.spendActionPoint()
+    const kept = found && withCard ? withCard : null
     this.replaceActor(index, {
-      ...player,
-      inventory: found && withCard ? withCard : player.inventory,
-      ...(rewardsEnabled && found && withCard
+      ...(kept ? kept.player : player),
+      ...(rewardsEnabled && kept
         ? {
             lastRewardDelivery: {
               rewardId: this.nextRewardId(ids),
               cardId,
               origin,
               disposition: 'kept',
+              space: kept.space,
             },
           }
         : {}),
@@ -5651,7 +5705,13 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         ? {
             cardId,
             found,
-            delivery: found ? (withCard ? 'inventory' : 'pending') : 'none',
+            delivery: found
+              ? kept
+                ? kept.space === 'mountInventory'
+                  ? 'mountInventory'
+                  : 'inventory'
+                : 'pending'
+              : 'none',
           }
         : { cardId, found },
     })
@@ -5715,7 +5775,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   prepare(
     operation: Extract<
       TPrepareOperation,
-      { operation: 'equip' | 'unequip' | 'openBooster' }
+      { operation: 'equip' | 'unequip' | 'openBooster' | 'transferMount' }
     >,
     catalog: { cards: readonly TCard[] },
     at: Date,
@@ -5745,6 +5805,31 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const base = { memberId: actor.id, occurredAt: at, aggregateId: this.id }
 
     switch (operation.operation) {
+      case 'transferMount': {
+        // REQ-160: gratuita, sem PA; recusas sem efeito.
+        const card = catalog.cards.find((c) => c.id === operation.cardId)
+        const moved = transferMount({
+          player,
+          direction: operation.direction,
+          space: operation.space,
+          cardId: operation.cardId,
+          quantity: operation.quantity,
+          ...(operation.inventorySlotIndex !== undefined && {
+            inventorySlotIndex: operation.inventorySlotIndex,
+          }),
+          card:
+            card?.type === 'equipment' ||
+            card?.type === 'item' ||
+            card?.type === 'attribute'
+              ? card
+              : null,
+          capacities: receiveCapacitiesOf(this.props.config, player.expansions),
+        })
+        if (moved.isLeft()) return left({ reason: moved.value })
+        this.replaceActor(index, moved.value)
+        this.props.savedAt = at
+        return right(undefined)
+      }
       case 'activate': {
         if (!ids) throw new TypeError('An IdGenerator is required for activate')
         const prepared = prepareEffect(
@@ -5889,14 +5974,30 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
               ? [{ cardId: slot.cardId, quantity: slot.quantity - 1 }]
               : []
         )
-        const inventory = [
+        const withPrevious = [
           ...removed,
           ...(previous !== null ? [copySlot(previous, previousState)] : []),
-          ...(shield !== null ? [copySlot(shield, shieldState)] : []),
         ]
-        // B J1: o escudo precisa de slot livre depois de E sair e da arma antiga entrar.
-        if (inventory.length > capacity)
+        if (withPrevious.length > capacity)
           return left({ reason: 'inventoryFull' })
+        // B J1: o escudo precisa de slot livre depois de E sair e da arma
+        // antiga entrar; cheio, vai ao inventário extra (REQ-159).
+        const mount = player.mount ?? null
+        const shieldToMount =
+          shield !== null &&
+          withPrevious.length >= capacity &&
+          mount !== null &&
+          mount.inventory.length < this.props.config.mountInventorySlots
+        if (
+          shield !== null &&
+          withPrevious.length >= capacity &&
+          !shieldToMount
+        )
+          return left({ reason: 'inventoryFull' })
+        const inventory =
+          shield !== null && !shieldToMount
+            ? [...withPrevious, copySlot(shield, shieldState)]
+            : withPrevious
 
         // O estado vai com a cópia (REQ-147): sai o do que estava em uso, entra o da nova.
         const cleared =
@@ -5904,6 +6005,14 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         this.replaceActor(index, {
           ...withWornState(cleared, card.slot, incomingState),
           inventory,
+          ...(shieldToMount &&
+            mount !== null &&
+            shield !== null && {
+              mount: {
+                ...mount,
+                inventory: [...mount.inventory, copySlot(shield, shieldState)],
+              },
+            }),
           equipment: {
             ...player.equipment,
             ...(shield !== null ? { shield: null } : {}),
@@ -5943,14 +6052,17 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         if (position < 0) return left({ reason: 'notInInventory' })
         const booster = catalog.cards.find((c) => c.id === cardId)
         if (!isBooster(booster)) return left({ reason: 'notBooster' })
-        const capacities = capacitiesOf(this.props.config, player.expansions)
-        const folderUsed = player.tcgFolder.reduce(
-          (sum, entry) => sum + entry.copies,
-          0
+        // REQ-159: a vaga soma a pasta e a pasta extra.
+        const receiveCapacities = receiveCapacitiesOf(
+          this.props.config,
+          player.expansions
         )
         if (
-          capacities.tcgFolder - folderUsed <
-          this.props.config.boosterCardCount
+          freeFolderCopies({
+            tcgFolder: player.tcgFolder,
+            mount: player.mount,
+            capacities: receiveCapacities,
+          }) < this.props.config.boosterCardCount
         )
           return left({ reason: 'tcgFolderFull' })
 
@@ -5968,7 +6080,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           player: { ...player, inventory: emptied ?? player.inventory },
           cards: catalog.cards,
           drawn,
-          inventoryCapacity: capacity,
+          capacities: receiveCapacities,
         })
         const source = { type: 'booster', boosterCardId: cardId } as const
         const pendingIds = drawn.filter(
@@ -6075,29 +6187,20 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             ...player,
             mount: { cardId: card.id, inventory: [], tcgFolder: [] },
           }
-        } else if (card.type === 'attribute') {
-          const folderSize = player.tcgFolder.reduce((s, e) => s + e.copies, 0)
-          if (
-            folderSize + quantity >
-            capacitiesOf(config, player.expansions).tcgFolder
-          ) {
-            return left('tcgFolderFull')
-          }
-          const existing = player.tcgFolder.find((e) => e.cardId === card.id)
-          const tcgFolder = sortedByCardId([
-            ...player.tcgFolder.filter((e) => e.cardId !== card.id),
-            { cardId: card.id, copies: (existing?.copies ?? 0) + quantity },
-          ])
-          next = { ...player, tcgFolder }
         } else {
-          const inventory = addToInventory(
-            player.inventory,
+          // REQ-159: o que não cabe no inventário/pasta vai à montaria.
+          const received = receiveCard(
+            player,
             card,
             quantity,
-            config.inventoryCapacity
+            receiveCapacitiesOf(config, player.expansions)
           )
-          if (inventory === null) return left('inventoryFull')
-          next = { ...player, inventory }
+          if (received === null) {
+            return left(
+              card.type === 'attribute' ? 'tcgFolderFull' : 'inventoryFull'
+            )
+          }
+          next = received.player
         }
         event = { type: 'card', cardId: card.id, quantity }
         break

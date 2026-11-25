@@ -81,7 +81,7 @@ export type TPlayerState = Readonly<{
   lastScavenge: Readonly<{
     cardId: string
     found: boolean
-    delivery?: 'inventory' | 'pending' | 'left' | 'none'
+    delivery?: 'inventory' | 'mountInventory' | 'pending' | 'left' | 'none'
   }> | null
   lastRewardSearch?: import('../../rewards').TRewardSearch | null
   lastRewardDelivery?: import('../../rewards').TRewardDelivery | null

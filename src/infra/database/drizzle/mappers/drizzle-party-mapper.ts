@@ -31,6 +31,7 @@ import {
   type TEquipmentState,
 } from '@/domain/campaign/enterprise/equipment-state'
 import type { TInventorySlot } from '@/domain/campaign/enterprise/inventory'
+import type { TPendingReward } from '@/domain/campaign/enterprise/rewards'
 import { emptyVault } from '@/domain/campaign/enterprise/vault'
 import type { TEventEncounter } from '@/domain/campaign/enterprise/random-event'
 import {
@@ -348,6 +349,12 @@ const count = z.number().int().nonnegative()
 const copies = z.number().int().positive()
 const zoneType = z.enum(ZONE_TYPES)
 const handCopy = z.strictObject({ copyId: id, cardId: id })
+const receiveSpace = z.enum([
+  'inventory',
+  'tcgFolder',
+  'mountInventory',
+  'mountTcgFolder',
+])
 const rewardDiscard = z.strictObject({ cardId: id, copies })
 const receipt = z.strictObject({
   requirementId: id,
@@ -434,7 +441,14 @@ const pendingReward = z.strictObject({
     z.strictObject({ type: z.literal('booster'), boosterCardId: id }),
   ]),
   destination: z.enum(['inventory', 'tcgFolder']),
-  discardOptions: z.array(z.strictObject({ cardId: id, maxCopies: copies })),
+  // REQ-159: `space` ausente nos saves de antes da T-77 = o espaço principal.
+  discardOptions: z.array(
+    z.strictObject({
+      cardId: id,
+      space: receiveSpace.optional(),
+      maxCopies: copies,
+    })
+  ),
   decisionDeadlineAt: z.null(),
 })
 const boosterQueue = z.strictObject({
@@ -448,7 +462,14 @@ const boosterOpeningSchema = z.strictObject({
     .array(
       z.strictObject({
         cardId: id,
-        destination: z.enum(['tcgFolder', 'inventory', 'vault', 'pending']),
+        destination: z.enum([
+          'tcgFolder',
+          'inventory',
+          'mountTcgFolder',
+          'mountInventory',
+          'vault',
+          'pending',
+        ]),
       })
     )
     .readonly(),
@@ -510,7 +531,13 @@ const playerSchema = v7PlayerSchema.extend({
     .strictObject({
       cardId: id,
       found: z.boolean(),
-      delivery: z.enum(['inventory', 'pending', 'left', 'none']),
+      delivery: z.enum([
+        'inventory',
+        'mountInventory',
+        'pending',
+        'left',
+        'none',
+      ]),
     })
     .nullable()
     .optional(),
@@ -533,6 +560,8 @@ const playerSchema = v7PlayerSchema.extend({
       cardId: id,
       origin: rewardOrigin,
       disposition: z.enum(['kept', 'returnedToDeck', 'removed', 'sentToLimbo']),
+      // REQ-159: ausente nos saves de antes da T-77 (o presenter deduz).
+      space: receiveSpace.nullable().optional(),
     })
     .nullable()
     .optional(),
@@ -769,6 +798,14 @@ const expansionsSchema = z.strictObject({
 
 const marketGold = z.number().int()
 const marketQuantity = z.number().int().min(1)
+const receivedParts = z
+  .array(
+    z.strictObject({
+      space: z.enum(['inventory', 'mountInventory']),
+      quantity: marketQuantity,
+    })
+  )
+  .readonly()
 const marketVisitSchema = z.strictObject({
   zoneId: id,
   results: z
@@ -779,19 +816,21 @@ const marketVisitSchema = z.strictObject({
           cardId: id,
           quantity: marketQuantity,
           copiesReceived: marketQuantity,
+          received: receivedParts.optional(),
           gold: marketGold,
         }),
         z.strictObject({
           operation: z.literal('buyBooster'),
           cardId: id,
           quantity: marketQuantity,
+          received: receivedParts.optional(),
           gold: marketGold,
         }),
         z.strictObject({
           operation: z.literal('buySingle'),
           slotIndex: count,
           cardId: id,
-          destination: z.enum(['inventory', 'tcgFolder']),
+          destination: receiveSpace,
           gold: marketGold,
         }),
         z.strictObject({
@@ -939,6 +978,7 @@ const blacksmithVisitSchema = z.strictObject({
           recipeCardId: id,
           equipmentId: id,
           gold: z.number().int(),
+          destination: z.enum(['inventory', 'mountInventory']).optional(),
           inventorySlotIndex: count,
           skipped: z.boolean(),
         }),
@@ -1183,7 +1223,7 @@ export class DrizzlePartyMapper {
           eventDecks: state.eventDecks,
           eventEncounter: state.eventEncounter as
             TEventEncounter | null | undefined,
-          pendingReward: state.pendingReward,
+          pendingReward: upgradePendingReward(state.pendingReward),
           rewardSequence: state.rewardSequence,
         }),
         ...(state.schemaVersion === 9 ||
@@ -1530,5 +1570,19 @@ function upgradeScavenge(
   return {
     ...scavenge,
     delivery: scavenge.delivery ?? (scavenge.found ? 'inventory' : 'none'),
+  }
+}
+
+/** REQ-159 (D-152): opção de descarte sem `space` (antes da T-77) = o espaço principal. */
+function upgradePendingReward(
+  reward: z.infer<typeof pendingReward> | null | undefined
+): TPendingReward | null | undefined {
+  if (!reward) return reward
+  return {
+    ...reward,
+    discardOptions: reward.discardOptions.map((option) => ({
+      ...option,
+      space: option.space ?? reward.destination,
+    })),
   }
 }

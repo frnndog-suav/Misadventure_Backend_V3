@@ -429,6 +429,42 @@ describe('Ir ao Ferreiro — lote (REQ-149, REQ-150, REQ-152; D-132)', () => {
     ).toEqual({ reason: 'notEnoughGold', operationIndex: 0, cardId: SWORD.id })
   })
 
+  it('REQ-159 (D-152 a): inventário cheio → a criada vai ao inventário extra, com destination e índice nesse espaço; sem espaço → inventoryFull', () => {
+    const full = {
+      gold: 20,
+      inventory: [{ cardId: BLUEPRINT.id, quantity: 1 }, ore(3)],
+    }
+    const small = { ...config, inventoryCapacity: 2, mountInventorySlots: 1 }
+    const go = (mountInventory: TPlayerState['inventory']) =>
+      applyBlacksmithOperations({
+        player: makePlayerState({
+          ...full,
+          mount: {
+            cardId: 'fixture.plow-horse',
+            inventory: mountInventory,
+            tcgFolder: [],
+          },
+        }),
+        config: small,
+        cards: CARDS,
+        operations: [{ operation: 'craft', inventorySlotIndex: 0 }],
+        zoneId: 'fixture.gray-harbor',
+        enchantments: ENCHANTMENTS,
+        actionPointsSpent: 2,
+        rng: rolls(),
+      })
+    const outcome = go([])
+    if (outcome.isLeft()) throw new Error('recusado')
+    expect(outcome.value.player.mount?.inventory).toEqual([sword()])
+    expect(outcome.value.result.results[0]).toMatchObject({
+      destination: 'mountInventory',
+      inventorySlotIndex: 0,
+    })
+    expect(go([{ cardId: 'x', quantity: 1 }]).value).toMatchObject({
+      reason: 'inventoryFull',
+    })
+  })
+
   it('REQ-152: criar consome materiais e ouro, mantém a receita (consumed false) e entrega no fim com estado padrão', () => {
     const outcome = run(
       {
@@ -450,6 +486,7 @@ describe('Ir ao Ferreiro — lote (REQ-149, REQ-150, REQ-152; D-132)', () => {
         recipeCardId: BLUEPRINT.id,
         equipmentId: SWORD.id,
         gold: -15,
+        destination: 'inventory',
         inventorySlotIndex: 2,
         skipped: false,
       },
