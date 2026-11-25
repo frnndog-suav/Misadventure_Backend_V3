@@ -196,7 +196,7 @@ describe('FEAT-18 — Espaço da montaria e transferência (e2e, T-77)', () => {
       party,
       transfer({ direction: 'up', space: 'inventory', cardId: P, quantity: 1 })
     ).expect(400)
-    expect(up.body.error.details).toEqual([
+    expect(up.body.error.details.fields).toEqual([
       { field: 'direction', reason: 'unknownOption' },
     ])
     const zero = await act(
@@ -208,7 +208,7 @@ describe('FEAT-18 — Espaço da montaria e transferência (e2e, T-77)', () => {
         quantity: 0,
       })
     ).expect(400)
-    expect(zero.body.error.details).toEqual([
+    expect(zero.body.error.details.fields).toEqual([
       { field: 'quantity', reason: 'notPositiveInteger' },
     ])
   })
@@ -270,7 +270,7 @@ describe('FEAT-18 — Espaço da montaria e transferência (e2e, T-77)', () => {
       party,
       keep([{ cardId: P, space: 'tcgFolder', copies: 2 }])
     ).expect(400)
-    expect(wrongSpace.body.error.details).toEqual([
+    expect(wrongSpace.body.error.details.fields).toEqual([
       { field: 'discard.0.space', reason: 'unknownOption' },
     ])
     await expectNotAllowed(
@@ -284,7 +284,18 @@ describe('FEAT-18 — Espaço da montaria e transferência (e2e, T-77)', () => {
       keep([{ cardId: P, space: 'mountInventory', copies: 2 }])
     ).expect(200)
     const me = player(response.body)
-    expect(me.inventory).toEqual([{ cardId: W, quantity: 1 }])
+    expect(me.inventory).toEqual([
+      {
+        cardId: W,
+        quantity: 1,
+        equipmentState: {
+          broken: false,
+          enchantments: [],
+          refinement: 0,
+          repairMarks: 0,
+        },
+      },
+    ])
     expect(me.mount?.inventory).toEqual([{ cardId: P, quantity: 1 }])
     expect(me.lastRewardDelivery?.space).toBe('mountInventory')
   })

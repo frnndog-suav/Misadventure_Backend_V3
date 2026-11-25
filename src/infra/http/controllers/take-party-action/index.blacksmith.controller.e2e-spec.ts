@@ -265,6 +265,7 @@ describe('Ir ao Ferreiro (e2e)', () => {
           equipmentId: W,
           gold: -15,
           inventorySlotIndex: 2,
+          destination: 'inventory',
           skipped: false,
         },
       ],

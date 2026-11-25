@@ -184,6 +184,7 @@ describe('Ir ao Mercado (e2e)', () => {
         cardId: A,
         quantity: 2,
         copiesReceived: 20,
+        received: [{ space: 'inventory', quantity: 20 }],
         gold: -8,
       },
     ])

@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 0.97 · **Data:** 2026-11-25
+> **Versão da spec:** 0.98 · **Data:** 2026-11-25
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -799,7 +799,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 - [x] **T-74 — Conteúdo, editor e laboratório (REQ-155, REQ-156, D-142).** Contrato `acordado` (v0.90). O contrato tem: a carta `mount` e `market.mounts`, com os motivos de validação; as chaves do laboratório; `PlayerState.mount` (inventário extra com `equipmentState`, pasta extra, capacidades); operações `buyMount` e `sellMount` em `visitMarket` e a projeção `market.stable`; a operação de transferência da Preparar; `move` com `viaZoneId` e as zonas do meio na projeção; `viaZoneId` no `PlayerMoved`; `mount` na doação do laboratório e nas recompensas; a ativação `loseMount`; motivos de recusa (`mountAlreadyOwned`, `noMount`, `mountNotEmpty`, `mountNotOffered` e os da transferência); eventos novos. Implementar tipos, integridade, schemas, leitura legada, editor, proteção de referência, chaves e validador de cartas. Conteúdo de teste: `fixture.plow-horse`, `fixture.war-pony` (D-148) e `fixture.old-mine` Rural com Estábulo; conferir os e2e antigos afetados pela mudança da `old-mine` e pelo sorteio de fator do novo mercado. Concluída no devlog 091 (D-149).
 - [x] **T-75 — Estado da montaria e save v11 (REQ-157, REQ-163, D-146).** `mount` no jogador, efeitos e habilidades da montaria como recurso em uso, doação do laboratório, `loseMount` com limbo, presenter; origens `mount`/`mountAbility` e `useAbility` com `mountAbility` (D-148), cobrindo o cenário "Habilidade da montaria" com `fixture.war-pony`. Save v11; v2 a v10 leem `null`. Cobrir reabertura e o equipamento com estado no inventário extra. Concluída no devlog 092 (D-150).
 - [x] **T-76 — Estábulo (REQ-158).** `buyMount`/`sellMount` no lote de `visitMarket`, preços com fator, `mountNotEmpty`, ouro perdido, projeção `stable`, `lastMarketVisit`, e2e com Supertest. Cobrir os exemplos 322 e 140 e vender e comprar no mesmo lote. Concluída no devlog 093 (D-151).
-- [ ] **T-77 — Espaço da montaria e transferência (REQ-159, REQ-160, D-143, D-144).** Destino automático em todas as chegadas, regras de espaço somadas (booster, singles, J1), Ajustar deck com a pasta extra, operação de transferência, `ReceiveSpace` em todas as saídas e `space` no descarte da recompensa pendente (D-148). Cobrir os cenários "Destino pronto" e "Descarte com montaria" e cada chegada com o espaço principal cheio e as recusas sem efeito. Concluída no devlog 094 (D-152).
+- [x] **T-77 — Espaço da montaria e transferência (REQ-159, REQ-160, D-143, D-144).** Destino automático em todas as chegadas, regras de espaço somadas (booster, singles, J1), Ajustar deck com a pasta extra, operação de transferência, `ReceiveSpace` em todas as saídas e `space` no descarte da recompensa pendente (D-148). Cobrir os cenários "Destino pronto" e "Descarte com montaria" e cada chegada com o espaço principal cheio e as recusas sem efeito. Concluída no devlog 094 (D-152).
 - [ ] **T-78 — Movimentar com montaria (REQ-161, D-145).** Destinos a 2 travessias, zonas do meio na projeção, `viaZoneId`, `PlayerMoved`, recusas. Cobrir os dois caminhos possíveis e o padrão por `id`.
 - [ ] **T-79 — Montaria como recompensa (REQ-162).** Conteúdo aceitando `mount` nas recompensas, entrega sem montaria, volta ao deck ou limbo com montaria.
 - [ ] **T-80 — Campanhas e validação integrada (REQ-155 a REQ-163).** Catálogo temporário e campanhas no padrão da T-73 (Estábulo em zona Rural, montaria com conteúdo para testar `mountNotEmpty`, inventário cheio para ver o transbordo, mapa com dois caminhos a 2 zonas). Depois das verificações do autor, `implementado (BE)`; `validado` após o retorno integrado.
@@ -905,6 +905,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 0.95 | 2026-11-25 | T-75 concluída (devlog 092): estado da montaria, origens `mount`/`mountAbility`, `loseMount` e save v11 (D-150). |
 | 0.96 | 2026-11-25 | T-76 concluída (devlog 093): Estábulo em `visitMarket` (`buyMount`/`sellMount`), projeção `market.stable` (D-151). |
 | 0.97 | 2026-11-25 | T-77 concluída (devlog 094): destino automático em todas as chegadas, Ajustar deck e J1 com a montaria, `transferMount`, `ReceiveSpace` e descarte por espaço; Criar transborda com `destination` (contrato v0.91) (D-152). |
+| 0.98 | 2026-11-25 | T-77 marcada como concluída após o autor confirmar que a suíte e2e passou (devlog 094). |
 
 ## Apêndice A — Conteúdo de teste
 

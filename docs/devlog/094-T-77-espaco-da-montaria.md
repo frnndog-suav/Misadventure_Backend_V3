@@ -38,7 +38,13 @@ npm run test:e2e        # com o Postgres no ar
 - `domain-guard --all` OK; `typecheck` OK; Prettier nos arquivos alterados.
 - `npx vitest run`: 135 arquivos, 1761 testes verdes (depois da revisão: craft, buySingle/buyBooster, Vasculhar, recusas da transferência e presenter de saves antigos).
 - `lint`: só os erros preexistentes de `test/prepare-feat-13.cjs` e `test/prepare-feat-14.cjs`.
-- e2e: pendente (Postgres fora do ar).
+
+### Execuções e2e
+
+- O autor executou a suíte. Passaram 322 de 326 testes, com quatro falhas de asserção.
+- Ajustadas as expectativas em `index.blacksmith.controller.e2e-spec.ts` (`craft.destination`), `index.market.controller.e2e-spec.ts` (`buyStock.received`) e `index.mount-space.controller.e2e-spec.ts` (`ACTION_INVALID.details.fields`, inclusive a asserção de quantidade zero no mesmo cenário).
+- Na segunda execução do autor, passaram 325 de 326 testes. O cenário de descarte chegou ao HTTP 200 e falhou na asserção do inventário principal, que omitia o `equipmentState` da espada. A expectativa passou a conferir o estado inicial completo do equipamento.
+- O autor confirmou que a suíte e2e passou sem erros após os ajustes. T-77 concluída.
 
 ## Ponte com o frontend
 
@@ -46,7 +52,7 @@ Contrato v0.91 (campo `destination` no `craft`). O aviso completo vai na `implem
 
 ## Commit sugerido
 
-`feat/add mount space overflow and transfer (t-77)`
+`test/align mount space e2e assertions (t-77)`
 
 ## Revisão (spec-reviewer, 2026-11-25)
 
