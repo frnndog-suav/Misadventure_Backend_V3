@@ -807,6 +807,16 @@ const marketVisitSchema = z.strictObject({
           capacity: count,
           gold: marketGold,
         }),
+        z.strictObject({
+          operation: z.literal('buyMount'),
+          cardId: id,
+          gold: marketGold,
+        }),
+        z.strictObject({
+          operation: z.literal('sellMount'),
+          cardId: id,
+          gold: marketGold,
+        }),
       ])
     )
     .readonly(),

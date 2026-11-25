@@ -15,6 +15,7 @@ import {
   type TEquipmentState,
 } from '../equipment-state'
 import { addToInventory } from '../inventory'
+import type { TMountState } from '../mount'
 import {
   capacitiesOf,
   departSingle,
@@ -68,6 +69,31 @@ const treasureValue = (config: TGameConfigValues, rarity: TRarity) =>
     epic: config.treasureValueEpic,
     legendary: config.treasureValueLegendary,
   })
+
+const mountBasePrice = (config: TGameConfigValues, rarity: TRarity) =>
+  rarityValue(rarity, {
+    common: config.mountPriceCommon,
+    uncommon: config.mountPriceUncommon,
+    rare: config.mountPriceRare,
+    epic: config.mountPriceEpic,
+    legendary: config.mountPriceLegendary,
+  })
+
+/** Estábulo (REQ-158 a): ⌈preço base da raridade × fator⌉. */
+export const mountPurchasePrice = (
+  config: TGameConfigValues,
+  rarity: TRarity,
+  factorPercent: number
+): number => Math.ceil((mountBasePrice(config, rarity) * factorPercent) / 100)
+
+/** Estábulo (REQ-158 b): ⌊50% × preço base⌋, sem fator. */
+export const mountSellPrice = (
+  config: TGameConfigValues,
+  rarity: TRarity
+): number => Math.floor(mountBasePrice(config, rarity) / 2)
+
+const mountIsEmpty = (mount: TMountState): boolean =>
+  mount.inventory.length === 0 && mount.tcgFolder.length === 0
 
 /** Estoque (REQ-141 a): ⌈`stockPrice` × fator⌉ por compra. */
 export const stockPurchasePrice = (
@@ -318,6 +344,11 @@ export type TMarketView = Readonly<{
     | null
   services: readonly TMarketService[]
   sellOffers: readonly TSellOffer[]
+  /** REQ-158: só em zona com Estábulo; senão `null`. */
+  stable: Readonly<{
+    offers: readonly { cardId: string; price: number }[]
+    currentMount: { cardId: string; price: number; sellable: boolean } | null
+  }> | null
 }>
 
 /**
@@ -331,6 +362,8 @@ export function describeMarket(input: {
   cards: TCards
   zoneId: string
   zoneStock: readonly string[]
+  /** REQ-158: `market.mounts` da zona (vazio = sem Estábulo). */
+  zoneMounts?: readonly string[]
   collectionId: string | null
   state: TMarketsState
 }): TMarketView {
@@ -390,6 +423,48 @@ export function describeMarket(input: {
     showcase,
     services: servicesOf(config, player.expansions),
     sellOffers: sellOffersOf(config, player, cards),
+    stable: describeStable(
+      config,
+      player,
+      cards,
+      input.zoneMounts ?? [],
+      factorPercent
+    ),
+  }
+}
+
+/** REQ-158: ofertas na ordem de `market.mounts` (id que o catálogo não tem como `mount` fica de fora). */
+function describeStable(
+  config: TGameConfigValues,
+  player: TPlayerState,
+  cards: TCards,
+  zoneMounts: readonly string[],
+  factorPercent: number
+): TMarketView['stable'] {
+  if (zoneMounts.length === 0) return null
+  const offers = zoneMounts.flatMap((cardId) => {
+    const card = cards.get(cardId)
+    return card?.type === 'mount'
+      ? [
+          {
+            cardId,
+            price: mountPurchasePrice(config, card.rarity, factorPercent),
+          },
+        ]
+      : []
+  })
+  const mount = player.mount ?? null
+  const card = mount === null ? undefined : cards.get(mount.cardId)
+  return {
+    offers,
+    currentMount:
+      mount !== null && card?.type === 'mount'
+        ? {
+            cardId: mount.cardId,
+            price: mountSellPrice(config, card.rarity),
+            sellable: mountIsEmpty(mount),
+          }
+        : null,
   }
 }
 
@@ -423,6 +498,8 @@ export type TMarketOperationResult =
       capacity: number
       gold: number
     }
+  | { operation: 'buyMount'; cardId: string; gold: number }
+  | { operation: 'sellMount'; cardId: string; gold: number }
 
 /** Resultado do `visitMarket` aceito (REQ-140). */
 export type TMarketVisitResult = Readonly<{
@@ -444,6 +521,10 @@ export type TMarketRefusalReason =
   | 'notInInventory'
   | 'notInTcgFolder'
   | 'notLotMultiple'
+  | 'mountNotOffered'
+  | 'mountAlreadyOwned'
+  | 'noMount'
+  | 'mountNotEmpty'
 
 export type TMarketRefusal = Readonly<{
   reason: TMarketRefusalReason
@@ -475,6 +556,8 @@ export function applyMarketOperations(input: {
   operations: readonly TMarketOperation[]
   zoneId: string
   zoneStock: readonly string[]
+  /** REQ-158: `market.mounts` da zona (vazio = sem Estábulo). */
+  zoneMounts?: readonly string[]
   collectionId: string | null
   state: TMarketsState
   candidates: readonly TMarketCandidate[]
@@ -484,6 +567,8 @@ export function applyMarketOperations(input: {
   let { state } = input
   let { inventory, tcgFolder, gold } = input.player
   let expansions = input.player.expansions ?? noExpansions()
+  let mount = input.player.mount ?? null
+  const zoneMounts = input.zoneMounts ?? []
   const marketIndex = state.markets.findIndex(
     (entry) => entry.zoneId === zoneId
   )
@@ -508,17 +593,20 @@ export function applyMarketOperations(input: {
     inventory = next
   }
 
-  /** Venda: o ouro acima da bolsa é perdido (REQ-142). */
+  /** Venda: o ouro acima da bolsa é perdido (REQ-142, REQ-158). */
+  const receive = (proceeds: number) => {
+    const purse = capacitiesOf(config, expansions).purse
+    const received = Math.min(proceeds, Math.max(0, purse - gold))
+    goldLost += proceeds - received
+    gold += received
+  }
   const credit = (
     proceeds: number,
     source: 'inventory' | 'tcgFolder',
     cardId: string,
     quantity: number
   ) => {
-    const purse = capacitiesOf(config, expansions).purse
-    const received = Math.min(proceeds, Math.max(0, purse - gold))
-    goldLost += proceeds - received
-    gold += received
+    receive(proceeds)
     results.push({
       operation: 'sell',
       source,
@@ -750,6 +838,35 @@ export function applyMarketOperations(input: {
         })
         break
       }
+      case 'buyMount': {
+        const { cardId } = operation
+        const card = cards.get(cardId)
+        if (!zoneMounts.includes(cardId) || card?.type !== 'mount') {
+          return refuse('mountNotOffered', cardId)
+        }
+        if (mount !== null) return refuse('mountAlreadyOwned', cardId)
+        const price = mountPurchasePrice(config, card.rarity, factorPercent)
+        if (gold < price) return refuse('notEnoughGold', cardId)
+        gold -= price
+        mount = { cardId, inventory: [], tcgFolder: [] }
+        results.push({ operation: 'buyMount', cardId, gold: -price })
+        break
+      }
+      case 'sellMount': {
+        if (mount === null) return refuse('noMount')
+        if (!mountIsEmpty(mount)) return refuse('mountNotEmpty', mount.cardId)
+        const card = cards.get(mount.cardId)
+        const proceeds =
+          card?.type === 'mount' ? mountSellPrice(config, card.rarity) : 0
+        receive(proceeds)
+        results.push({
+          operation: 'sellMount',
+          cardId: mount.cardId,
+          gold: proceeds,
+        })
+        mount = null
+        break
+      }
       default: {
         const _exhaustive: never = operation
         return _exhaustive
@@ -758,7 +875,14 @@ export function applyMarketOperations(input: {
   }
 
   return right({
-    player: { ...input.player, inventory, tcgFolder, gold, expansions },
+    player: {
+      ...input.player,
+      inventory,
+      tcgFolder,
+      gold,
+      expansions,
+      mount,
+    },
     state,
     result: { zoneId, results, goldLost },
   })

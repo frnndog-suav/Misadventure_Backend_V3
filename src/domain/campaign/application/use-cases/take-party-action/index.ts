@@ -807,6 +807,8 @@ export class TakePartyActionUseCase {
     }
     const cardIds = [
       ...(zone?.type === 'zone' ? (zone.market?.stock ?? []) : []),
+      ...(zone?.type === 'zone' ? (zone.market?.mounts ?? []) : []),
+      ...(player?.mount ? [player.mount.cardId] : []),
       ...(player?.inventory ?? []).map(({ cardId }) => cardId),
       ...(player?.tcgFolder ?? []).map(({ cardId }) => cardId),
     ]

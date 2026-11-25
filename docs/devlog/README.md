@@ -110,6 +110,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 090 | FEAT-17 | [FEAT-17 validada](090-FEAT-17-validada.md) | concluída |
 | 091 | T-74 | [Conteúdo da montaria](091-T-74-conteudo-da-montaria.md) | aguardando revisão |
 | 092 | T-75 | [Estado da montaria e save v11](092-T-75-estado-da-montaria.md) | aguardando revisão |
+| 093 | T-76 | [Estábulo](093-T-76-estabulo.md) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

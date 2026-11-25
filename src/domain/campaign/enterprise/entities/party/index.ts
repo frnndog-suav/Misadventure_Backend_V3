@@ -5359,6 +5359,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       operations,
       zoneId: zone.id,
       zoneStock: zone.market.stock,
+      zoneMounts: zone.market.mounts,
       collectionId: catalog.collectionId,
       state: { markets: this.markets, pool: this.marketPool },
       candidates: this.marketCandidates,
@@ -5405,6 +5406,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       cards,
       zoneId: zone.id,
       zoneStock: zone.market.stock,
+      zoneMounts: zone.market.mounts,
       collectionId:
         dimension?.type === 'dimension' ? dimension.collectionId : null,
       state: { markets: this.markets, pool: this.marketPool },

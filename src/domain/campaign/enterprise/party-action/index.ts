@@ -107,6 +107,9 @@ export type TMarketOperation =
       inventorySlotIndex?: number
     }
   | { operation: 'buyExpansion'; expansion: TMarketExpansion }
+  /** REQ-158: Estábulo. */
+  | { operation: 'buyMount'; cardId: string }
+  | { operation: 'sellMount' }
 
 /** Onde está o equipamento que a operação do ferreiro atende (REQ-149). */
 export type TEquipmentTarget =
@@ -1193,6 +1196,16 @@ function parseMarketOperation(
       if (issues.length > before || expansion === undefined) return null
       return { operation, expansion }
     }
+    case 'buyMount': {
+      const cardId = text('cardId')
+      extras(['cardId'])
+      if (issues.length > before || cardId === null) return null
+      return { operation, cardId }
+    }
+    case 'sellMount':
+      extras([])
+      if (issues.length > before) return null
+      return { operation }
     default:
       issues.push({ field: `${path}.operation`, reason: 'unknownOperation' })
       return null

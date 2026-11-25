@@ -572,6 +572,8 @@ export async function findPartyCards(
   if (actor && actorZone?.type === 'zone' && actorZone.market) {
     // FEAT-16 (REQ-140): estoque, vitrine, pasta e boosters da coleção vigente.
     for (const cardId of actorZone.market.stock) cardIds.add(cardId)
+    // FEAT-18 (REQ-158): montarias do Estábulo.
+    for (const cardId of actorZone.market.mounts) cardIds.add(cardId)
     for (const cardId of party.markets.find(
       ({ zoneId }) => zoneId === actorZone.id
     )?.showcase ?? [])
