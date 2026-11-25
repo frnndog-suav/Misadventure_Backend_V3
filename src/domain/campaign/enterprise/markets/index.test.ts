@@ -64,9 +64,15 @@ describe('marketCandidatesOf', () => {
 describe('marketZonesOf', () => {
   it('REQ-138: zonas do mapa com mercado, na ordem do mapa', () => {
     const zones = [
-      makeZoneCard({ id: 'a', market: { stock: [], singles: false } }),
+      makeZoneCard({
+        id: 'a',
+        market: { stock: [], singles: false, mounts: [] },
+      }),
       makeZoneCard({ id: 'b', market: null }),
-      makeZoneCard({ id: 'c', market: { stock: [], singles: true } }),
+      makeZoneCard({
+        id: 'c',
+        market: { stock: [], singles: true, mounts: [] },
+      }),
     ]
 
     expect(marketZonesOf(['c', 'b', 'a'], zones)).toEqual([

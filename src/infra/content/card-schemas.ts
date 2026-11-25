@@ -249,7 +249,12 @@ const cardSchemas = {
     questDeck: z.array(text).default([]),
     effects: z.array(zoneEffectSchema),
     market: z
-      .strictObject({ stock: z.array(text), singles: z.boolean() })
+      .strictObject({
+        stock: z.array(text),
+        singles: z.boolean(),
+        // REQ-155: conteúdo legado sem Estábulo lê `[]`.
+        mounts: z.array(text).default([]),
+      })
       .nullable()
       .default(null),
     blacksmith: z
@@ -349,6 +354,17 @@ const cardSchemas = {
     rewardDecks: z.array(zoneDeck),
     eventDecks: z.array(zoneDeck).optional(),
   }),
+  // REQ-155: tipos e criatura vazios são conferidos na integridade (mensagem própria).
+  mount: z.strictObject({
+    id,
+    name: text,
+    flavorText,
+    rarity: z.enum(RARITIES),
+    mountTypes: z.array(z.enum(ENEMY_TYPES)),
+    creature: z.string(),
+    effects: z.array(effectSchema),
+    abilities: z.array(ability),
+  }),
 } satisfies Record<TCardType, z.ZodType>
 
 const status = z.enum(CONTENT_STATUSES).optional()
@@ -363,6 +379,7 @@ export const cardFileSchemas = {
   combatEvent: cardSchemas.combatEvent.extend({ status }),
   zoneQuest: cardSchemas.zoneQuest.extend({ status }),
   dimension: cardSchemas.dimension.extend({ status }),
+  mount: cardSchemas.mount.extend({ status }),
 } satisfies Record<TCardType, z.ZodType>
 
 /**
@@ -401,6 +418,7 @@ export const cardInputSchema = z.discriminatedUnion('type', [
   cardSchemas.combatEvent.omit({ id: true }).extend(inputKeys('combatEvent')),
   cardSchemas.zoneQuest.omit({ id: true }).extend(inputKeys('zoneQuest')),
   cardSchemas.dimension.omit({ id: true }).extend(inputKeys('dimension')),
+  cardSchemas.mount.omit({ id: true }).extend(inputKeys('mount')),
 ])
 
 /**

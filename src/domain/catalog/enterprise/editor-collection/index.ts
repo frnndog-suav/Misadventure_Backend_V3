@@ -58,6 +58,7 @@ export function describeCollection(
         for (const tag of card.tags) tags.add(tag)
         break
       case 'attribute':
+      case 'mount':
         rarityCounts[card.rarity] += 1
         break
       case 'zone':

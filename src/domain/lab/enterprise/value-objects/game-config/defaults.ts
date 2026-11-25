@@ -199,11 +199,33 @@ export const BLACKSMITH_LIMITS = {
   { min: number; max: number }
 >
 
+/** REQ-156 (CONTRATO FEAT-18): preço base por raridade e espaços da montaria. */
+export const MOUNT_DEFAULTS = {
+  mountPriceCommon: 80,
+  mountPriceUncommon: 150,
+  mountPriceRare: 280,
+  mountPriceEpic: 550,
+  mountPriceLegendary: 1100,
+  mountInventorySlots: 4,
+  mountFolderCapacity: 10,
+}
+
+export const MOUNT_LIMITS = {
+  mountPriceCommon: { min: 0, max: 1000000 },
+  mountPriceUncommon: { min: 0, max: 1000000 },
+  mountPriceRare: { min: 0, max: 1000000 },
+  mountPriceEpic: { min: 0, max: 1000000 },
+  mountPriceLegendary: { min: 0, max: 1000000 },
+  mountInventorySlots: { min: 0, max: 100 },
+  mountFolderCapacity: { min: 0, max: 1000 },
+} satisfies Record<keyof typeof MOUNT_DEFAULTS, { min: number; max: number }>
+
 export interface TGameConfigValues extends Record<
   | keyof typeof COMBAT_NUMERIC_DEFAULTS
   | keyof typeof QUEST_DEFAULTS
   | keyof typeof MARKET_DEFAULTS
-  | keyof typeof BLACKSMITH_DEFAULTS,
+  | keyof typeof BLACKSMITH_DEFAULTS
+  | keyof typeof MOUNT_DEFAULTS,
   number
 > {
   enemyAbilityPriorities: TEnemyAbilityPriorities
@@ -261,6 +283,7 @@ export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
   ...QUEST_DEFAULTS,
   ...MARKET_DEFAULTS,
   ...BLACKSMITH_DEFAULTS,
+  ...MOUNT_DEFAULTS,
   ...COMBAT_NUMERIC_DEFAULTS,
   enemyAbilityPriorities: {
     aggressive: ['highestPower'],
@@ -353,6 +376,7 @@ export const GAME_CONFIG_LIMITS: Readonly<
   ...QUEST_LIMITS,
   ...MARKET_LIMITS,
   ...BLACKSMITH_LIMITS,
+  ...MOUNT_LIMITS,
   recoverVigorPercent: { min: 0, max: 100 },
   recoverHandSize: { min: 0, max: 200 },
   inventoryCapacity: { min: 0, max: 100 },

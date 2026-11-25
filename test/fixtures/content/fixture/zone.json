@@ -23,7 +23,12 @@
           "kind": "element",
           "element": "fire",
           "bonusPercent": 10,
-          "materials": [{ "cardId": "fixture.ember-shard", "quantity": 1 }]
+          "materials": [
+            {
+              "cardId": "fixture.ember-shard",
+              "quantity": 1
+            }
+          ]
         }
       ]
     },
@@ -33,18 +38,24 @@
         "fixture.arrows",
         "fixture.fishing-rod"
       ],
-      "singles": true
+      "singles": true,
+      "mounts": []
     }
   },
   {
     "id": "fixture.old-mine",
     "title": "Mina Velha",
-    "zoneType": "forest",
+    "zoneType": "rural",
     "location": "Terras Selvagens",
     "connectionArrows": 1,
     "arrowLayout": null,
-    "zoneActions": ["startEvent"],
-    "effects": []
+    "zoneActions": ["startEvent", "visitMarket"],
+    "effects": [],
+    "market": {
+      "stock": [],
+      "singles": false,
+      "mounts": ["fixture.plow-horse"]
+    }
   },
   {
     "id": "fixture.stone-bend",

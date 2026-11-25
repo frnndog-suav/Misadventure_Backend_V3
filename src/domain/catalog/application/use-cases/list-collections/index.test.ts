@@ -55,6 +55,7 @@ describe('ListCollectionsUseCase', () => {
           combatEvent: 0,
           zoneQuest: 0,
           dimension: 1,
+          mount: 0,
         },
       },
       {
@@ -69,6 +70,7 @@ describe('ListCollectionsUseCase', () => {
           combatEvent: 0,
           zoneQuest: 0,
           dimension: 0,
+          mount: 0,
         },
       },
     ])

@@ -20,6 +20,7 @@ export const CARD_TYPES = [
   'combatEvent',
   'zoneQuest',
   'dimension',
+  'mount',
 ] as const
 export type TCardType = (typeof CARD_TYPES)[number]
 
@@ -290,8 +291,15 @@ export type TZoneCard = Readonly<{
   zoneActions: readonly TZoneAction[]
   questDeck?: readonly string[]
   effects: readonly TZoneEffect[]
-  /** REQ-136, D-114: presente se e só se `zoneActions` tem `visitMarket`. */
-  market: Readonly<{ stock: readonly string[]; singles: boolean }> | null
+  /**
+   * REQ-136, D-114: presente se e só se `zoneActions` tem `visitMarket`.
+   * REQ-155: `mounts` = cartas `mount` do Estábulo (não vazia só em Rural/Habitada).
+   */
+  market: Readonly<{
+    stock: readonly string[]
+    singles: boolean
+    mounts: readonly string[]
+  }> | null
   /** REQ-145: presente se e só se `zoneActions` tem `visitBlacksmith`. */
   blacksmith: Readonly<{
     enchantments: readonly TBlacksmithEnchantment[]
@@ -510,6 +518,20 @@ export type TDimensionCard = Readonly<{
   eventDecks?: readonly TRewardDeck[]
 }>
 
+/** REQ-155 (README 26, D-142): sem categoria e sem `priceMultiplier`. */
+export type TMountCard = Readonly<{
+  type: 'mount'
+  id: string
+  collectionId: string
+  name: string
+  flavorText: string | null
+  rarity: TRarity
+  mountTypes: readonly TEnemyType[]
+  creature: string
+  effects: readonly TEffect[]
+  abilities: readonly TAbility[]
+}>
+
 export type TCard =
   | TZoneCard
   | TAttributeCard
@@ -519,6 +541,7 @@ export type TCard =
   | TCombatEventCard
   | TZoneQuestCard
   | TDimensionCard
+  | TMountCard
 
 export type TCollection = Readonly<{ id: string; name: string }>
 

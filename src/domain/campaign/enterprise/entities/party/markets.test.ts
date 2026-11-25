@@ -44,7 +44,7 @@ const withMarket = zones.map((zone) =>
     ? {
         ...zone,
         zoneActions: [...zone.zoneActions, 'visitMarket' as const],
-        market: { stock: [], singles: true },
+        market: { stock: [], singles: true, mounts: [] },
       }
     : zone
 )

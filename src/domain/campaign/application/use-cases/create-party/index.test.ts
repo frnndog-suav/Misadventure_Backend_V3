@@ -424,7 +424,7 @@ describe('CreatePartyUseCase — mercados (REQ-138)', () => {
         ? {
             ...card,
             zoneActions: [...card.zoneActions, 'visitMarket' as const],
-            market: { stock: [], singles: true },
+            market: { stock: [], singles: true, mounts: [] },
           }
         : card
     )

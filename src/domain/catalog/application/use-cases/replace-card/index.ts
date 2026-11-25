@@ -19,6 +19,7 @@ import {
   citesOtherCards,
   isCitedInBlacksmith,
   isCitedInMarketStock,
+  isCitedInStable,
   isCitedInRewardDeck,
   effectCitationPublicationIssues,
   combatDeckPublicationIssues,
@@ -102,9 +103,12 @@ export class ReplaceCardUseCase {
         current.card.itemCategory === 'material' &&
         (card.type !== 'item' || card.itemCategory !== 'material')) ||
       (current.card.type === 'equipment' && card.type !== 'equipment')
+    // REQ-155: montaria do Estábulo continua montaria.
+    const leavesStable = current.card.type === 'mount' && card.type !== 'mount'
     const allCards =
       citesOtherCards(card) ||
       leavesStock ||
+      leavesStable ||
       leavesBlacksmithRole ||
       leavesEventTypes ||
       losesCombatExecution ||
@@ -120,6 +124,11 @@ export class ReplaceCardUseCase {
       )
     const inMarketStock = () =>
       isCitedInMarketStock(
+        allCards.map((entry) => entry.card),
+        new Set([cardId])
+      )
+    const inStable = () =>
+      isCitedInStable(
         allCards.map((entry) => entry.card),
         new Set([cardId])
       )
@@ -186,6 +195,9 @@ export class ReplaceCardUseCase {
     if (!renamed && leavesStock && inMarketStock()) {
       return left(new ContentReferencedError('marketStock'))
     }
+    if (!renamed && leavesStable && inStable()) {
+      return left(new ContentReferencedError('stable'))
+    }
     if (!renamed && leavesBlacksmithRole && inBlacksmith()) {
       return left(new ContentReferencedError('blacksmith'))
     }
@@ -203,6 +215,7 @@ export class ReplaceCardUseCase {
       if (cited()) return left(new ContentReferencedError('rewardDeck'))
       if (inMarketStock())
         return left(new ContentReferencedError('marketStock'))
+      if (inStable()) return left(new ContentReferencedError('stable'))
       if (inBlacksmith()) return left(new ContentReferencedError('blacksmith'))
       if (await this.contentStore.findEditorCard(card.id)) {
         return left(

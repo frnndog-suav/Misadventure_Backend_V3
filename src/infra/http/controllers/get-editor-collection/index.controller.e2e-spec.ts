@@ -23,7 +23,7 @@ describe('GET /lab/content/collections/:collectionId (e2e)', () => {
       id: 'fixture',
       name: 'Coleção de Teste',
       description: '',
-      publishedCount: 28,
+      publishedCount: 30,
       draftCount: 0,
       cardCounts: {
         zone: 4,
@@ -34,8 +34,9 @@ describe('GET /lab/content/collections/:collectionId (e2e)', () => {
         combatEvent: 1,
         zoneQuest: 0,
         dimension: 1,
+        mount: 2,
       },
-      rarityCounts: { common: 13, uncommon: 5, rare: 3, epic: 0, legendary: 0 },
+      rarityCounts: { common: 14, uncommon: 5, rare: 4, epic: 0, legendary: 0 },
       tags: [
         'duas mãos',
         'elmo',

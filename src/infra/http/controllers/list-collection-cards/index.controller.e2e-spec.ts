@@ -58,6 +58,7 @@ describe('GET /catalog/collections/:collectionId/cards (e2e)', () => {
       ['fixture.oak-shield', 'equipment'],
       ['fixture.old-mine', 'zone'],
       ['fixture.pickaxe', 'item'],
+      ['fixture.plow-horse', 'mount'],
       ['fixture.short-sword', 'equipment'],
       ['fixture.silver-fish', 'item'],
       ['fixture.stone-bend', 'zone'],
@@ -65,6 +66,7 @@ describe('GET /catalog/collections/:collectionId/cards (e2e)', () => {
       ['fixture.strength-tonic', 'item'],
       ['fixture.sword-blueprint', 'item'],
       ['fixture.test-dimension', 'dimension'],
+      ['fixture.war-pony', 'mount'],
       ['fixture.whispering-grove', 'zone'],
       ['fixture.wounded-traveler', 'randomEvent'],
     ])

@@ -31,7 +31,7 @@ const SWORD = makeEquipmentCard({
 const CARDS: TCard[] = [ORE, SWORD]
 const HARBOR = makeUrbanZoneCard({
   zoneActions: ['useVault', 'visitBlacksmith', 'visitMarket'],
-  market: { stock: [], singles: false },
+  market: { stock: [], singles: false, mounts: [] },
   blacksmith: { enchantments: [] },
 })
 

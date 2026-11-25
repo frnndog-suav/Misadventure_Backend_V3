@@ -238,7 +238,7 @@ describe('FEAT-11 — efeitos e status (e2e)', () => {
     const response = await request(server())
       .get('/catalog/collections/fixture/cards')
       .expect(200)
-    expect(response.body).toHaveLength(28)
+    expect(response.body).toHaveLength(30)
     expect(response.body).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: TONIC, type: 'item' }),

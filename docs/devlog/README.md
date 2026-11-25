@@ -105,9 +105,10 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 085 | T-69 | [Ir ao Ferreiro: consertar, refinar e criar](085-T-69-ir-ao-ferreiro.md) | aguardando revisão |
 | 086 | T-70 | [Encantar](086-T-70-encantar.md) | aguardando revisão |
 | 087 | T-71 | [Oficina do Artífice](087-T-71-oficina-do-artifice.md) | concluída |
-| 088 | T-72 | [Venda de equipamento modificado](088-T-72-venda-de-equipamento-modificado.md) | aguardando revisão |
+| 088 | T-72 | [Venda de equipamento modificado](088-T-72-venda-de-equipamento-modificado.md) | concluída |
 | 089 | T-73 | [Campanhas da FEAT-17](089-T-73-campanhas-da-feat-17.md) | concluída |
 | 090 | FEAT-17 | [FEAT-17 validada](090-FEAT-17-validada.md) | concluída |
+| 091 | T-74 | [Conteúdo da montaria](091-T-74-conteudo-da-montaria.md) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

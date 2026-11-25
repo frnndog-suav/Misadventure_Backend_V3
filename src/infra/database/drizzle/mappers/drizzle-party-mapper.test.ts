@@ -4,6 +4,7 @@ import { SeededRng } from '@/core/rng/seeded-rng'
 import {
   BLACKSMITH_DEFAULTS,
   GAME_CONFIG_DEFAULTS,
+  MOUNT_DEFAULTS,
 } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
 import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
@@ -117,6 +118,25 @@ describe('DrizzlePartyMapper', () => {
 
     expect(restored.config).toMatchObject({
       ...BLACKSMITH_DEFAULTS,
+      initialGold: 40,
+    })
+  })
+
+  it('REQ-156: snapshot sem as chaves da montaria ganha os padrões', () => {
+    const row = DrizzlePartyMapper.toDrizzle(usedRngParty())
+    const legacyConfig: Record<string, unknown> = { ...row.state.config }
+    for (const key of Object.keys(MOUNT_DEFAULTS)) {
+      delete legacyConfig[key]
+    }
+    expect(legacyConfig).not.toHaveProperty('mountFolderCapacity')
+
+    const restored = DrizzlePartyMapper.toDomain({
+      ...row,
+      state: { ...row.state, config: legacyConfig } as typeof row.state,
+    })
+
+    expect(restored.config).toMatchObject({
+      ...MOUNT_DEFAULTS,
       initialGold: 40,
     })
   })

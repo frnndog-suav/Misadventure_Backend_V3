@@ -363,7 +363,10 @@ describe('Ir ao Mercado (e2e)', () => {
 
   it('REQ-140: fora do Porto — market null, sem visitMarket e 409 zoneActionUnavailable; com 0 PA no Porto — market presente, sem visitMarket e 409 noActionPoints', async () => {
     const party = await startedParty()
-    const target = player(party).moveTargets[0]
+    // Zona sem mercado (a Mina Velha tem Estábulo desde a FEAT-18).
+    const target = player(party).moveTargets.find(
+      (zoneId: string) => zoneId !== 'fixture.old-mine'
+    )
     const moved = await act(party.id, { type: 'move', zoneId: target })
     expect(moved.status).toBe(200)
     expect(player(moved.body).market).toBeNull()

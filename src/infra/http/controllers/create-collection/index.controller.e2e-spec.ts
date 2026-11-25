@@ -17,6 +17,7 @@ const ZERO_TYPES = {
   combatEvent: 0,
   zoneQuest: 0,
   dimension: 0,
+  mount: 0,
 }
 const ZERO_RARITIES = { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 }
 

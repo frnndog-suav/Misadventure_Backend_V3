@@ -243,6 +243,18 @@ export function isCitedInMarketStock(
   )
 }
 
+/** REQ-155: alguma zona tem uma destas no Estábulo (`market.mounts`)? */
+export function isCitedInStable(
+  cards: readonly TCard[],
+  cardIds: ReadonlySet<string>
+): boolean {
+  return cards.some(
+    (card) =>
+      card.type === 'zone' &&
+      (card.market?.mounts.some((id) => cardIds.has(id)) ?? false)
+  )
+}
+
 /**
  * REQ-99 (D-91): ao publicar, a carta e o título de zona citados pelos efeitos
  * precisam existir no catálogo. `cards` = as cartas de todas as coleções

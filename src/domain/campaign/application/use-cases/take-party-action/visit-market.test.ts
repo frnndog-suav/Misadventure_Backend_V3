@@ -52,7 +52,7 @@ const W = makeEquipmentCard({
 const STR = makeAttributeCard({ id: 'fixture.strength-basic' })
 const HARBOR = makeUrbanZoneCard({
   zoneActions: ['startEvent', 'visitMarket'],
-  market: { stock: [P.id, 'fixture.unpublished'], singles: true },
+  market: { stock: [P.id, 'fixture.unpublished'], singles: true, mounts: [] },
 })
 const MINE = makeZoneCard({ id: 'fixture.old-mine' })
 

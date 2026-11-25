@@ -95,6 +95,11 @@ const CATALOG_MESSAGES: Record<TCatalogIssueReason, string> = {
   marketMismatch: 'Zona com Ir ao Mercado precisa do mercado, e só ela.',
   stockItemWithoutPrice: 'O item do estoque precisa ter preço de estoque.',
   duplicateStockItem: 'Item repetido no estoque.',
+  mountTypesInvalid: 'A montaria precisa de ao menos um tipo, sem repetição.',
+  creatureRequired: 'A montaria precisa da criatura.',
+  stableNotAllowed: 'Só zonas Rurais e Habitadas têm Estábulo.',
+  notAMount: 'A carta do Estábulo precisa ser uma montaria.',
+  duplicateMount: 'Montaria repetida no Estábulo.',
   refinementMaterialsRequired:
     'Equipamento refinável precisa dos materiais de refino.',
   materialNotMaterial: 'O material precisa ser um item da categoria material.',
@@ -231,6 +236,11 @@ export function contentIssueMessage(issue: TContentIssue): string {
     case 'marketMismatch':
     case 'stockItemWithoutPrice':
     case 'duplicateStockItem':
+    case 'mountTypesInvalid':
+    case 'creatureRequired':
+    case 'stableNotAllowed':
+    case 'notAMount':
+    case 'duplicateMount':
     case 'refinementMaterialsRequired':
     case 'materialNotMaterial':
     case 'duplicateMaterial':

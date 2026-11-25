@@ -307,7 +307,10 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
   it('REQ-57: endTurn com 0 pontos passa a rodada, pontos cheios, grava; não acumulam', async () => {
     const party = await startedParty()
     const memberId = party.members[0].id
-    const a = party.members[0].player.moveTargets[0]
+    // Zona sem mercado (a Mina Velha tem Estábulo desde a FEAT-18).
+    const a = party.members[0].player.moveTargets.find(
+      (zoneId: string) => zoneId !== 'fixture.old-mine'
+    )
     let last: TParty = party
     for (const zoneId of [a, CITY, a]) {
       last = (await act(party.id, { type: 'move', zoneId })).body

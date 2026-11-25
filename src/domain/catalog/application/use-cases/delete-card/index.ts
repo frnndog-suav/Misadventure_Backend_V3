@@ -9,6 +9,7 @@ import {
   breaksQuestReferences,
   isCitedInBlacksmith,
   isCitedInMarketStock,
+  isCitedInStable,
   isCitedInRewardDeck,
 } from '@/domain/catalog/enterprise/card-validation'
 import { breaksSpecializationReferences } from '@/domain/catalog/enterprise/class-validation'
@@ -73,6 +74,15 @@ export class DeleteCardUseCase {
       )
     ) {
       return left(new ContentReferencedError('marketStock'))
+    }
+    // REQ-155: no Estábulo de alguma zona.
+    if (
+      isCitedInStable(
+        allCards.map(({ card }) => card),
+        new Set([cardId])
+      )
+    ) {
+      return left(new ContentReferencedError('stable'))
     }
     // REQ-145: material, receita ou encantamento de outra carta.
     if (

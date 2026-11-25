@@ -3,6 +3,7 @@ import {
   type TExecutableAbility,
   type TAttributeCard,
   type TDimensionCard,
+  type TMountCard,
   type TEquipmentCard,
   type TItemCard,
   type TSpecializationDefinition,
@@ -42,7 +43,12 @@ export type TEffectIssueReason =
 export type TEffectReport = (field: string, reason: TEffectIssueReason) => void
 
 export type TEffectCard =
-  TZoneCard | TAttributeCard | TEquipmentCard | TItemCard | TDimensionCard
+  | TZoneCard
+  | TAttributeCard
+  | TEquipmentCard
+  | TItemCard
+  | TDimensionCard
+  | TMountCard
 
 type TEffectSource =
   | TEffectCard

@@ -50,6 +50,7 @@ import {
 } from '@/domain/catalog/enterprise/value-objects/card'
 import {
   BLACKSMITH_LIMITS,
+  MOUNT_LIMITS,
   COMBAT_NUMERIC_LIMITS,
   GAME_CONFIG_DEFAULTS,
   KNOCKOUT_NUMERIC_LIMITS,
@@ -107,6 +108,7 @@ const optionalNumericConfigLimits = {
   ...QUEST_LIMITS,
   ...MARKET_LIMITS,
   ...BLACKSMITH_LIMITS,
+  ...MOUNT_LIMITS,
 }
 type TOptionalNumericConfigKey = keyof typeof optionalNumericConfigLimits
 type TLegacyConfigKey = Exclude<

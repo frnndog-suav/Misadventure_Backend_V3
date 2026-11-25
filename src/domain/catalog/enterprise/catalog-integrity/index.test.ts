@@ -1301,15 +1301,20 @@ describe('REQ-136 — conteúdo do mercado (README 3.4, 5.1, 5.2, 24; D-114)', (
 
     it('REQ-136: presente se e só se a zona tem Ir ao Mercado', () => {
       expect(
-        check([potion, harbor({ stock: [potion.id], singles: true })])
+        check([
+          potion,
+          harbor({ stock: [potion.id], singles: true, mounts: [] }),
+        ])
       ).toEqual([])
-      expect(check([harbor({ stock: [], singles: false })])).toEqual([])
+      expect(
+        check([harbor({ stock: [], singles: false, mounts: [] })])
+      ).toEqual([])
       expect(reasons([harbor(null)])).toEqual([
         ['fixture.gray-harbor', 'market', 'marketMismatch'],
       ])
-      expect(reasons([harbor({ stock: [], singles: true }, false)])).toEqual([
-        ['fixture.gray-harbor', 'market', 'marketMismatch'],
-      ])
+      expect(
+        reasons([harbor({ stock: [], singles: true, mounts: [] }, false)])
+      ).toEqual([['fixture.gray-harbor', 'market', 'marketMismatch']])
     })
 
     it('REQ-136: estoque só com itens com preço de estoque, sem repetição, de qualquer coleção', () => {
@@ -1332,6 +1337,7 @@ describe('REQ-136 — conteúdo do mercado (README 3.4, 5.1, 5.2, 24; D-114)', (
               'fixture.strength-basic',
             ],
             singles: false,
+            mounts: [],
           }),
         ])
       ).toEqual([
@@ -1350,7 +1356,7 @@ describe('REQ-136 — conteúdo do mercado (README 3.4, 5.1, 5.2, 24; D-114)', (
       expect(
         checkCatalogIntegrity({
           collections: [makeCollection()],
-          cards: [harbor({ stock: [foreign.id], singles: false })],
+          cards: [harbor({ stock: [foreign.id], singles: false, mounts: [] })],
           referenceCards: [foreign],
         })
       ).toEqual([])

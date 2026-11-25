@@ -33,7 +33,7 @@ const CARDS: TCard[] = [P, S, E]
 
 const HARBOR = makeUrbanZoneCard({
   zoneActions: ['useVault', 'visitMarket'],
-  market: { stock: [], singles: false },
+  market: { stock: [], singles: false, mounts: [] },
 })
 
 const expanded = (patch: Partial<ReturnType<typeof noExpansions>>) => ({

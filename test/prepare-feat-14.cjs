@@ -173,7 +173,7 @@ async function prepareContent() {
   })
   await edit('dimension', ([dimension]) => {
     dimension.eventDecks.push({
-      zoneType: 'forest',
+      zoneType: 'rural',
       cards: [payment, healing, defeat, reflection].map((cardId) => ({
         cardId,
         copies: 1,
@@ -226,12 +226,12 @@ function seed(state, scenario) {
   state.eventDecks = [
     { zoneType: 'urban', cards: [], discard: [] },
     {
-      zoneType: 'forest',
+      zoneType: 'rural',
       cards: scenario.card ? [scenario.card] : [],
       discard: [],
     },
   ]
-  state.upgradedCombatDecks = ['urban', 'forest']
+  state.upgradedCombatDecks = ['urban', 'rural']
   Object.assign(player, {
     zoneId: scenario.zone ?? mine,
     respawnZoneId: scenario.zone ? harbor : town,

@@ -33,7 +33,7 @@ const arrows = makeItemCard({
 })
 const harbor = makeUrbanZoneCard({
   zoneActions: ['startEvent', 'useVault', 'visitMarket', 'saveRespawnPoint'],
-  market: { stock: [arrows.id], singles: true },
+  market: { stock: [arrows.id], singles: true, mounts: [] },
 })
 const referenced = 'Esta carta está no estoque do mercado de uma zona.'
 
@@ -156,6 +156,7 @@ describe('REQ-136 — conteúdo do mercado no editor', () => {
         market: {
           stock: [arrows.id, 'fixture.healing-potion', arrows.id, 'fixture.x'],
           singles: false,
+          mounts: [],
         },
       }),
     })
@@ -180,7 +181,7 @@ describe('REQ-136 — conteúdo do mercado no editor', () => {
       collectionId: 'fixture',
       body: toCardInput({
         ...harbor,
-        market: { stock: [foreign.id], singles: false },
+        market: { stock: [foreign.id], singles: false, mounts: [] },
       }),
     })
     expect(zone.isRight()).toBe(true)
@@ -245,7 +246,10 @@ describe('REQ-136 — conteúdo do mercado no editor', () => {
       stockPrice: 4,
     })
     store.cards = [
-      published({ ...harbor, market: { stock: [foreign.id], singles: false } }),
+      published({
+        ...harbor,
+        market: { stock: [foreign.id], singles: false, mounts: [] },
+      }),
       published(foreign),
     ]
     const parties = new InMemoryPartiesRepository()

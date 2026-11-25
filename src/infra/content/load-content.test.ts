@@ -172,7 +172,7 @@ describe('loadContent', () => {
     }
   })
 
-  it('REQ-10/REQ-100: a fixture de teste carrega com as 28 cartas e as 2 classes do contrato', async () => {
+  it('REQ-10/REQ-100: a fixture de teste carrega com as 30 cartas e as 2 classes do contrato', async () => {
     const result = await loadContent('test/fixtures/content')
 
     expect(result.ok).toBe(true)
@@ -228,6 +228,7 @@ describe('loadContent', () => {
       ['fixture.oak-shield', 'equipment'],
       ['fixture.old-mine', 'zone'],
       ['fixture.pickaxe', 'item'],
+      ['fixture.plow-horse', 'mount'],
       ['fixture.short-sword', 'equipment'],
       ['fixture.silver-fish', 'item'],
       ['fixture.stone-bend', 'zone'],
@@ -235,6 +236,7 @@ describe('loadContent', () => {
       ['fixture.strength-tonic', 'item'],
       ['fixture.sword-blueprint', 'item'],
       ['fixture.test-dimension', 'dimension'],
+      ['fixture.war-pony', 'mount'],
       ['fixture.whispering-grove', 'zone'],
       ['fixture.wounded-traveler', 'randomEvent'],
     ])
@@ -428,7 +430,7 @@ describe('loadContent', () => {
           cardId: null,
           field: null,
           message:
-            'Arquivo desconhecido (esperados collection.json, class.json e zone, attribute, equipment, item, randomEvent, combatEvent, zoneQuest, dimension .json).',
+            'Arquivo desconhecido (esperados collection.json, class.json e zone, attribute, equipment, item, randomEvent, combatEvent, zoneQuest, dimension, mount .json).',
         },
         {
           file: rel('fixture/collection.json'),

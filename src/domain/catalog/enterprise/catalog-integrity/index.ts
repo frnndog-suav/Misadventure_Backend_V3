@@ -26,6 +26,7 @@ import {
   type TDimensionCard,
   type TEquipmentCard,
   type TItemCard,
+  type TMountCard,
   type TRandomEventCard,
   type TRandomEventOutcomeStep,
   type TQuestCombat,
@@ -98,6 +99,12 @@ export type TCatalogIssueReason =
   | 'marketMismatch'
   | 'stockItemWithoutPrice'
   | 'duplicateStockItem'
+  // REQ-155
+  | 'mountTypesInvalid'
+  | 'creatureRequired'
+  | 'stableNotAllowed'
+  | 'notAMount'
+  | 'duplicateMount'
   // REQ-145
   | TBlacksmithIssueReason
 
@@ -273,6 +280,11 @@ export function checkCatalogIntegrity({
         releaseOrders.add(card.releaseOrder)
         checkZoneDecks(card.rewardDecks, 'rewardDecks', cardsById, report)
         checkZoneDecks(card.eventDecks ?? [], 'eventDecks', cardsById, report)
+        checkEffects(card, report)
+        break
+      case 'mount':
+        checkMount(card, report)
+        checkAbilities(card.abilities, 'abilities', report)
         checkEffects(card, report)
         break
       default: {
@@ -615,6 +627,35 @@ function checkMarket(
     } else if (seen.has(id)) report(path, 'duplicateStockItem')
     seen.add(id)
   })
+  // REQ-155 (README 24.5): Estábulo só em zona Rural ou Habitada.
+  const mounts = card.market?.mounts ?? []
+  if (
+    mounts.length > 0 &&
+    card.zoneType !== 'rural' &&
+    card.zoneType !== 'inhabited'
+  ) {
+    report('market.mounts', 'stableNotAllowed')
+  }
+  const seenMounts = new Set<string>()
+  mounts.forEach((id, index) => {
+    const path = `market.mounts.${index}`
+    const cited = cardsById.get(id)
+    if (!cited) report(path, 'unknownCard')
+    else if (cited.type !== 'mount') report(path, 'notAMount')
+    else if (seenMounts.has(id)) report(path, 'duplicateMount')
+    seenMounts.add(id)
+  })
+}
+
+/** REQ-155 (README 26): tipos sem repetição e criatura. */
+function checkMount(card: TMountCard, report: TReport): void {
+  if (
+    card.mountTypes.length === 0 ||
+    new Set(card.mountTypes).size !== card.mountTypes.length
+  ) {
+    report('mountTypes', 'mountTypesInvalid')
+  }
+  if (card.creature.trim() === '') report('creature', 'creatureRequired')
 }
 
 function checkKebab(value: string | null, field: string, report: TReport) {

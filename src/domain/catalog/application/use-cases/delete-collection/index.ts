@@ -11,6 +11,7 @@ import {
 import {
   isCitedInBlacksmith,
   isCitedInMarketStock,
+  isCitedInStable,
   isCitedInRewardDeck,
 } from '@/domain/catalog/enterprise/card-validation'
 import { breaksSpecializationReferences } from '@/domain/catalog/enterprise/class-validation'
@@ -79,6 +80,10 @@ export class DeleteCollectionUseCase {
     // REQ-136: carta dela no estoque do mercado de zona de outra coleção.
     if (isCitedInMarketStock(cardsOutside(allCards, collectionId), cardIds)) {
       return left(new ContentReferencedError('marketStock'))
+    }
+    // REQ-155: montaria dela no Estábulo de zona de outra coleção.
+    if (isCitedInStable(cardsOutside(allCards, collectionId), cardIds)) {
+      return left(new ContentReferencedError('stable'))
     }
     // REQ-145: carta dela usada por conteúdo de outra coleção.
     if (isCitedInBlacksmith(cardsOutside(allCards, collectionId), cardIds)) {

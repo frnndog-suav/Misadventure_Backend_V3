@@ -21,7 +21,7 @@ const dexterity = 'fixture.dexterity-basic'
 const wisdom = 'fixture.wisdom-basic'
 const toll = 'fixture.t60-toll'
 const harborLocation = { type: 'zoneTitle', title: 'Porto Cinzento' }
-const forestLocation = { type: 'zoneType', zoneType: 'forest' }
+const ruralLocation = { type: 'zoneType', zoneType: 'rural' }
 const urbanLocation = { type: 'zoneType', zoneType: 'urban' }
 const [A, B, C, D, E] = [
   'clue',
@@ -199,7 +199,7 @@ async function writeT60Content(root) {
           {
             type: 'combatEvent',
             text: 'Enfrente o lobo.',
-            location: forestLocation,
+            location: ruralLocation,
             combat: combat(reflective),
           },
         ]),
@@ -207,7 +207,7 @@ async function writeT60Content(root) {
           {
             type: 'combatEvent',
             text: 'Enfrente o lobo.',
-            location: forestLocation,
+            location: ruralLocation,
             combat: combat(lethal),
           },
         ]),
@@ -215,7 +215,7 @@ async function writeT60Content(root) {
           {
             type: 'combatEvent',
             text: 'Enfrente o lobo.',
-            location: forestLocation,
+            location: ruralLocation,
             combat: combat(weak),
           },
         ]),
@@ -226,13 +226,13 @@ async function writeT60Content(root) {
             {
               type: 'randomEvent',
               text: 'Pague o pedágio.',
-              location: forestLocation,
+              location: ruralLocation,
               eventCardId: toll,
             },
             {
               type: 'combatEvent',
               text: 'Enfrente o lobo.',
-              location: forestLocation,
+              location: ruralLocation,
               combat: combat(weak),
             },
           ],
@@ -245,7 +245,7 @@ async function writeT60Content(root) {
   )
   await edit('dimension', ([dimension]) => {
     dimension.eventDecks.push({
-      zoneType: 'forest',
+      zoneType: 'rural',
       cards: [{ cardId: toll, copies: 1 }],
     })
   })
@@ -425,9 +425,9 @@ function seed(state, scenario) {
       cards: scenario.event ? [scenario.event] : [],
       discard: [],
     },
-    { zoneType: 'forest', cards: [], discard: [] },
+    { zoneType: 'rural', cards: [], discard: [] },
   ]
-  state.upgradedCombatDecks = ['urban', 'forest']
+  state.upgradedCombatDecks = ['urban', 'rural']
   Object.assign(player, {
     zoneId: scenario.zone,
     respawnZoneId: harbor,

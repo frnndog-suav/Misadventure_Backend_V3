@@ -20,6 +20,7 @@ import {
   buildCard,
   isCitedInBlacksmith,
   isCitedInMarketStock,
+  isCitedInStable,
   isCitedInRewardDeck,
   effectCitationPublicationIssues,
   combatDeckPublicationIssues,
@@ -315,6 +316,17 @@ export class ImportCollectionUseCase {
     ])
     if (isCitedInMarketStock(outsideCards, leavingStock)) {
       return new ContentReferencedError('marketStock')
+    }
+    // REQ-155: montaria que some, ou deixa de ser montaria, e está no
+    // Estábulo de zona de outra coleção.
+    const leavingStable = new Set([
+      ...removed,
+      ...keptCards
+        .filter((card) => card.type !== 'mount')
+        .map((card) => card.id),
+    ])
+    if (isCitedInStable(outsideCards, leavingStable)) {
+      return new ContentReferencedError('stable')
     }
     // REQ-145: carta que some ou deixa de ser material/equipamento e é usada por conteúdo de outra coleção.
     const leavingBlacksmith = new Set([

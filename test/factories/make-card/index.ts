@@ -8,6 +8,7 @@ import type {
   TEnemy,
   TEquipmentCard,
   TItemCard,
+  TMountCard,
   TRandomEventCard,
   TZoneCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
@@ -239,6 +240,23 @@ export function makeDimensionCard(
     arrivalZoneTitle: 'Porto Cinzento',
     effects: [],
     rewardDecks: [],
+    ...override,
+  }
+}
+
+/** Montaria sem efeitos (Cavalo de Arado da fixture, REQ-155). */
+export function makeMountCard(override: Partial<TMountCard> = {}): TMountCard {
+  return {
+    type: 'mount',
+    id: 'fixture.plow-horse',
+    collectionId: 'fixture',
+    name: 'Cavalo de Arado',
+    flavorText: null,
+    rarity: 'rare',
+    mountTypes: ['beast'],
+    creature: 'Cavalo',
+    effects: [],
+    abilities: [],
     ...override,
   }
 }

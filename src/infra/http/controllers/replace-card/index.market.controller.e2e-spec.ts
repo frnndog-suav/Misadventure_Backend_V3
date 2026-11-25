@@ -43,6 +43,7 @@ describe('Mercado no catálogo e no editor (e2e)', () => {
         'fixture.fishing-rod',
       ],
       singles: true,
+      mounts: [],
     })
 
     expect((await card('fixture.healing-potion')).stockPrice).toBe(6)
@@ -65,7 +66,8 @@ describe('Mercado no catálogo e no editor (e2e)', () => {
     ).body as { id: string; market: unknown }[]
     expect(zones.length).toBeGreaterThan(1)
     for (const zone of zones) {
-      if (zone.id !== 'fixture.gray-harbor') expect(zone.market).toBeNull()
+      if (zone.id !== 'fixture.gray-harbor' && zone.id !== 'fixture.old-mine')
+        expect(zone.market).toBeNull()
     }
   })
 

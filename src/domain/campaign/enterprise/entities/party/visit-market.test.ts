@@ -45,7 +45,7 @@ const CARDS: TCard[] = [P, BO, C, W, makeAttributeCard()]
 
 const HARBOR = makeUrbanZoneCard({
   zoneActions: ['startEvent', 'useVault', 'visitMarket', 'saveRespawnPoint'],
-  market: { stock: [P.id], singles: true },
+  market: { stock: [P.id], singles: true, mounts: [] },
 })
 
 const catalog = (zone = HARBOR) => ({

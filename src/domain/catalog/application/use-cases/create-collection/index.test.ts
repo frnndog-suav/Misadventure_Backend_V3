@@ -43,6 +43,7 @@ describe('CreateCollectionUseCase', () => {
       combatEvent: 0,
       zoneQuest: 0,
       dimension: 0,
+      mount: 0,
     })
     expect(Object.values(result.value.collection.rarityCounts)).toEqual(
       Array(5).fill(0)
