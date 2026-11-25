@@ -356,6 +356,7 @@ export type TActivation =
   | Readonly<{ kind: 'swapCombatOrder' }>
   | Readonly<{ kind: 'reviveAlly'; healthPercent: number }>
   | Readonly<{ kind: 'teleportToRespawn' }>
+  | Readonly<{ kind: 'loseMount' }>
   | Readonly<{
       kind: 'moveToZoneOfType'
       zoneType: TZoneType | 'sameAsCurrent'

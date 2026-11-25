@@ -62,7 +62,7 @@ import {
 } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 
 // REQ-107: saves v2 a v6 ganham a lista de status na leitura.
-const SCHEMA_VERSION = 10
+const SCHEMA_VERSION = 11
 
 const uint32 = z
   .number()
@@ -243,6 +243,8 @@ const playerFields = {
   modifiers: modifiersSchema,
   zoneId: id,
   respawnZoneId: id.optional(),
+  // REQ-157, D-146: antes do v11 não havia montaria; aceita só a ausência ou `null`.
+  mount: z.null().optional(),
 }
 
 const legacyPlayerSchema = z.strictObject(playerFields)
@@ -575,6 +577,7 @@ const combat = z.strictObject({
       z.strictObject({
         actorId: id,
         equipmentSlot: slot.nullable(),
+        mountAbility: z.literal(true).optional(),
         abilityId: id,
         sourceCardId: id,
         element: element.nullable(),
@@ -615,7 +618,12 @@ const triggeredEffects = z.strictObject({
       sourceKey: id,
       effectIndex: count,
       effectId: id,
-      usedAbility: z.strictObject({ slot, abilityId: id }).optional(),
+      usedAbility: z
+        .strictObject({
+          slot: z.union([slot, z.literal('mount')]),
+          abilityId: id,
+        })
+        .optional(),
       targetIds: z.array(id).optional(),
     })
   ),
@@ -643,6 +651,17 @@ const triggeredEffects = z.strictObject({
               type: z.literal('equipmentAbility'),
               cardId: id,
               equipmentSlot: slot,
+              abilityId: id,
+              effectIndex: count,
+            }),
+            z.strictObject({
+              type: z.literal('mount'),
+              cardId: id,
+              effectIndex: count,
+            }),
+            z.strictObject({
+              type: z.literal('mountAbility'),
+              cardId: id,
               abilityId: id,
               effectIndex: count,
             }),
@@ -979,7 +998,16 @@ const v9PlayerSchema = playerSchema.extend({
     .optional(),
   brokenEquipment: z.array(slot).optional(),
 })
-// Campos do save v9 e v10 que não são do jogador nem da configuração.
+const v10PlayerSchema = v9PlayerSchema
+  .omit({ brokenEquipment: true })
+  .extend(v10PlayerFields)
+// REQ-157, D-146 (save v11): inventário extra com `equipmentState`; pasta extra.
+const mountSchema = z.strictObject({
+  cardId: id,
+  inventory: z.array(stateSlot),
+  tcgFolder: cardCopies,
+})
+// Campos do save v9 a v11 que não são do jogador nem da configuração.
 const v9Fields = {
   questRewardDelivery: questRewardDelivery.optional(),
   boosterQueue: boosterQueue.optional(),
@@ -1004,54 +1032,75 @@ const v9Fields = {
   upgradedCombatDecks: z.array(zoneType).optional(),
 }
 
-const stateSchema = z
+const legacyStates = [
+  z.strictObject({
+    schemaVersion: z.literal(2),
+    ...stateFields(legacyConfigSchema, legacyPlayerSchema),
+  }),
+  z.strictObject({
+    schemaVersion: z.literal(3),
+    ...stateFields(legacyConfigSchema, legacyPlayerSchema),
+    turn: turnSchema,
+  }),
+  z.strictObject({
+    schemaVersion: z.literal(4),
+    ...stateFields(v4ConfigSchema, v4PlayerSchema),
+    turn: turnSchema,
+  }),
+  z.strictObject({
+    schemaVersion: z.literal(5),
+    ...stateFields(v5ConfigSchema, v5PlayerSchema),
+    turn: turnSchema,
+  }),
+  z.strictObject({
+    schemaVersion: z.literal(6),
+    ...stateFields(configSchema, v6PlayerSchema),
+    turn: turnSchema,
+    rewardDecks: rewardDecksSchema.optional(),
+  }),
+  z.strictObject({
+    schemaVersion: z.literal(7),
+    ...stateFields(currentConfigSchema, v7PlayerSchema),
+    turn: turnSchema,
+    rewardDecks: rewardDecksSchema.optional(),
+  }),
+] as const
+const v9State = v8State.extend({
+  schemaVersion: z.literal(9),
+  ...v9Fields,
+  ...stateFields(currentConfigSchema, v9PlayerSchema),
+})
+// D-131: o `broken` passa para o estado de cada cópia; `brokenEquipment` sai.
+const v10State = v8State.extend({
+  schemaVersion: z.literal(10),
+  ...v9Fields,
+  ...stateFields(currentConfigSchema, v10PlayerSchema),
+})
+// REQ-157, D-146: a montaria (`null` sem montaria).
+const v11State = v8State.extend({
+  schemaVersion: z.literal(SCHEMA_VERSION),
+  ...v9Fields,
+  ...stateFields(
+    currentConfigSchema,
+    v10PlayerSchema.extend({ mount: mountSchema.nullable() })
+  ),
+})
+
+type TLegacyState = z.infer<(typeof legacyStates)[number]>
+type TV8State = z.infer<typeof v8State>
+type TV9State = z.infer<typeof v9State>
+type TV10State = z.infer<typeof v10State>
+type TPartyState = z.infer<typeof v11State>
+type TStoredState = TLegacyState | TV8State | TV9State | TV10State | TPartyState
+
+// Anotado: o tipo inferido da união passa do limite do compilador (TS7056).
+const stateSchema: z.ZodType<TStoredState> = z
   .discriminatedUnion('schemaVersion', [
-    z.strictObject({
-      schemaVersion: z.literal(2),
-      ...stateFields(legacyConfigSchema, legacyPlayerSchema),
-    }),
-    z.strictObject({
-      schemaVersion: z.literal(3),
-      ...stateFields(legacyConfigSchema, legacyPlayerSchema),
-      turn: turnSchema,
-    }),
-    z.strictObject({
-      schemaVersion: z.literal(4),
-      ...stateFields(v4ConfigSchema, v4PlayerSchema),
-      turn: turnSchema,
-    }),
-    z.strictObject({
-      schemaVersion: z.literal(5),
-      ...stateFields(v5ConfigSchema, v5PlayerSchema),
-      turn: turnSchema,
-    }),
-    z.strictObject({
-      schemaVersion: z.literal(6),
-      ...stateFields(configSchema, v6PlayerSchema),
-      turn: turnSchema,
-      rewardDecks: rewardDecksSchema.optional(),
-    }),
-    z.strictObject({
-      schemaVersion: z.literal(7),
-      ...stateFields(currentConfigSchema, v7PlayerSchema),
-      turn: turnSchema,
-      rewardDecks: rewardDecksSchema.optional(),
-    }),
+    ...legacyStates,
     v8State,
-    v8State.extend({
-      schemaVersion: z.literal(9),
-      ...v9Fields,
-      ...stateFields(currentConfigSchema, v9PlayerSchema),
-    }),
-    // D-131: o `broken` passa para o estado de cada cópia; `brokenEquipment` sai.
-    v8State.extend({
-      schemaVersion: z.literal(SCHEMA_VERSION),
-      ...v9Fields,
-      ...stateFields(
-        currentConfigSchema,
-        v9PlayerSchema.omit({ brokenEquipment: true }).extend(v10PlayerFields)
-      ),
-    }),
+    v9State,
+    v10State,
+    v11State,
   ])
   .refine((state) => state.members.some((m) => m.id === state.hostMemberId), {
     message: 'hostMemberId fora dos membros',
@@ -1064,11 +1113,6 @@ const stateSchema = z
   )
 
 const partyStatusSchema = z.enum(['idle', 'inSession'])
-
-type TPartyState = Extract<
-  z.infer<typeof stateSchema>,
-  { schemaVersion: typeof SCHEMA_VERSION }
->
 
 export interface TPartyRow {
   id: string
@@ -1124,6 +1168,7 @@ export class DrizzlePartyMapper {
         rewardDecks: 'rewardDecks' in state ? (state.rewardDecks ?? []) : [],
         ...((state.schemaVersion === 8 ||
           state.schemaVersion === 9 ||
+          state.schemaVersion === 10 ||
           state.schemaVersion === SCHEMA_VERSION) && {
           eventDecks: state.eventDecks,
           eventEncounter: state.eventEncounter as
@@ -1131,7 +1176,9 @@ export class DrizzlePartyMapper {
           pendingReward: state.pendingReward,
           rewardSequence: state.rewardSequence,
         }),
-        ...(state.schemaVersion === 9 || state.schemaVersion === SCHEMA_VERSION
+        ...(state.schemaVersion === 9 ||
+        state.schemaVersion === 10 ||
+        state.schemaVersion === SCHEMA_VERSION
           ? {
               markets: state.markets,
               marketPool: state.marketPool,
@@ -1286,6 +1333,13 @@ export class DrizzlePartyMapper {
               abilityUsage: { ...m.player.abilityUsage },
             }),
             ...storedEquipmentStates(m.player),
+            mount: m.player.mount
+              ? {
+                  cardId: m.player.mount.cardId,
+                  inventory: m.player.mount.inventory.map(storedSlot),
+                  tcgFolder: m.player.mount.tcgFolder.map((e) => ({ ...e })),
+                }
+              : null,
           },
         })),
         hostMemberId: party.hostMemberId.toString(),
@@ -1391,7 +1445,7 @@ function storedEquipmentStates(player: TPlayerState) {
     : {}
 }
 
-type TStoredPlayer = z.infer<typeof legacyPlayerSchema> & {
+type TStoredPlayer = Omit<z.infer<typeof legacyPlayerSchema>, 'mount'> & {
   /** Save v10: estado completo (com `broken`) de cada equipamento em uso. */
   equipmentStates?: Partial<Record<TEquipmentSlot, TEquipmentState>>
 } & Partial<
@@ -1414,6 +1468,7 @@ type TStoredPlayer = z.infer<typeof legacyPlayerSchema> & {
       | 'expansions'
       | 'lastMarketVisit'
       | 'lastBoosterOpening'
+      | 'mount'
     >
   >
 
@@ -1443,6 +1498,7 @@ function upgradePlayer(
         : player.build,
     tcgFolder: player.tcgFolder ?? [],
     inventory: player.inventory ?? [],
+    mount: player.mount ?? null,
     equipment: player.equipment ?? emptyEquipment(),
     vault: player.vault ?? emptyVault(),
     lastScavenge: upgradeScavenge(player.lastScavenge),

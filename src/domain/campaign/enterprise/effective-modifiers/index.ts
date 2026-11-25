@@ -4,6 +4,7 @@ import {
   type TEquipmentSlot,
   type TExecutableAbility,
   type TModifier,
+  type TMountCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
 
 import { applyEquipmentState, type TWornStates } from '../equipment-state'
@@ -16,6 +17,8 @@ export type TEffectiveModifiersInput = Readonly<{
   peak: number
   /** Cartas dos equipamentos em uso (o agregado não conhece o catálogo, D-76). */
   equipment: readonly TEquipmentCard[]
+  /** Carta da montaria em uso (REQ-157): vale como equipamento em uso, sem requisito de Pico. */
+  mountCard?: TMountCard | null
   statuses?: readonly TPlayerStatus[]
   /** Estado dos equipamentos em uso (REQ-148); o que falta é o estado padrão. */
   equipmentStates?: TWornStates
@@ -54,6 +57,23 @@ export function abilitySourceWorks(
   )
 }
 
+/**
+ * As habilidades da montaria funcionam salvo anulação geral (sem slots nem
+ * tags), já que a montaria não tem slot nem tags (REQ-157).
+ */
+export function mountAbilitiesWork(
+  statuses: TPlayerState['statuses']
+): boolean {
+  return !statuses.some(({ activation }) =>
+    activation.some(
+      (effect) =>
+        effect.kind === 'nullifyAbilities' &&
+        !effect.slots.length &&
+        !effect.tags.length
+    )
+  )
+}
+
 export function abilityMatchesOwner(
   ability: TExecutableAbility,
   playerClasses: TPlayerState['playerClasses'],
@@ -78,6 +98,7 @@ export function effectiveModifiers({
   modifiers,
   peak,
   equipment,
+  mountCard = null,
   equipmentStates,
   refineBonusPercent = 0,
   statuses = [],
@@ -93,7 +114,11 @@ export function effectiveModifiers({
     applyEquipmentState(card, equipmentStates?.[card.slot], refineBonusPercent)
   )
   const equipmentBonuses = working.flatMap((card) => card.modifiers)
-  const passives = working.flatMap((card) =>
+  const sources: readonly { effects: TEquipmentCard['effects'] }[] = [
+    ...working,
+    ...(mountCard ? [mountCard] : []),
+  ]
+  const passives = sources.flatMap((card) =>
     card.effects.filter(
       (effect) =>
         effect.trigger === null &&
@@ -111,29 +136,30 @@ export function effectiveModifiers({
     ({ sourceCardId }) => !disabledIds.has(sourceCardId)
   )
   const passiveAbilities = abilityOwner
-    ? working
-        .filter((card) =>
+    ? [
+        ...working.filter((card) =>
           abilitySourceWorks(card, card.slot, {
             peak,
             statuses,
             ...abilityOwner,
           })
-        )
-        .flatMap((card) =>
-          card.abilities.flatMap((ability) =>
-            ability.id !== undefined &&
-            ability.form === 'passive' &&
-            abilityMatchesOwner(
-              ability,
-              abilityOwner.playerClasses,
-              Boolean(combat)
-            )
-              ? ability.effects.filter(
-                  (effect) => effect.trigger === null && !effect.cost.length
-                )
-              : []
+        ),
+        ...(mountCard && mountAbilitiesWork(statuses) ? [mountCard] : []),
+      ].flatMap((card) =>
+        card.abilities.flatMap((ability) =>
+          ability.id !== undefined &&
+          ability.form === 'passive' &&
+          abilityMatchesOwner(
+            ability,
+            abilityOwner.playerClasses,
+            Boolean(combat)
           )
+            ? ability.effects.filter(
+                (effect) => effect.trigger === null && !effect.cost.length
+              )
+            : []
         )
+      )
     : []
   const activations = [
     ...passives,

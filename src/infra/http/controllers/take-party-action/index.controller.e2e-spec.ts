@@ -443,7 +443,7 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
       .from(parties)
       .where(eq(parties.id, party.id))
     expect(saved.state).toMatchObject({
-      schemaVersion: 10,
+      schemaVersion: 11,
       turn: { round: 2, memberId: party.members[0].id, actionPoints: 4 },
     })
   })

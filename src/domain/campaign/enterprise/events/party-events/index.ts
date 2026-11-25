@@ -12,6 +12,7 @@ import type {
   TBlacksmithSource,
 } from '../../blacksmith'
 import type { TMarketOperationResult } from '../../market-trade'
+import type { TMountLimboSource } from '../../mount'
 import type { TRecoverOption } from '../../party-action'
 
 // Eventos do agregado `Party` (D-27), união discriminada por `type`.
@@ -154,7 +155,8 @@ export interface SentToLimboEvent extends DomainEvent {
   readonly memberId: UniqueEntityID
   readonly cardId: string
   readonly quantity: number
-  readonly from: 'vault' | 'inventory' | 'equipment' | 'tcgFolder'
+  readonly from:
+    'vault' | 'inventory' | 'equipment' | 'tcgFolder' | TMountLimboSource
 }
 
 /** Vasculhar aceito (README 12.6; REQ-91): `found` diz se a carta saiu do deck. */

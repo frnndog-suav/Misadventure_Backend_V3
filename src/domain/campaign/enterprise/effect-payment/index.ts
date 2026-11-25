@@ -11,6 +11,7 @@ import type {
 
 import { effectiveModifiers } from '../effective-modifiers'
 import { maxHealthOf, type TPlayerState } from '../entities/party-member'
+import { mountCardOf } from '../mount'
 import { shuffle } from '../shuffle'
 import { handCount, matchingHands } from './hand-payment'
 
@@ -73,6 +74,7 @@ export function quantityOf(
       effectiveModifiers({
         ...player,
         equipment,
+        mountCard: mountCardOf(player, cards),
         abilityOwner: usePassiveAbilities ? player : undefined,
         combat:
           usePassiveAbilities && enemyCount > 0

@@ -24,6 +24,7 @@ import type {
   TCombatEventCard,
   TExecutableAbility,
   TItemCard,
+  TMountCard,
   TRandomEventOutcomeStep,
   TStarterDeckEntry,
   TZoneAction,
@@ -48,6 +49,7 @@ import { connectedZones } from '../../connected-zones'
 import {
   combatAttackTargets,
   combatAbilityUsage,
+  usageMatchesSlot,
   combatIsTerminal,
   combatTurnStarted,
   createCombat,
@@ -61,6 +63,7 @@ import {
   type TCombatUpdate,
 } from '../../combat'
 import {
+  abilitySlotOf,
   adventureAbilityKey,
   abilityWithModifiers,
   abilityEffectDuration,
@@ -68,6 +71,7 @@ import {
   applyAbilityEffect,
   equippedAbility,
   matchesAbilityUse,
+  type TAbilitySlot,
 } from '../../combat/abilities'
 import { describeAbilityPayment, payAbility } from '../../combat/payment'
 import { effectiveModifiers, equipmentWorks } from '../../effective-modifiers'
@@ -81,6 +85,11 @@ import {
   wornStateOf,
 } from '../../equipment-state'
 import { addToInventory } from '../../inventory'
+import {
+  mountCardOf,
+  type TMountLimboEntry,
+  type TMountLimboSink,
+} from '../../mount'
 import {
   applyBlacksmithOperations,
   artificerActive,
@@ -187,6 +196,9 @@ import {
 } from '../../booster'
 import { maxHealthOf, PartyMember, type TPlayerState } from '../party-member'
 
+/** Slots de onde saem habilidades: os de equipamento e a montaria (REQ-157). */
+const ABILITY_SLOTS: readonly TAbilitySlot[] = [...EQUIPMENT_SLOTS, 'mount']
+
 /** Limites de CONTRATO FEAT-05 (`CreatePartyRequest`, D-30). */
 export const PARTY_NAME_MAX_LENGTH = 40
 export const CHARACTER_NAME_MAX_LENGTH = 24
@@ -280,7 +292,7 @@ export type TScavengeRefusal =
 export type TLabGrant =
   | {
       type: 'card'
-      card: TEquipmentCard | TItemCard | TAttributeCard
+      card: TEquipmentCard | TItemCard | TAttributeCard | TMountCard
       quantity: number
     }
   | { type: 'gold'; amount: number }
@@ -305,9 +317,12 @@ type TriggerSourceOrigin =
       abilityId: string
     })
   | { type: 'inventory'; cardId: string }
+  /** A carta da montaria e suas habilidades (REQ-157; CONTRATO FEAT-18 v0.89). */
+  | { type: 'mount'; cardId: string }
+  | { type: 'mountAbility'; cardId: string; abilityId: string }
 
 type UsedTriggerAbility = {
-  slot: TEquipmentSlot
+  slot: TAbilitySlot
   abilityId: string
   includeOwnEffects: boolean
   hitTargets?: readonly string[]
@@ -318,7 +333,7 @@ type PendingTriggeredEffect = {
   sourceKey: string
   effectIndex: number
   effectId: string
-  usedAbility?: { slot: TEquipmentSlot; abilityId: string }
+  usedAbility?: { slot: TAbilitySlot; abilityId: string }
   targetIds?: readonly string[]
 }
 
@@ -582,6 +597,43 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 
   private eventCatalog: ReadonlyMap<string, TCard> = new Map()
   private readonly updates: TCombatUpdate[] = []
+  /**
+   * Limbo da montaria perdida fora do `activate` (habilidades, efeitos
+   * disparados e de evento; REQ-163), com o membro da vez no momento da perda.
+   * Vira `SentToLimbo` antes do próximo evento registrado, na ordem.
+   */
+  private pendingLimbo: (TMountLimboEntry & { memberId: UniqueEntityID })[] = []
+  private readonly limboSink: TMountLimboSink = {
+    push: (...entries) =>
+      this.pendingLimbo.push(
+        ...entries.map((entry) => ({
+          ...entry,
+          memberId: this.props.turn.memberId,
+        }))
+      ),
+  }
+
+  protected override addDomainEvent(event: TPartyEvent): void {
+    this.flushLimbo(event.occurredAt)
+    super.addDomainEvent(event)
+  }
+
+  override pullDomainEvents(): TPartyEvent[] {
+    this.flushLimbo(this.props.savedAt)
+    return super.pullDomainEvents()
+  }
+
+  private flushLimbo(occurredAt: Date): void {
+    const pending = this.pendingLimbo
+    this.pendingLimbo = []
+    for (const entry of pending)
+      super.addDomainEvent({
+        type: 'SentToLimbo',
+        aggregateId: this.id,
+        occurredAt,
+        ...entry,
+      })
+  }
 
   get combatUpdates(): readonly TCombatUpdate[] {
     return this.updates
@@ -686,8 +738,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         })
       ),
       abilityStates: [
-        ...EQUIPMENT_SLOTS.flatMap((slot) => {
-          const card = this.equippedCard(player, slot, cards)
+        ...ABILITY_SLOTS.flatMap((slot) => {
+          const card = this.abilityCard(player, slot, cards)
           return card
             ? card.abilities.flatMap((ability) =>
                 ability.id === undefined
@@ -733,14 +785,16 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   private describeAbilityState(
     state: TCombatState,
     actorId: string,
-    equipmentSlot: TEquipmentSlot | null,
+    slot: TAbilitySlot | null,
     ability: TExecutableAbility,
     passive: boolean
   ) {
-    const usage = combatAbilityUsage(state, actorId, equipmentSlot, ability.id)
+    const usage = combatAbilityUsage(state, actorId, slot, ability.id)
     return {
       actorId,
-      equipmentSlot,
+      // A montaria não tem slot (D-150 b).
+      equipmentSlot: slot === 'mount' ? null : slot,
+      mountAbility: slot === 'mount',
       abilityId: ability.id,
       cooldownRemaining: Math.max(
         0,
@@ -796,8 +850,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const enemies =
       state?.enemies.filter(({ health }) => health > 0).map(({ id }) => id) ??
       []
-    return EQUIPMENT_SLOTS.flatMap((equipmentSlot) => {
-      const card = this.equippedCard(player, equipmentSlot, cards)
+    return ABILITY_SLOTS.flatMap((equipmentSlot) => {
+      const card = this.abilityCard(player, equipmentSlot, cards)
       if (!card) return []
       return card.abilities.flatMap((ability) => {
         if (
@@ -836,7 +890,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         return [
           {
             ...payment,
-            equipmentSlot,
+            ...(equipmentSlot === 'mount'
+              ? { mountAbility: true as const }
+              : { equipmentSlot }),
             abilityId: ability.id,
             targetIds:
               ability.target === 'opponent' || ability.target === 'allOpponents'
@@ -850,7 +906,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 
   private continuousAbilityActive(
     state: TCombatState,
-    slot: TEquipmentSlot,
+    slot: TAbilitySlot,
     ability: TExecutableAbility
   ) {
     return (
@@ -858,7 +914,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       state.abilityUsage?.some(
         (entry) =>
           entry.actorId === state.memberId &&
-          entry.equipmentSlot === slot &&
+          usageMatchesSlot(entry, slot) &&
           (entry.activeUntilCycle ?? 0) > state.cycle
       )
     )
@@ -875,7 +931,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       combatIsTerminal(state, player.health)
     )
       return []
-    const sources = [
+    const mount = mountCardOf(player, cards)
+    const sources: {
+      card: TItemCard | TEquipmentCard | TMountCard
+      equipmentSlot: TEquipmentSlot | 'mount' | null
+    }[] = [
       ...[...new Set(player.inventory.map(({ cardId }) => cardId))].flatMap(
         (cardId) => {
           const card = cards.get(cardId)
@@ -890,6 +950,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           ? [{ card, equipmentSlot }]
           : []
       }),
+      // A montaria em uso, sem requisito de Pico (REQ-157).
+      ...(mount ? [{ card: mount, equipmentSlot: 'mount' as const }] : []),
     ]
     return sources.flatMap(({ card, equipmentSlot }) =>
       card.effects.flatMap((effect, effectIndex) => {
@@ -899,6 +961,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             (entry) =>
               entry.kind === 'nullifyEffects' &&
               ((equipmentSlot &&
+                equipmentSlot !== 'mount' &&
                 entry.target === 'equipment' &&
                 (!entry.slots.length || entry.slots.includes(equipmentSlot))) ||
                 (card.type === 'item' &&
@@ -946,12 +1009,14 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             origin:
               equipmentSlot === null
                 ? { type: 'inventory' as const, cardId: card.id, effectIndex }
-                : {
-                    type: 'equipment' as const,
-                    equipmentSlot,
-                    cardId: card.id,
-                    effectIndex,
-                  },
+                : equipmentSlot === 'mount'
+                  ? { type: 'mount' as const, cardId: card.id, effectIndex }
+                  : {
+                      type: 'equipment' as const,
+                      equipmentSlot,
+                      cardId: card.id,
+                      effectIndex,
+                    },
           },
         ]
       })
@@ -1683,6 +1748,17 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
    * A carta em uso no `slot` com o estado dela aplicado (REQ-148): refino no
    * modificador principal e efeitos e habilidades dos encantamentos ligados.
    */
+  /** A carta de onde saem as habilidades do slot: equipamento ou montaria (REQ-157). */
+  private abilityCard(
+    player: TPlayerState,
+    slot: TAbilitySlot,
+    cards: ReadonlyMap<string, TCard>
+  ): TEquipmentCard | TMountCard | undefined {
+    return slot === 'mount'
+      ? (mountCardOf(player, cards) ?? undefined)
+      : this.equippedCard(player, slot, cards)
+  }
+
   private equippedCard(
     player: TPlayerState,
     slot: TEquipmentSlot,
@@ -1719,6 +1795,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       health: player.health,
       snapshot: player,
       update: (update) => this.updates.push(update),
+      limbo: this.limboSink,
       withSnapshot: (state) =>
         this.combatPlayer(state, cards, power, projectile, battle),
       statuses: player.statuses,
@@ -1768,6 +1845,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       modifiers: effectiveModifiers({
         ...player,
         equipment,
+        mountCard: mountCardOf(player, cards),
         refineBonusPercent: this.config.refineBonusPercent,
         statuses: [...player.statuses, ...conditional],
         abilityOwner: player,
@@ -2101,13 +2179,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     cards: ReadonlyMap<string, TCard>,
     at: Date
   ): Either<TCombatRefusal, void> {
-    const source = equippedAbility(
-      player,
-      cards,
-      action.equipmentSlot,
-      action.abilityId,
-      true
-    )
+    const slot = abilitySlotOf(action)
+    if (slot === 'mount' && !player.mount) return left('noMount')
+    const source = equippedAbility(player, cards, slot, action.abilityId, true)
     if (!source || source.ability.form === 'passive')
       return left('combatAbilityUnavailable')
     const { card } = source
@@ -2118,16 +2192,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       cards,
       living.length
     )
-    const usage = combatAbilityUsage(
-      state,
-      state.memberId,
-      action.equipmentSlot,
-      ability.id
-    )
+    const usage = combatAbilityUsage(state, state.memberId, slot, ability.id)
     if (
       (usage?.cooldown ?? 0) > 0 ||
       (usage?.uses ?? 0) >= ability.usesPerTurn ||
-      this.continuousAbilityActive(state, action.equipmentSlot, ability)
+      this.continuousAbilityActive(state, slot, ability)
     )
       return left('combatAbilityUnavailable')
     const targets =
@@ -2159,12 +2228,13 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       combatId: state.id,
       actorId: state.memberId,
       abilityId: ability.id,
-      equipmentSlot: action.equipmentSlot,
+      equipmentSlot: slot === 'mount' ? null : slot,
+      mountAbility: slot === 'mount',
     })
     const registered = registerCombatAbility(
       state,
       state.memberId,
-      action.equipmentSlot,
+      slot,
       ability,
       player.health,
       card.id
@@ -2179,7 +2249,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     let combat: TCombatState = registered.state
     const notices: CombatNotice[] = []
     const usedAbility: UsedTriggerAbility = {
-      slot: action.equipmentSlot,
+      slot: slot,
       abilityId: ability.id,
       includeOwnEffects: !registered.charging,
     }
@@ -2202,9 +2272,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
               current,
               abilityEffectDuration(ability, effect),
               card.id,
-              `${state.turn.id}:${action.equipmentSlot}:${ability.id}:${usage?.uses ?? 0}:${effectIndex}`,
+              `${state.turn.id}:${slot}:${ability.id}:${usage?.uses ?? 0}:${effectIndex}`,
               capacitiesOf(this.config, changed.expansions).purse,
-              effectIndex
+              effectIndex,
+              this.limboSink
             ),
           changed
         )
@@ -2246,9 +2317,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       rng.state(),
       combat,
       [...notices, ...enemyDefeatNotices(state, combat)],
-      `${state.turn.id}:${action.equipmentSlot}:${ability.id}:${usage?.uses ?? 0}`,
-      (trigger) =>
-        matchesAbilityUse(trigger, card, action.equipmentSlot, ability),
+      `${state.turn.id}:${slot}:${ability.id}:${usage?.uses ?? 0}`,
+      (trigger) => matchesAbilityUse(trigger, card, slot, ability),
       usedAbility
     )
     if (reactions.battle) {
@@ -2355,7 +2425,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             origin.cardId,
             option.effectId,
             capacitiesOf(this.config, changed.expansions).purse,
-            origin.effectIndex
+            origin.effectIndex,
+            this.limboSink
           ),
         }
     const combat = this.applyCombatTurnEffects(resolved.state, [effect])
@@ -2400,10 +2471,12 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const index = this.actorIndex()
     const player = this.props.members[index].player
     if (player.health === 0) return left('playerDown')
+    const slot = abilitySlotOf(operation)
+    if (slot === 'mount' && !player.mount) return left('noMount')
     const source = equippedAbility(
       player,
       cards,
-      operation.equipmentSlot,
+      slot,
       operation.abilityId,
       false
     )
@@ -2411,11 +2484,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       return left('combatAbilityUnavailable')
     const { card } = source
     const ability = abilityWithModifiers(source.ability, player, cards)
-    const key = adventureAbilityKey(
-      operation.equipmentSlot,
-      card.id,
-      ability.id
-    )
+    const key = adventureAbilityKey(slot, card.id, ability.id)
     const previous = player.abilityUsage?.[key]
     if (
       (previous?.cooldown ?? 0) > 0 ||
@@ -2462,21 +2531,21 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         card.id,
         `${statusId}:ability:${effectIndex}`,
         capacitiesOf(this.config, changed.expansions).purse,
-        effectIndex
+        effectIndex,
+        this.limboSink
       )
     })
     const triggered = this.resolveAbilityTriggers(
       changed,
       cards,
       rngState,
-      (trigger) =>
-        matchesAbilityUse(trigger, card, operation.equipmentSlot, ability),
+      (trigger) => matchesAbilityUse(trigger, card, slot, ability),
       statusId,
       zone,
       dimension,
       undefined,
       {
-        slot: operation.equipmentSlot,
+        slot: slot,
         abilityId: ability.id,
         includeOwnEffects: true,
       }
@@ -2502,7 +2571,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   private prepareAbilityEffects(
     player: TPlayerState,
     cards: ReadonlyMap<string, TCard>,
-    card: TEquipmentCard,
+    card: Readonly<{ id: string }>,
     ability: TExecutableAbility,
     initialRng: RngState,
     enemyCount = 0
@@ -2645,7 +2714,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       cardId,
       effectId,
       capacitiesOf(this.config, player.expansions).purse,
-      effectIndex
+      effectIndex,
+      this.limboSink
     )
   }
 
@@ -2682,12 +2752,15 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           entry.sourceKey !== `${slot}:${source.card.id}:${abilityId}`
         )
           return []
-        const origin = {
-          type: 'equipmentAbility' as const,
-          cardId: source.card.id,
-          equipmentSlot: slot,
-          abilityId,
-        }
+        const origin: TriggerSourceOrigin =
+          slot === 'mount'
+            ? { type: 'mountAbility', cardId: source.card.id, abilityId }
+            : {
+                type: 'equipmentAbility',
+                cardId: source.card.id,
+                equipmentSlot: slot,
+                abilityId,
+              }
         if (
           entry.targetIds &&
           !battle?.enemies.some(
@@ -2961,7 +3034,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     battle?: TCombatState,
     foundZone?: TZoneCard | null,
     foundDimension?: TDimensionCard | null,
-    usedAbility?: { slot: TEquipmentSlot; abilityId: string },
+    usedAbility?: { slot: TAbilitySlot; abilityId: string },
     enteringCombat = false
   ): {
     id: string
@@ -3047,6 +3120,66 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           ...abilities,
         ]
       }),
+      ...this.mountTriggerSources(
+        player,
+        cards,
+        battle,
+        usedAbility,
+        enteringCombat
+      ),
+    ]
+  }
+
+  /** A montaria vale como equipamento em uso, sem requisito de Pico (REQ-157). */
+  private mountTriggerSources(
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>,
+    battle: TCombatState | undefined,
+    usedAbility: { slot: TAbilitySlot; abilityId: string } | undefined,
+    enteringCombat: boolean
+  ) {
+    const mount = mountCardOf(player, cards)
+    if (!mount) return []
+    const abilities = mount.abilities.flatMap((entry) => {
+      if (entry.id === undefined || entry.target !== 'self') return []
+      const source = equippedAbility(
+        player,
+        cards,
+        'mount',
+        entry.id,
+        battle !== undefined || enteringCombat
+      )
+      if (!source) return []
+      const ability = source.ability
+      const active =
+        ability.form === 'continuous' &&
+        battle !== undefined &&
+        (usedAbility?.slot !== 'mount' ||
+          ability.id !== usedAbility.abilityId) &&
+        (combatAbilityUsage(battle, battle.memberId, 'mount', ability.id)
+          ?.activeUntilCycle ?? 0) > battle.cycle
+      if (ability.form !== 'passive' && !active) return []
+      return [
+        {
+          id: mount.id,
+          key: `mount:${mount.id}:${ability.id}`,
+          effects: ability.effects,
+          origin: {
+            type: 'mountAbility' as const,
+            cardId: mount.id,
+            abilityId: ability.id,
+          },
+        },
+      ]
+    })
+    return [
+      {
+        id: mount.id,
+        key: 'mount',
+        effects: mount.effects,
+        origin: { type: 'mount' as const, cardId: mount.id },
+      },
+      ...abilities,
     ]
   }
 
@@ -4181,11 +4314,12 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       .filter(isExecutableActivation)
       .filter(({ kind }) => !inCombatOutcome || kind !== 'heal')
     if (activations.length === 0 && inCombatOutcome) return player
-    const { player: changed } = applyActivations(
+    const { player: changed, limbo } = applyActivations(
       player,
       activations,
       capacitiesOf(this.props.config, player.expansions).purse
     )
+    if (limbo.length) this.limboSink.push(...limbo)
     const next = reconcileHand(player, changed)
     const { mark, text } = effect
     const duration =
@@ -5621,7 +5755,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         if (prepared.isLeft()) return left(prepared.value)
 
         const { effect, paid, consumed } = prepared.value
-        const { player: changed, applied } = applyActivations(
+        const {
+          player: changed,
+          applied,
+          limbo,
+        } = applyActivations(
           prepared.value.player,
           effect.activation,
           capacitiesOf(this.props.config, prepared.value.player.expansions)
@@ -5681,6 +5819,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             quantity: 1,
             from: 'inventory',
           })
+        for (const entry of limbo)
+          this.addDomainEvent({ ...base, type: 'SentToLimbo', ...entry })
         if (status)
           this.addDomainEvent({
             ...base,
@@ -5911,7 +6051,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     memberId: UniqueEntityID,
     grant: TLabGrant,
     at: Date
-  ): Either<'memberNotFound' | 'inventoryFull' | 'tcgFolderFull', void> {
+  ): Either<
+    'memberNotFound' | 'inventoryFull' | 'tcgFolderFull' | 'mountAlreadyOwned',
+    void
+  > {
     const index = this.props.members.findIndex((m) => m.id.equals(memberId))
     if (index < 0) return left('memberNotFound')
     const { config } = this.props
@@ -5922,7 +6065,15 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     switch (grant.type) {
       case 'card': {
         const { card, quantity } = grant
-        if (card.type === 'attribute') {
+        if (card.type === 'mount') {
+          // Sem montaria, a carta vira a montaria, vazia (REQ-157). Uma por
+          // vez (README 26): a 2ª cópia não caberia (D-150 e).
+          if (player.mount || quantity > 1) return left('mountAlreadyOwned')
+          next = {
+            ...player,
+            mount: { cardId: card.id, inventory: [], tcgFolder: [] },
+          }
+        } else if (card.type === 'attribute') {
           const folderSize = player.tcgFolder.reduce((s, e) => s + e.copies, 0)
           if (
             folderSize + quantity >

@@ -27,6 +27,7 @@ export function makePlayerState(
     tcgFolder: [],
     inventory: [],
     equipment: emptyEquipment(),
+    mount: null,
     vault: { slots: [], decks: [], gold: 0 },
     expansions: noExpansions(),
     lastScavenge: null,

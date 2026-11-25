@@ -136,6 +136,7 @@ const ACTIVATION_CASES: Record<string, Record<string, unknown>> = {
   loseGold: { amount: 1 },
   heal: { amount: 1 },
   loseLife: { amount: 'halfHealth' },
+  loseMount: {},
   gainPeak: { amount: 1 },
   restoreVigor: { amount: 1 },
   modifierFlat: { changes: [{ modifier: 'attack', amount: 1 }] },

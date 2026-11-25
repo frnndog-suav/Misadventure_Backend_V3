@@ -56,6 +56,7 @@ describe('POST /parties (e2e)', () => {
           isHost: true,
           player: {
             down: false,
+            mount: null,
             usableAbilities: [],
             playerClasses: [{ playerClass: 'warrior', deckLockMet: true }],
             questBoard: [],

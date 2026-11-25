@@ -218,7 +218,7 @@ describe('DrizzlePartyMapper', () => {
 
     expect(restored.combat).toEqual(party.combat)
     expect(DrizzlePartyMapper.toDrizzle(restored).state).toMatchObject({
-      schemaVersion: 10,
+      schemaVersion: 11,
       combat,
       combatZone: 'urban',
       rngState: [...party.rngState],
@@ -326,7 +326,7 @@ describe('DrizzlePartyMapper', () => {
       createdAt: party.createdAt,
       savedAt: party.savedAt,
       state: {
-        schemaVersion: 10,
+        schemaVersion: 11,
         members: [
           {
             id: 'member-1',
@@ -491,7 +491,21 @@ describe('DrizzlePartyMapper', () => {
     }
   }
 
-  it('REQ-59/D-64: save v2 é lido (rodada 1, 1º de turnOrder, pontos do config) e regravado como v10', () => {
+  it.each([2, 3, 4, 5] as const)(
+    'REQ-157/D-146: o save v%i lê mount: null sem usar o RNG',
+    (version) => {
+      const { party, row } = legacyRow(version)
+
+      const restored = DrizzlePartyMapper.toDomain(row)
+
+      expect(
+        (restored.members[0].player as { mount?: unknown }).mount
+      ).toBeNull()
+      expect(restored.rngState).toEqual(party.rngState)
+    }
+  )
+
+  it('REQ-59/D-64: save v2 é lido (rodada 1, 1º de turnOrder, pontos do config) e regravado como v11', () => {
     const { row } = legacyRow(2, 5)
 
     const restored = DrizzlePartyMapper.toDomain(row)
@@ -501,7 +515,7 @@ describe('DrizzlePartyMapper', () => {
     expect(restored.turn.actionPoints).toBe(5)
     expect(restored.pullDomainEvents()).toEqual([])
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(10)
+    expect(rewritten.schemaVersion).toBe(11)
     expect(rewritten.turn).toEqual({
       round: 1,
       memberId: 'member-1',
@@ -509,7 +523,7 @@ describe('DrizzlePartyMapper', () => {
     })
   })
 
-  it('REQ-68/D-70: save v3 é lido com a pasta vazia, a vez intacta e as chaves novas nos padrões; regravado como v10', () => {
+  it('REQ-68/D-70: save v3 é lido com a pasta vazia, a vez intacta e as chaves novas nos padrões; regravado como v11', () => {
     const { party, row } = legacyRow(3)
 
     const restored = DrizzlePartyMapper.toDomain(row)
@@ -530,11 +544,11 @@ describe('DrizzlePartyMapper', () => {
     })
     expect(restored.pullDomainEvents()).toEqual([])
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(10)
+    expect(rewritten.schemaVersion).toBe(11)
     expect(rewritten.members[0].player.tcgFolder).toEqual([])
   })
 
-  it('REQ-79/D-79: save v4 é lido com inventário vazio, nada equipado e as chaves de REQ-69 nos padrões; regravado como v10', () => {
+  it('REQ-79/D-79: save v4 é lido com inventário vazio, nada equipado e as chaves de REQ-69 nos padrões; regravado como v11', () => {
     const { party, row } = legacyRow(4)
 
     const restored = DrizzlePartyMapper.toDomain(row)
@@ -560,11 +574,11 @@ describe('DrizzlePartyMapper', () => {
     })
     expect(restored.turn).toEqual(party.turn)
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(10)
+    expect(rewritten.schemaVersion).toBe(11)
     expect(rewritten.members[0].player.inventory).toEqual([])
   })
 
-  it('REQ-95/D-87: save v5 é lido com cofre vazio e as chaves de REQ-80 nos padrões; regravado como v10', () => {
+  it('REQ-95/D-87: save v5 é lido com cofre vazio e as chaves de REQ-80 nos padrões; regravado como v11', () => {
     const { party, row } = legacyRow(5)
     row.state.config.inventoryCapacity = 12
 
@@ -586,7 +600,7 @@ describe('DrizzlePartyMapper', () => {
     expect(restored.turn).toEqual(party.turn)
     expect(restored.pullDomainEvents()).toEqual([])
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(10)
+    expect(rewritten.schemaVersion).toBe(11)
     expect(rewritten.members[0].player.vault).toEqual({
       slots: [],
       decks: [],
@@ -956,7 +970,7 @@ describe('DrizzlePartyMapper', () => {
       purse: 1,
       vaultGold: 0,
     })
-    expect(DrizzlePartyMapper.toDrizzle(restored).state.schemaVersion).toBe(10)
+    expect(DrizzlePartyMapper.toDrizzle(restored).state.schemaVersion).toBe(11)
   })
 
   it('REQ-140: ida e volta preserva lastMarketVisit; save sem ele lê undefined', () => {
@@ -1223,7 +1237,7 @@ describe('DrizzlePartyMapper', () => {
       boosterCardId: 'fixture.booster',
       remaining: ['fixture.short-sword', 'fixture.short-sword'],
     })
-    expect(DrizzlePartyMapper.toDrizzle(restored).state.schemaVersion).toBe(10)
+    expect(DrizzlePartyMapper.toDrizzle(restored).state.schemaVersion).toBe(11)
 
     const plain = DrizzlePartyMapper.toDomain(toRow(without))
     expect(plain.members[0].player.lastBoosterOpening).toBeUndefined()
@@ -1271,7 +1285,7 @@ describe('DrizzlePartyMapper', () => {
   })
 
   it.each([2, 3, 4, 5] as const)(
-    'REQ-138: o save v%i lê mercados vazios e expansões em 0, sem usar o RNG, e regrava como v10',
+    'REQ-138: o save v%i lê mercados vazios e expansões em 0, sem usar o RNG, e regrava como v11',
     (version) => {
       const { party, row } = legacyRow(version)
 
@@ -1288,7 +1302,7 @@ describe('DrizzlePartyMapper', () => {
       })
       expect(restored.rngState).toEqual(party.rngState)
       expect(DrizzlePartyMapper.toDrizzle(restored).state.schemaVersion).toBe(
-        10
+        11
       )
     }
   )
@@ -1399,7 +1413,7 @@ describe('DrizzlePartyMapper — save v10 (REQ-147, D-131)', () => {
       schemaVersion: number
       members: { player: Record<string, unknown> }[]
     }
-    expect(stored.schemaVersion).toBe(10)
+    expect(stored.schemaVersion).toBe(11)
     expect(stored.members[0].player.brokenEquipment).toBeUndefined()
     expect(stored.members[0].player.equipmentStates).toEqual({
       weapon: state,
@@ -1427,7 +1441,7 @@ describe('DrizzlePartyMapper — save v10 (REQ-147, D-131)', () => {
     expect(stored.members[0].player.brokenEquipment).toBeUndefined()
   })
 
-  it('REQ-147: o save v9 lê estado padrão em tudo, exceto broken nos slots de brokenEquipment, e regrava como v10 sem usar o RNG', () => {
+  it('REQ-147: o save v9 lê estado padrão em tudo, exceto broken nos slots de brokenEquipment, e regrava como v11 sem usar o RNG', () => {
     const party = partyWith({
       equipment: {
         ...makePlayerState().equipment,
@@ -1462,7 +1476,7 @@ describe('DrizzlePartyMapper — save v10 (REQ-147, D-131)', () => {
     ])
     expect(restored.rngState).toEqual(party.rngState)
     const rewritten = DrizzlePartyMapper.toDrizzle(restored).state
-    expect(rewritten.schemaVersion).toBe(10)
+    expect(rewritten.schemaVersion).toBe(11)
     expect(rewritten.members[0].player.equipmentStates).toEqual({
       weapon: {
         refinement: 0,

@@ -112,7 +112,7 @@ describe('DrizzlePartiesRepository (e2e)', () => {
     )
 
     expect(rows.rows).toEqual([
-      { id: ID_1, name: 'Os Teimosos', status: 'idle', v: '10' },
+      { id: ID_1, name: 'Os Teimosos', status: 'idle', v: '11' },
     ])
   })
 

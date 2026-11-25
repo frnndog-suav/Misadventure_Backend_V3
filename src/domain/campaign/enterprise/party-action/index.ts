@@ -23,11 +23,15 @@ export type TPrepareOperation =
   | TActivateOperation
   | ({ operation: 'useAbility' } & TAbilityIntent)
 
+/** A origem da habilidade: exatamente um dos dois (CONTRATO FEAT-18 `AbilitySource`; REQ-157). */
+export type TAbilitySource =
+  | { equipmentSlot: TEquipmentSlot; mountAbility?: never }
+  | { equipmentSlot?: never; mountAbility: true }
+
 type TAbilityIntent = {
   abilityId: string
-  equipmentSlot: TEquipmentSlot
   payment?: TEventPayment
-}
+} & TAbilitySource
 
 export type TActivateOperation = {
   operation: 'activate'
@@ -329,6 +333,7 @@ function parseCombatAction(
         ...fields,
         'abilityId',
         'equipmentSlot',
+        'mountAbility',
         'targetId',
         'payment',
       ])
@@ -724,6 +729,7 @@ function parsePrepare(
           'operation',
           'abilityId',
           'equipmentSlot',
+          'mountAbility',
           'payment',
         ])
       )
@@ -774,21 +780,33 @@ function readAbilityIntent(
   body: Record<string, unknown>,
   issues: TActionIssue[]
 ): TAbilityIntent | null {
-  const { abilityId, equipmentSlot } = body
-  for (const field of ['abilityId', 'equipmentSlot'] as const) {
-    if (typeof body[field] !== 'string')
-      issues.push({
-        field,
-        reason: body[field] === undefined ? 'required' : 'notString',
-      })
-  }
-  if (typeof equipmentSlot === 'string' && !isEquipmentSlot(equipmentSlot))
+  const { abilityId, equipmentSlot, mountAbility } = body
+  if (typeof abilityId !== 'string')
+    issues.push({
+      field: 'abilityId',
+      reason: abilityId === undefined ? 'required' : 'notString',
+    })
+  // Exatamente um entre `equipmentSlot` e `mountAbility: true` (REQ-157).
+  if (mountAbility !== undefined) {
+    if (mountAbility !== true || equipmentSlot !== undefined)
+      issues.push({ field: 'mountAbility', reason: 'invalidItem' })
+  } else if (typeof equipmentSlot !== 'string') {
+    issues.push({
+      field: 'equipmentSlot',
+      reason: equipmentSlot === undefined ? 'required' : 'notString',
+    })
+  } else if (!isEquipmentSlot(equipmentSlot)) {
     issues.push({ field: 'equipmentSlot', reason: 'unknownSlot' })
+  }
   const payment = readEventPayment(body.payment, issues)
-  return typeof abilityId === 'string' &&
+  if (typeof abilityId !== 'string') return null
+  const extra = payment ? { payment } : {}
+  if (mountAbility === true && equipmentSlot === undefined)
+    return { abilityId, mountAbility: true, ...extra }
+  return mountAbility === undefined &&
     typeof equipmentSlot === 'string' &&
     isEquipmentSlot(equipmentSlot)
-    ? { abilityId, equipmentSlot, ...(payment ? { payment } : {}) }
+    ? { abilityId, equipmentSlot, ...extra }
     : null
 }
 

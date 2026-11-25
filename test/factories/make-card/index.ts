@@ -379,3 +379,54 @@ export function toClassInput(
   void collectionId
   return { ...rest }
 }
+
+/** Pônei de Guerra da fixture (D-148): efeito ativável e habilidade fora de combate. */
+export function makeWarPonyCard(
+  override: Partial<TMountCard> = {}
+): TMountCard {
+  return makeMountCard({
+    id: 'fixture.war-pony',
+    name: 'Pônei de Guerra',
+    rarity: 'common',
+    creature: 'Pônei',
+    effects: [
+      {
+        text: 'Pague 1 de ouro: recupere 2 de vida.',
+        trigger: null,
+        cost: [{ kind: 'payGold', amount: 1 }],
+        activation: [{ kind: 'heal', amount: 2 }],
+        duration: { kind: 'immediate' },
+        mark: null,
+      },
+    ],
+    abilities: [
+      {
+        id: 'pony-rest',
+        name: 'Descanso do Pônei',
+        text: 'Recupere 1 de vida.',
+        form: 'targeted',
+        element: null,
+        cost: [],
+        power: null,
+        effects: [
+          {
+            text: 'Recupere 1 de vida.',
+            trigger: null,
+            cost: [],
+            activation: [{ kind: 'heal', amount: 1 }],
+            duration: { kind: 'immediate' },
+            mark: null,
+          },
+        ],
+        cooldown: 0,
+        timing: 'outsideCombat',
+        classRestriction: [],
+        usesPerTurn: 1,
+        target: 'self',
+        duration: null,
+        channel: null,
+      },
+    ],
+    ...override,
+  })
+}

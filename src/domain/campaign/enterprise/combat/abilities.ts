@@ -1,4 +1,5 @@
 import type {
+  TAbility,
   TCard,
   TEquipmentSlot,
   TExecutableAbility,
@@ -14,8 +15,14 @@ import {
 import { applyActivations } from '../effect-activation'
 import { quantityOf } from '../effect-payment'
 
-import { abilityMatchesOwner, abilitySourceWorks } from '../effective-modifiers'
+import {
+  abilityMatchesOwner,
+  abilitySourceWorks,
+  mountAbilitiesWork,
+} from '../effective-modifiers'
 import type { TPlayerState } from '../entities/party-member'
+import { mountCardOf, type TMountLimboSink } from '../mount'
+import type { TAbilitySource } from '../party-action'
 
 import {
   applyEquipmentState,
@@ -24,19 +31,49 @@ import {
 } from '../equipment-state'
 import { reconcileHand } from '../random-event'
 
-export function equippedAbility(
+/** Onde está a habilidade: um slot de equipamento ou a montaria (REQ-157). */
+export type TAbilitySlot = TEquipmentSlot | 'mount'
+
+export function abilitySlotOf(source: TAbilitySource): TAbilitySlot {
+  return source.mountAbility === true ? 'mount' : source.equipmentSlot
+}
+
+/** A carta de origem da habilidade, no que importa para usá-la. */
+type TAbilityOwnerCard = Readonly<{
+  id: string
+  tags: readonly string[]
+  abilities: readonly TAbility[]
+}>
+
+function abilityOwnerCard(
   player: TPlayerState,
   cards: ReadonlyMap<string, TCard>,
-  slot: TEquipmentSlot,
-  abilityId: string,
-  inCombat: boolean
-) {
+  slot: TAbilitySlot
+): TAbilityOwnerCard | null {
+  if (slot === 'mount') {
+    // A montaria vale como equipamento em uso, sem requisito de Pico (REQ-157).
+    const mount = mountCardOf(player, cards)
+    return mount && mountAbilitiesWork(player.statuses)
+      ? { id: mount.id, tags: [], abilities: mount.abilities }
+      : null
+  }
   const cardId = player.equipment[slot]
   const card = cardId ? cards.get(cardId) : undefined
   if (card?.type !== 'equipment' || !abilitySourceWorks(card, slot, player))
     return null
   // As habilidades dos encantamentos ligados contam como as da carta (REQ-148).
-  const resolved = applyEquipmentState(card, player.equipmentStates?.[slot], 0)
+  return applyEquipmentState(card, player.equipmentStates?.[slot], 0)
+}
+
+export function equippedAbility(
+  player: TPlayerState,
+  cards: ReadonlyMap<string, TCard>,
+  slot: TAbilitySlot,
+  abilityId: string,
+  inCombat: boolean
+): { card: TAbilityOwnerCard; ability: TExecutableAbility } | null {
+  const resolved = abilityOwnerCard(player, cards, slot)
+  if (!resolved) return null
   const ability = resolved.abilities.find(
     (entry): entry is TExecutableAbility => entry.id === abilityId
   )
@@ -58,17 +95,17 @@ export function applyAbilityEffect(
   sourceCardId: string,
   statusId: string,
   purseCapacity: number,
-  effectIndex: number
+  effectIndex: number,
+  limbo?: TMountLimboSink
 ): TPlayerState {
   const { activation } = effect
-  let changed = reconcileHand(
+  const applied = applyActivations(
     player,
-    applyActivations(
-      player,
-      activation.filter(isExecutableActivation),
-      purseCapacity
-    ).player
+    activation.filter(isExecutableActivation),
+    purseCapacity
   )
+  if (applied.limbo.length) limbo?.push(...applied.limbo)
+  let changed = reconcileHand(player, applied.player)
   if (
     activation.some(
       (entry) => entry.kind === 'repairEquipment' && entry.target === 'self'
@@ -149,7 +186,7 @@ export function abilityEffectDuration(
 }
 
 export function adventureAbilityKey(
-  slot: TEquipmentSlot,
+  slot: TAbilitySlot,
   cardId: string,
   abilityId: string
 ) {
@@ -203,16 +240,18 @@ export function abilityWithModifiers(
 export function matchesAbilityUse(
   trigger: TTrigger | null,
   card: { id: string; tags: readonly string[] },
-  slot: TEquipmentSlot,
+  slot: TAbilitySlot,
   ability: TExecutableAbility
 ) {
+  const equipmentSlot = slot === 'mount' ? null : slot
   if (trigger?.kind === 'onElementAbilityUsed')
     return trigger.element === ability.element
   return (
     trigger?.kind === 'onAbilityUsed' &&
     (trigger.cardId === null || trigger.cardId === card.id) &&
-    (trigger.slots.length === 0 || trigger.slots.includes(slot)) &&
-    !trigger.excludeSlots.includes(slot) &&
+    (trigger.slots.length === 0 ||
+      (equipmentSlot !== null && trigger.slots.includes(equipmentSlot))) &&
+    (equipmentSlot === null || !trigger.excludeSlots.includes(equipmentSlot)) &&
     (trigger.tags.length === 0 ||
       trigger.tags.some((tag) => card.tags.includes(tag)))
   )

@@ -338,6 +338,8 @@ const changesPercent = z.array(
 export const activationSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('gainGold'), amount: z.number() }),
   z.strictObject({ kind: z.literal('loseGold'), amount: z.number() }),
+  // REQ-163: perde a montaria em uso (alvo: o próprio jogador).
+  z.strictObject({ kind: z.literal('loseMount') }),
   z.strictObject({ kind: z.literal('heal'), amount: z.number() }),
   z.strictObject({
     kind: z.literal('loseLife'),

@@ -40,6 +40,7 @@ import {
 import { availableActions } from '@/domain/campaign/enterprise/available-actions'
 import { connectedZones } from '@/domain/campaign/enterprise/connected-zones'
 import { effectiveModifiers } from '@/domain/campaign/enterprise/effective-modifiers'
+import { mountCardOf } from '@/domain/campaign/enterprise/mount'
 import {
   DEFAULT_EQUIPMENT_STATE,
   enchantmentActive,
@@ -153,6 +154,14 @@ export interface TPlayerStateHttp {
   equipment: Record<TEquipmentSlot, string | null>
   /** FEAT-17 (REQ-147): estado do equipamento em uso; `null` onde não há. */
   equipmentStates: Record<TEquipmentSlot, TEquipmentStateHttp | null>
+  /** FEAT-18 (REQ-157): `null` sem montaria. */
+  mount: {
+    cardId: string
+    inventory: TInventorySlotHttp[]
+    inventoryCapacity: number
+    tcgFolder: TCardCopiesHttp[]
+    tcgFolderCapacity: number
+  } | null
   purseCapacity: number
   effectiveModifiers: Record<TModifier, number>
   statuses: readonly TPlayerStatus[]
@@ -446,6 +455,17 @@ function playerToHTTP(
         ]
       })
     ) as Record<TEquipmentSlot, TEquipmentStateHttp | null>,
+    mount: player.mount
+      ? {
+          cardId: player.mount.cardId,
+          inventory: player.mount.inventory.map((slot) =>
+            slotToHTTP(slot, cards)
+          ),
+          inventoryCapacity: party.config.mountInventorySlots,
+          tcgFolder: copiesToHTTP(player.mount.tcgFolder),
+          tcgFolderCapacity: party.config.mountFolderCapacity,
+        }
+      : null,
     purseCapacity: capacities.purse,
     effectiveModifiers:
       (party.turn.memberId.equals(member.id)
@@ -459,6 +479,7 @@ function playerToHTTP(
         refineBonusPercent: party.config.refineBonusPercent,
         statuses: player.statuses,
         abilityOwner: player,
+        mountCard: mountCardOf(player, cards),
       }),
     vault: {
       slots: player.vault.slots.map((slot) => slotToHTTP(slot, cards)),
@@ -514,6 +535,11 @@ export async function findPartyCards(
       for (const cardId of player.hand) cardIds.add(cardId)
     }
     for (const { cardId } of player.inventory) cardIds.add(cardId)
+    if (player.mount) {
+      // REQ-157: a carta da montaria e o inventário extra.
+      cardIds.add(player.mount.cardId)
+      for (const { cardId } of player.mount.inventory) cardIds.add(cardId)
+    }
     for (const { cardId } of player.vault.slots) cardIds.add(cardId)
     for (const cardId of Object.values(player.equipment)) {
       if (cardId !== null) cardIds.add(cardId)

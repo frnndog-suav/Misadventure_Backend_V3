@@ -255,6 +255,7 @@ const ACTIVATIONS: Record<TActivationKind, Rule> = {
   swapCombatOrder: NONE,
   reviveAlly: { ints: { healthPercent: [1, 100] } },
   teleportToRespawn: NONE,
+  loseMount: NONE,
   moveToZoneOfType: NONE,
   removeDebuffs: NONE,
   removeBuffs: NONE,

@@ -38,9 +38,9 @@ const gear = (effect: Partial<TEffect>) =>
 const unknown = <T>(value: unknown) => value as T
 
 describe('REQ-98: catálogo de variações (D-96, D-97)', () => {
-  it('REQ-98: as quatro uniões cobrem as 172 variações do catálogo validado', () => {
+  it('REQ-98: as quatro uniões cobrem as 173 variações do catálogo validado', () => {
     expect(Object.values(EFFECT_KINDS).map((kinds) => kinds.length)).toEqual([
-      46, 11, 56, 59,
+      46, 11, 57, 59,
     ])
   })
 

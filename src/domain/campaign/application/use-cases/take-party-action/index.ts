@@ -637,6 +637,8 @@ export class TakePartyActionUseCase {
       ...Object.values(player?.equipment ?? {}).filter(
         (id): id is string => id !== null
       ),
+      // A montaria em uso vale como equipamento em uso (REQ-157).
+      ...(player?.mount ? [player.mount.cardId] : []),
       ...(party.eventEncounter?.payments.flatMap(
         (receipt) => receipt.handCards?.map(({ cardId }) => cardId) ?? []
       ) ?? []),

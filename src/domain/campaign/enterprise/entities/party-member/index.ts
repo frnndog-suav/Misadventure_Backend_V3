@@ -14,6 +14,7 @@ import type { TWornStates } from '../../equipment-state'
 import type { TInventorySlot } from '../../inventory'
 import type { TMarketVisitResult } from '../../market-trade'
 import type { TExpansions } from '../../markets'
+import type { TMountState } from '../../mount'
 import type { TPlayerStatus } from '../../player-status'
 import type { TEventResult, THandCopy } from '../../random-event'
 import type { TVault } from '../../vault'
@@ -64,6 +65,8 @@ export type TPlayerState = Readonly<{
   inventory: readonly TInventorySlot[]
   /** Equipamento em uso por categoria (README 5.1; REQ-70). */
   equipment: Readonly<Record<TEquipmentSlot, string | null>>
+  /** Montaria (README 26; REQ-157): `null`/ausente = sem montaria. */
+  mount?: TMountState | null
   /** Cofre (README 6.4; REQ-83, D-83): começa vazio. */
   vault: TVault
   /** Expansões compradas no mercado (REQ-143; D-120); ausente = tudo 0. */

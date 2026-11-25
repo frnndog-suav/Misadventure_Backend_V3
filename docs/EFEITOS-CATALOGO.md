@@ -239,6 +239,7 @@ Nenhum gatilho é executado na FEAT-11 (fora do escopo, D-95): todos os `entra` 
 | `breakEquipment` | `slots: EquipmentSlot[] (opc.)` — **só inimigos** (pool exclusiva, 17.5) | "Quebre um equipamento do jogador." / "Quebre o equipamento de tronco do jogador." | 13.3 | FEAT-13 | entra |
 | `abandonOwnEquipment` | mesma forma do custo `abandonEquipment` | "Abdique de um equipamento seu à escolha ou aleatório." / "Abdique do seu calçado ou da cabeça." | 13.3 | a definir | entra |
 | `repairEquipment` | `target: self | allyInZone` | "Repare um equipamento seu." / "Repare um equipamento de um jogador na mesma zona." | 13.3 | FEAT-17 | entra |
+| `loseMount` | — | "Perca a sua montaria." (montaria, inventário extra e pasta extra vão ao limbo; REQ-163) | 26 | FEAT-18 | entra |
 | `offerResourcesAsEffect` | mesma forma do custo `offerResources` | "Ofereça um recurso do tipo X ou Y do inventário." / "Ofereça 2 recursos do inventário." | 13.3 | a definir | entra |
 
 ### Interação de elemento (nenhum efeito cria multi-elemento, 13.3)

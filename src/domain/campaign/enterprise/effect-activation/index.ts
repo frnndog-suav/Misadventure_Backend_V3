@@ -1,5 +1,6 @@
 ﻿import type { TExecutableActivation } from '../activatable-effects'
 import { maxHealthOf, type TPlayerState } from '../entities/party-member'
+import { mountLimbo, type TMountLimboEntry } from '../mount'
 
 export type TActivationApplied = {
   activation: TExecutableActivation['kind']
@@ -13,9 +14,15 @@ export function applyActivations(
   initial: TPlayerState,
   activations: readonly TExecutableActivation[],
   purseCapacity: number
-): { player: TPlayerState; applied: TActivationApplied[] } {
+): {
+  player: TPlayerState
+  applied: TActivationApplied[]
+  /** O que foi ao limbo, na ordem (`loseMount`, REQ-163). */
+  limbo: TMountLimboEntry[]
+} {
   let player = initial.health === 0 ? { ...initial, down: true } : initial
   const applied: TActivationApplied[] = []
+  const limbo: TMountLimboEntry[] = []
   for (const activation of activations) {
     const record = (
       patch: Partial<TPlayerState>,
@@ -91,6 +98,10 @@ export function applyActivations(
         record({ statuses }, { statusIds })
         break
       }
+      case 'loseMount':
+        limbo.push(...mountLimbo(player.mount))
+        record(player.mount ? { mount: null } : {})
+        break
       case 'modifierFlat':
       case 'modifierPercent':
       case 'keepPeakOnKnockout':
@@ -105,5 +116,5 @@ export function applyActivations(
       }
     }
   }
-  return { player, applied }
+  return { player, applied, limbo }
 }

@@ -5,6 +5,7 @@ import {
   type TCard,
   type TEquipmentCard,
   type TItemCard,
+  type TMountCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import type {
   TActivation,
@@ -41,6 +42,7 @@ const ACTIVATIONS = [
   'fleeTargetOverride',
   'fleeTargetModifier',
   'diceResultModifier',
+  'loseMount',
 ] as const satisfies readonly TActivation['kind'][]
 
 function isEventRuleActivation(entry: TActivation): boolean {
@@ -101,10 +103,10 @@ type TExecutableEffect = Omit<TEffect, 'cost' | 'activation' | 'duration'> & {
   duration: TPlayerStatus['duration'] | { kind: 'immediate' }
 }
 
-type TSource = {
-  source: 'inventory' | 'equipment'
-  card: TItemCard | TEquipmentCard
-}
+type TSource =
+  | { source: 'inventory' | 'equipment'; card: TItemCard | TEquipmentCard }
+  /** A carta da montaria em uso, sem requisito de Pico (REQ-157). */
+  | { source: 'mount'; card: TMountCard }
 export type TActivateRefusal =
   | TPaymentRefusal
   | {
@@ -196,16 +198,22 @@ export function activatableEffects(
   const catalog = new Map(cards.map((card) => [card.id, card]))
   const seen = new Set<string>()
   const available: TActivatableEffect[] = []
-  const add = (cardId: string, source: TSource['source']) => {
+  const add = (cardId: string, kind: TSource['source']) => {
     const card = catalog.get(cardId)
-    if (
-      (card?.type !== 'item' && card?.type !== 'equipment') ||
-      seen.has(cardId)
-    )
-      return
+    const found: TSource | null =
+      card?.type === 'mount'
+        ? kind === 'mount'
+          ? { source: kind, card }
+          : null
+        : (card?.type === 'item' || card?.type === 'equipment') &&
+            kind !== 'mount'
+          ? { source: kind, card }
+          : null
+    if (!found || seen.has(cardId)) return
     seen.add(cardId)
-    for (const [effectIndex] of card.effects.entries()) {
-      const effect = resolveEffect(player, { card, source }, effectIndex, phase)
+    const { source } = found
+    for (const [effectIndex] of found.card.effects.entries()) {
+      const effect = resolveEffect(player, found, effectIndex, phase)
       if (
         effect.isLeft() ||
         payEffectCosts(player, cardId, effect.value.cost, catalog).isLeft()
@@ -227,6 +235,7 @@ export function activatableEffects(
     const cardId = player.equipment[slot]
     if (cardId !== null) add(cardId, 'equipment')
   }
+  if (player.mount) add(player.mount.cardId, 'mount')
   return available
 }
 
@@ -241,18 +250,17 @@ export function prepareEffect(
   const inUse = Object.values(player.equipment).includes(cardId)
   const catalog = new Map(cards.map((card) => [card.id, card]))
   const card = catalog.get(cardId)
-  if (
-    (!inUse && !player.inventory.some((slot) => slot.cardId === cardId)) ||
-    (card?.type !== 'item' && card?.type !== 'equipment')
-  ) {
-    return left({ reason: 'notOwned', cardId })
-  }
-  const effect = resolveEffect(
-    player,
-    { card, source: inUse ? 'equipment' : 'inventory' },
-    effectIndex,
-    phase
-  )
+  const source: TSource | null =
+    card?.type === 'mount'
+      ? player.mount?.cardId === cardId
+        ? { source: 'mount', card }
+        : null
+      : (card?.type === 'item' || card?.type === 'equipment') &&
+          (inUse || player.inventory.some((slot) => slot.cardId === cardId))
+        ? { source: inUse ? 'equipment' : 'inventory', card }
+        : null
+  if (!source) return left({ reason: 'notOwned', cardId })
+  const effect = resolveEffect(player, source, effectIndex, phase)
   if (effect.isLeft()) return left(effect.value)
   const payment = payEffectCosts(player, cardId, effect.value.cost, catalog, {
     handCards: operation.payment?.handCards,

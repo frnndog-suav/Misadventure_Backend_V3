@@ -426,7 +426,7 @@ describe('Preparar — equip e unequip (e2e)', () => {
 
     await act(party.id, { type: 'endTurn' }).expect(200)
     expect(await rawState(party.id)).toMatchObject({
-      schemaVersion: 10,
+      schemaVersion: 11,
       config: { inventoryCapacity: 10, purseCapacity: 300 },
       members: [{ player: { inventory: [], gold: 300 } }],
     })

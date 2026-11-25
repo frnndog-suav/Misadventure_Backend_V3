@@ -12,6 +12,7 @@ import type {
 import { quantityOf } from '../effect-payment'
 import { effectiveModifiers } from '../effective-modifiers'
 import type { TPlayerState } from '../entities/party-member'
+import { mountCardOf } from '../mount'
 import type { TEventPayment } from '../party-action'
 import { shuffle } from '../shuffle'
 
@@ -387,6 +388,7 @@ export function failedMinimums(
   const modifiers = effectiveModifiers({
     ...player,
     equipment,
+    mountCard: mountCardOf(player, cards),
     refineBonusPercent,
   })
   return card.requirements.flatMap((requirement) => {

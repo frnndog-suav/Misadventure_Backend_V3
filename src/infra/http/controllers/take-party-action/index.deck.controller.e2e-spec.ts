@@ -569,7 +569,7 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
       .from(parties)
       .where(eq(parties.id, party.id))
     expect(saved.state).toMatchObject({
-      schemaVersion: 10,
+      schemaVersion: 11,
       config: NEW_KEYS,
       members: [{ player: { tcgFolder: [] } }],
     })

@@ -17,6 +17,7 @@ import { effectiveModifiers } from '../effective-modifiers'
 import type { TPaymentRefusal } from '../effect-payment'
 import type { TPlayerState } from '../entities/party-member'
 import { capacitiesOf } from '../markets'
+import type { TMountLimboSink } from '../mount'
 import {
   abilityEffectDuration,
   abilityEffectStatus,
@@ -36,6 +37,7 @@ export type TCombatRefusal =
   | 'wrongCombatPhase'
   | 'combatTargetUnavailable'
   | 'combatAbilityUnavailable'
+  | 'noMount'
   | TPaymentRefusal['reason']
   | 'notActivatable'
   | 'playerDown'
@@ -263,7 +265,9 @@ export type TCombatState = {
 
 type CombatAbilityUsage = {
   actorId: string
+  /** `null` para inimigo e para a montaria (com `mountAbility`; D-150 b). */
   equipmentSlot: TEquipmentSlot | null
+  mountAbility?: true
   abilityId: string
   sourceCardId: string
   element: TElement | null
@@ -301,6 +305,7 @@ export type TCombatUpdate = { combatId: string } & (
       actorId: string
       abilityId: string
       equipmentSlot: TEquipmentSlot | null
+      mountAbility: boolean
     }
   | { type: 'combatEffectActivated'; actorId: string; effectId: string }
   | {
@@ -339,6 +344,8 @@ type CombatPlayer = {
   snapshot?: TPlayerState
   update?: (update: TCombatUpdate) => void
   withSnapshot?: (player: TPlayerState) => CombatPlayer
+  /** Recebe o que vai ao limbo ao perder a montaria (REQ-163). */
+  limbo?: TMountLimboSink
   reactionPending?: () => boolean
   react?: (
     fighter: CombatPlayer,
@@ -423,16 +430,28 @@ function notifyCombat(
     : { fighter, rng, state }
 }
 
+/** Slot do equipamento, `'mount'` (habilidade da montaria) ou `null` (inimigo). */
+type TUsageSlot = TEquipmentSlot | 'mount' | null
+
+export function usageMatchesSlot(
+  entry: Pick<CombatAbilityUsage, 'equipmentSlot' | 'mountAbility'>,
+  slot: TUsageSlot
+) {
+  return slot === 'mount'
+    ? entry.mountAbility === true
+    : entry.equipmentSlot === slot && entry.mountAbility !== true
+}
+
 export function combatAbilityUsage(
   state: TCombatState,
   actorId: string,
-  equipmentSlot: TEquipmentSlot | null,
+  equipmentSlot: TUsageSlot,
   abilityId: string
 ) {
   return state.abilityUsage?.find(
     (entry) =>
       entry.actorId === actorId &&
-      entry.equipmentSlot === equipmentSlot &&
+      usageMatchesSlot(entry, equipmentSlot) &&
       entry.abilityId === abilityId
   )
 }
@@ -440,18 +459,19 @@ export function combatAbilityUsage(
 export function registerCombatAbility(
   state: TCombatState,
   actorId: string,
-  equipmentSlot: TEquipmentSlot | null,
+  slot: TUsageSlot,
   ability: TExecutableAbility,
   health: number,
   sourceCardId = state.card.id
 ) {
-  const previous = combatAbilityUsage(state, actorId, equipmentSlot, ability.id)
+  const previous = combatAbilityUsage(state, actorId, slot, ability.id)
   const channel = ability.channel
   const nextCharge = (previous?.charges ?? 0) + 1
   const charging = channel !== null && nextCharge < channel.chargesRequired
   const usage = {
     actorId,
-    equipmentSlot,
+    equipmentSlot: slot === 'mount' ? null : slot,
+    ...(slot === 'mount' && { mountAbility: true as const }),
     abilityId: ability.id,
     sourceCardId,
     element: ability.element,
@@ -1292,6 +1312,7 @@ function resolveEnemyAbilities(
       actorId: actor.id,
       abilityId: ability.id,
       equipmentSlot: null,
+      mountAbility: false,
     })
     const registered = registerCombatAbility(
       current,
@@ -1506,7 +1527,8 @@ function resolveEnemyAbilities(
           state.card.id,
           `${state.turn.id}:${use}:${effectIndex}`,
           capacitiesOf(config, player.snapshot.expansions).purse,
-          effectIndex
+          effectIndex,
+          player.limbo
         )
         if (changed.health < health) {
           current = interruptChannel(

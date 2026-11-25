@@ -72,7 +72,8 @@ export class GrantToMemberUseCase {
         if (
           card.type !== 'equipment' &&
           card.type !== 'item' &&
-          card.type !== 'attribute'
+          card.type !== 'attribute' &&
+          card.type !== 'mount'
         ) {
           return left(
             new LabGrantInvalidError([
@@ -103,6 +104,7 @@ export class GrantToMemberUseCase {
           return left(new MemberNotFoundError())
         case 'inventoryFull':
         case 'tcgFolderFull':
+        case 'mountAlreadyOwned':
           return left(new LabGrantNoSpaceError(reason))
         default: {
           const _exhaustive: never = reason
