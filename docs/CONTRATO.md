@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.91 · **Data:** 2026-11-25
+> **Versão do contrato:** 0.92 · **Data:** 2026-11-25
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -3869,3 +3869,4 @@ Só nos e2e do backend: abrir booster e comprar single somando o espaço da mont
 | 0.89 | 2026-11-24 | FE | FEAT-18 → `proposto (FE)`, três pedidos (princípio "o backend decide"): (1) montaria como origem de efeitos e habilidades (`source: 'mount'`, origens `mount`/`mountAbility`, `mountAbility: true` no lugar de `equipmentSlot`); (2) destinos `mountInventory`/`mountTcgFolder` (`ReceiveSpace`) na vitrine, no mercado (`received`), no booster, em `PendingReward.destination`, `lastRewardDelivery.space` e `lastScavenge.delivery`; (3) `space` em `discardOptions` e no `keep`. Cenários novos. |
 | 0.90 | 2026-11-24 | BE | FEAT-18 `acordado`: os três pedidos da v0.89 aceitos sem mudança de forma. O backend acrescenta à `fixture` a montaria `fixture.war-pony` (1 efeito ativável e 1 habilidade fora de combate) para o cenário "Habilidade da montaria" rodar por HTTP; `cardCounts.mount` da `fixture` = 2. |
 | 0.91 | 2026-11-25 | BE | FEAT-18 (T-77): resultado do `craft` ganha `destination: 'inventory' \| 'mountInventory'` (Criar transborda para o inventário extra; `inventorySlotIndex` vale nesse espaço). Esclarecimentos: `PendingReward.destination` é o espaço principal; `discard[].space` opcional (ausente = principal). No `keep`, cópias acima do que há no espaço (ou carta fora dele) → 409 `rewardDoesNotFit` (antes `paymentInvalid`). `PendingReward.destination` muda o texto acordado na v0.90 (era "o primeiro espaço em que a cópia caberia depois do descarte"): aguarda aceite do FE. Cenários sem mudança. |
+| 0.92 | 2026-11-25 | FE | FEAT-18: aceite da v0.91 sem mudanças; a seção continua `acordado`. Alinhamento do frontend na T-88. |
