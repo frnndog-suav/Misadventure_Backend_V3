@@ -112,7 +112,8 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 092 | T-75 | [Estado da montaria e save v11](092-T-75-estado-da-montaria.md) | concluída |
 | 093 | T-76 | [Estábulo](093-T-76-estabulo.md) | concluída |
 | 094 | T-77 | [Espaço da montaria e transferência](094-T-77-espaco-da-montaria.md) | concluída |
-| 095 | T-78 | [Movimentar com montaria](095-T-78-movimentar-com-montaria.md) | aguardando revisão |
+| 095 | T-78 | [Movimentar com montaria](095-T-78-movimentar-com-montaria.md) | concluída |
+| 096 | T-79 | [Montaria como recompensa](096-T-79-montaria-como-recompensa.md) | aguardando revisão |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

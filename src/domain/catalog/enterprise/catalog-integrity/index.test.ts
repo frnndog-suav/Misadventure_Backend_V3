@@ -17,6 +17,7 @@ import {
   makeEnemy,
   makeEquipmentCard,
   makeItemCard,
+  makeMountCard,
   makeRandomEventCard,
   makeUrbanZoneCard,
   makeZoneCard,
@@ -90,6 +91,31 @@ describe('checkCatalogIntegrity', () => {
       ],
     })
     expect(check([dimension, executable, combat])).toEqual([])
+  })
+
+  it('REQ-162: recompensa fixa e busca de evento aceitam montaria', () => {
+    const horse = makeMountCard()
+    const event = makeRandomEventCard({
+      requirements: [
+        {
+          id: 'vigor',
+          kind: 'minimum',
+          stat: 'vigor',
+          value: 1,
+          text: 'Vigor',
+        },
+      ],
+      goodOutcome: {
+        text: 'Ganhe um cavalo.',
+        steps: [
+          { type: 'grantReward', cardId: horse.id, copies: 1 },
+          { type: 'searchReward', cardId: horse.id },
+        ],
+      },
+      badOutcome: { text: 'Nada.', steps: [] },
+      escapeThreshold: null,
+    })
+    expect(check([event, horse])).toEqual([])
   })
 
   describe('ids e coleções', () => {
@@ -1128,6 +1154,16 @@ describe('REQ-82: decks de recompensas na Carta de Dimensão (3.4, D-74)', () =>
         },
       ])
     ).toEqual([['rewardDecks[0].cards', 'duplicateValue']])
+  })
+
+  it('REQ-162: montaria entra no deck de recompensas', () => {
+    const horse = makeMountCard()
+    expect(
+      fields(
+        [{ zoneType: 'rural', cards: [{ cardId: horse.id, copies: 1 }] }],
+        [horse]
+      )
+    ).toEqual([])
   })
 
   it('REQ-82: carta inexistente, de tipo que não entra e copies inválido', () => {

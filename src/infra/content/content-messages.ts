@@ -53,7 +53,7 @@ const CATALOG_MESSAGES: Record<TCatalogIssueReason, string> = {
     'Só ferramenta (com tipo de ferramenta) tem tipos de zona para vasculhar.',
   notKebabCase: 'Use só letras minúsculas, números e hífens.',
   notARewardCard:
-    'O deck de recompensas só tem cartas de atributo, equipamento ou item.',
+    'O deck de recompensas só tem cartas de atributo, equipamento, item ou montaria.',
   notAnEventCard: 'Use uma carta de evento aleatório ou de combate.',
   randomEventNotExecutable:
     'Informe regras executáveis para o evento aleatório.',

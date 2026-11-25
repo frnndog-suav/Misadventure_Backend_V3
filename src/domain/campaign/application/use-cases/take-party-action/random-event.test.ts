@@ -22,6 +22,7 @@ import {
   makeEnemy,
   makeEquipmentCard,
   makeItemCard,
+  makeMountCard,
   makeRandomEventCard,
   makeUrbanZoneCard,
   makeZoneEffect,
@@ -1109,6 +1110,133 @@ describe('TakePartyActionUseCase — recompensas de encontro (T-42)', () => {
     expect(game.playerState()).toMatchObject({
       inventory: [],
       lastRewardSearch: { encounterId, cardId: ore.id, found: false },
+    })
+  })
+})
+
+describe('TakePartyActionUseCase — montaria como recompensa (T-79)', () => {
+  const horse = makeMountCard()
+  const pony = makeMountCard({ id: 'fixture.war-pony', name: 'Pônei' })
+  const owned = {
+    cardId: pony.id,
+    inventory: [{ cardId: ore.id, quantity: 1 }],
+    tcgFolder: [],
+  }
+
+  it.each([
+    { type: 'drawRewards', count: 1 },
+    { type: 'searchReward', cardId: horse.id },
+    { type: 'grantReward', cardId: horse.id, copies: 1 },
+  ] as const)(
+    'REQ-162: sem montaria, $type entrega a montaria vazia sem escolha',
+    async (step) => {
+      const game = setup({
+        player: { inventory: [{ cardId: spare.id, quantity: 1 }] },
+        rewardCards: [horse.id],
+        rewardConfig: { ...GAME_CONFIG_DEFAULTS, inventoryCapacity: 1 },
+        additionalCards: [horse, pony],
+        outcome: { text: 'Ganhe um cavalo.', steps: [step] },
+      })
+      const encounterId = await game.reveal()
+      const resolved = await game.accept({ type: 'resolveEvent', encounterId })
+      expect(rewardState(resolved)).toMatchObject({
+        randomEventEncounter: null,
+        pendingRewards: [],
+      })
+      expect(game.playerState()).toMatchObject({
+        mount: { cardId: horse.id, inventory: [], tcgFolder: [] },
+        inventory: [{ cardId: spare.id, quantity: 1 }],
+        lastRewardDelivery: {
+          cardId: horse.id,
+          origin:
+            step.type === 'grantReward'
+              ? { type: 'fixed' }
+              : { type: 'rewardDeck', zoneType: 'urban' },
+          disposition: 'kept',
+          space: null,
+        },
+      })
+    }
+  )
+
+  it.each([
+    { type: 'drawRewards', count: 1 },
+    { type: 'searchReward', cardId: horse.id },
+  ] as const)(
+    'REQ-162: com montaria, $type devolve a carta ao fundo do deck',
+    async (step) => {
+      const game = setup({
+        player: { mount: owned },
+        rewardCards: [horse.id, potion.id],
+        additionalCards: [horse, pony],
+        outcome: { text: 'Ganhe um cavalo.', steps: [step] },
+      })
+      const encounterId = await game.reveal()
+      const resolved = await game.accept({ type: 'resolveEvent', encounterId })
+      expect(rewardState(resolved)).toMatchObject({ pendingRewards: [] })
+      expect(game.playerState()).toMatchObject({
+        mount: owned,
+        lastRewardDelivery: {
+          cardId: horse.id,
+          origin: { type: 'rewardDeck', zoneType: 'urban' },
+          disposition: 'returnedToDeck',
+          space: null,
+        },
+      })
+      expect(resolved.rewardDecks).toEqual([
+        { zoneType: 'urban', cards: [potion.id, horse.id] },
+      ])
+      expect(resolved.pullDomainEvents()).not.toContainEqual(
+        expect.objectContaining({ type: 'SentToLimbo' })
+      )
+    }
+  )
+
+  it('REQ-162: com montaria, a recompensa fixa vai ao limbo', async () => {
+    const game = setup({
+      player: { mount: owned },
+      additionalCards: [horse, pony],
+      outcome: {
+        text: 'Ganhe um cavalo.',
+        steps: [{ type: 'grantReward', cardId: horse.id, copies: 1 }],
+      },
+    })
+    const encounterId = await game.reveal()
+    const resolved = await game.accept({ type: 'resolveEvent', encounterId })
+    expect(rewardState(resolved)).toMatchObject({ pendingRewards: [] })
+    expect(game.playerState()).toMatchObject({
+      mount: owned,
+      lastRewardDelivery: {
+        cardId: horse.id,
+        origin: { type: 'fixed' },
+        disposition: 'sentToLimbo',
+        space: null,
+      },
+    })
+    expect(resolved.pullDomainEvents()).toContainEqual(
+      expect.objectContaining({
+        type: 'SentToLimbo',
+        memberId: new UniqueEntityID('member-1'),
+        cardId: horse.id,
+        quantity: 1,
+        from: 'mount',
+      })
+    )
+  })
+
+  it('REQ-162: duas cópias fixas: a primeira vira a montaria, a segunda vai ao limbo', async () => {
+    const game = setup({
+      additionalCards: [horse],
+      outcome: {
+        text: 'Ganhe dois cavalos.',
+        steps: [{ type: 'grantReward', cardId: horse.id, copies: 2 }],
+      },
+    })
+    const encounterId = await game.reveal()
+    await game.accept({ type: 'resolveEvent', encounterId })
+    expect(game.playerState()).toMatchObject({
+      mount: { cardId: horse.id, inventory: [], tcgFolder: [] },
+      lastRewardDelivery: { cardId: horse.id, disposition: 'sentToLimbo' },
     })
   })
 })

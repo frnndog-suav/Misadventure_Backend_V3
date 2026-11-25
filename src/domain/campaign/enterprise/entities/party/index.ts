@@ -3992,6 +3992,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         }
         if (!reward) continue
         const rewardCard = cards.get(reward.cardId)
+        if (rewardCard?.type === 'mount') {
+          player = this.deliverMountReward(player, reward, ids)
+          continue
+        }
         if (
           rewardCard?.type !== 'attribute' &&
           rewardCard?.type !== 'item' &&
@@ -4075,6 +4079,42 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return received
       ? { player: received.player, space: received.received[0].space }
       : null
+  }
+
+  /**
+   * Montaria como recompensa (REQ-162; D-154): sem montaria, vira a montaria,
+   * vazia; com montaria, volta ao fundo do deck de recompensas de origem ou vai
+   * ao limbo. Nunca abre escolha.
+   */
+  private deliverMountReward(
+    player: TPlayerState,
+    reward: { cardId: string; origin: TRewardOrigin },
+    ids: IdGenerator | undefined
+  ): TPlayerState {
+    const { cardId, origin } = reward
+    let disposition: TRewardDelivery['disposition'] = 'kept'
+    if (!player.mount) {
+      player = { ...player, mount: { cardId, inventory: [], tcgFolder: [] } }
+    } else if (origin.type === 'rewardDeck') {
+      const deck = this.rewardDecks.find(
+        ({ zoneType }) => zoneType === origin.zoneType
+      )
+      this.updateRewardDeck(origin.zoneType, [...(deck?.cards ?? []), cardId])
+      disposition = 'returnedToDeck'
+    } else {
+      this.limboSink.push({ cardId, quantity: 1, from: 'mount' })
+      disposition = 'sentToLimbo'
+    }
+    return {
+      ...player,
+      lastRewardDelivery: {
+        rewardId: this.nextRewardId(ids),
+        cardId,
+        origin,
+        disposition,
+        space: null,
+      },
+    }
   }
 
   private nextRewardId(ids: IdGenerator | undefined): string {

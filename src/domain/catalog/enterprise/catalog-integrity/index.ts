@@ -989,7 +989,8 @@ export function isRewardCard(card: TCard): boolean {
   return (
     card.type === 'attribute' ||
     card.type === 'equipment' ||
-    card.type === 'item'
+    card.type === 'item' ||
+    card.type === 'mount'
   )
 }
 
