@@ -3013,6 +3013,14 @@ A lista completa de valores está no [Apêndice A](#apêndice-a--valores-ajustá
 | U1 | Mover coisas entre o jogador e a montaria | Dentro de **Preparar** (gratuita, só na própria vez, também com 0 pontos), o jogador move recursos entre o inventário e o inventário extra, e cartas de atributo entre a pasta de TCG e a pasta extra, quantas vezes quiser. O estado do equipamento (refino, encantamentos, reparos, quebra) vai junto. | [6.6](#66-recompensas-e-falta-de-espaço), [12.2](#122-lista-de-ações-padrão), [26](#26-montarias) |
 | U2 | Onde guarda o que chega (D2) | O que chega vai primeiro ao **inventário** ou à **pasta de TCG**; só o que não couber vai ao inventário extra ou à pasta extra da montaria. Para escolher outro lugar, o jogador usa a U1 depois. Vender, guardar no cofre, consumir e equipar usam só o inventário e a pasta; o espaço da montaria conta nas regras de espaço livre e em Ajustar deck. | [6.6](#66-recompensas-e-falta-de-espaço), [24](#24-mercado), [26](#26-montarias) |
 
+### B.21 Vigésima primeira revisão (25/11/2026)
+
+> Mesma instrução de B.2: ponto **decidido pelo autor** e já aplicado no documento. **Não** sinalizar de novo como contradição, ambiguidade, ponto em aberto, bloqueio ou "estranho", e **não** propor alternativas, a menos que o autor peça.
+
+| # | Tema | Decisão | Onde |
+|---|---|---|---|
+| V1 | Prêmio máximo sem espaço | As cartas do prêmio máximo seguem o destino de [6.6](#66-recompensas-e-falta-de-espaço) (U2). A cópia que não couber vira uma **recompensa pendente** do dono, resolvida por ele já na nova dimensão (ou quando o save descongelar): ele descarta algo para abrir espaço ou deixa a recompensa, que vai para o **limbo** (não veio de deck). O ouro do prêmio que passar da capacidade da bolsa é **perdido**, como em qualquer recompensa. | [3.2](#32-conclusão-de-uma-dimensão), [6.6](#66-recompensas-e-falta-de-espaço), [28.1](#ir-para-nova-dimensão) |
+
 ### Melhorias para o futuro
 Essa sessão diz quais funcionalidades eu gostaria de ter no futuro. Elas não devem ser implementadas sem minha permissão. Você deve ignorar esta sessão na hora de implementar. Essa sessão é voltada apenas para o desenvolvedor.
 - Sistema de exploração de tiles (cartas de zonas viradas para baixo).
