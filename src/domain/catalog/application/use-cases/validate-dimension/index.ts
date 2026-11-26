@@ -1,6 +1,7 @@
 import { type Either, left, right } from '@/core/error/either'
 import { ContentStore } from '@/domain/catalog/application/repositories/content-store'
 import { CollectionNotFoundError } from '@/domain/catalog/application/use-cases/_errors/collection-not-found-error'
+import { loadAllCards } from '@/domain/catalog/application/use-cases/_shared/all-cards'
 import { checkDimensionComposition } from '@/domain/catalog/enterprise/dimension-composition'
 import type {
   TCard,
@@ -38,7 +39,20 @@ export class ValidateDimensionUseCase {
       if (card.type === 'dimension') dimension = card
     }
 
-    const problems = checkDimensionComposition({ dimension, zones, cards })
+    const referenceCards = dimension?.completion
+      ? (await loadAllCards(this.contentStore))
+          .filter(
+            ({ card, status }) =>
+              card.collectionId !== collectionId && status === 'published'
+          )
+          .map(({ card }) => card)
+      : []
+    const problems = checkDimensionComposition({
+      dimension,
+      zones,
+      cards,
+      referenceCards,
+    })
 
     return right({ valid: problems.length === 0, problems })
   }

@@ -52,6 +52,7 @@ import {
 import {
   BLACKSMITH_LIMITS,
   MOUNT_LIMITS,
+  COMPLETION_PEAK_LIMITS,
   COMBAT_NUMERIC_LIMITS,
   GAME_CONFIG_DEFAULTS,
   KNOCKOUT_NUMERIC_LIMITS,
@@ -110,6 +111,7 @@ const optionalNumericConfigLimits = {
   ...MARKET_LIMITS,
   ...BLACKSMITH_LIMITS,
   ...MOUNT_LIMITS,
+  ...COMPLETION_PEAK_LIMITS,
 }
 type TOptionalNumericConfigKey = keyof typeof optionalNumericConfigLimits
 type TLegacyConfigKey = Exclude<

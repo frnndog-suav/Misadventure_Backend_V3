@@ -300,6 +300,7 @@ const cardSchemas = {
     flavorText,
     rarity: z.enum(RARITIES),
     itemCategory: z.enum(ITEM_CATEGORIES),
+    completionItem: z.boolean().default(false),
     tags: z.array(text),
     effects: z.array(effectSchema),
     toolKind: text.nullable(),
@@ -350,6 +351,22 @@ const cardSchemas = {
     flavorText,
     releaseOrder: z.number(),
     arrivalZoneTitle: text.nullable(),
+    completion: z
+      .strictObject({
+        zoneTitle: text,
+        requirement: z.array(
+          z.strictObject({ cardId: text, count: z.number() })
+        ),
+        grandPrize: z.strictObject({
+          cards: z.array(z.strictObject({ cardId: text, copies: z.number() })),
+          gold: z.number(),
+        }),
+        finalBoss: z
+          .strictObject({ title: text, flavorText, ...combatFields })
+          .nullable(),
+      })
+      .nullable()
+      .default(null),
     effects: z.array(zoneEffectSchema),
     rewardDecks: z.array(zoneDeck),
     eventDecks: z.array(zoneDeck).optional(),

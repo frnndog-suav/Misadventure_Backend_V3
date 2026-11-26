@@ -9,6 +9,7 @@ export type TContentReference =
   | 'marketStock'
   | 'blacksmith'
   | 'stable'
+  | 'dimensionCompletion'
 
 const MESSAGES: Record<TContentReference, string> = {
   quest: 'Esta carta é referenciada por uma missão ou por um deck de missões.',
@@ -19,6 +20,7 @@ const MESSAGES: Record<TContentReference, string> = {
     'Esta carta está no deck de recompensas de uma Carta de Dimensão.',
   marketStock: 'Esta carta está no estoque do mercado de uma zona.',
   stable: 'Esta montaria está no Estábulo de uma zona.',
+  dimensionCompletion: 'Esta carta é exigida para concluir uma dimensão.',
   blacksmith:
     'Esta carta é usada como material, receita ou encantamento de outra carta.',
 }

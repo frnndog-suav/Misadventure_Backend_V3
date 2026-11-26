@@ -353,6 +353,7 @@ export type TEquipmentCard = Readonly<{
 }>
 
 export type TItemCard = Readonly<{
+  completionItem?: boolean
   type: 'item'
   id: string
   collectionId: string
@@ -505,7 +506,26 @@ export type TRewardDeck = Readonly<{
 }>
 
 /** README 3.2, mínima (D-39): as zonas da dimensão são as da sua coleção. */
+export type TFinalBoss = Readonly<{
+  title: string
+  flavorText: string | null
+  enemies: readonly TEnemy[]
+  noEscape: boolean
+  escapeThreshold?: number | null
+}>
+
+export type TDimensionCompletion = Readonly<{
+  zoneTitle: string
+  requirement: readonly { cardId: string; count: number }[]
+  grandPrize: Readonly<{
+    cards: readonly { cardId: string; copies: number }[]
+    gold: number
+  }>
+  finalBoss: TFinalBoss | null
+}>
+
 export type TDimensionCard = Readonly<{
+  completion?: TDimensionCompletion | null
   type: 'dimension'
   id: string
   collectionId: string

@@ -200,6 +200,19 @@ export const BLACKSMITH_LIMITS = {
 >
 
 /** REQ-156 (CONTRATO FEAT-18): preço base por raridade e espaços da montaria. */
+export const COMPLETION_PEAK_DEFAULTS = {
+  dimensionCompletionPeakGain: 25,
+  bossPeakGain: 15,
+} as const
+
+export const COMPLETION_PEAK_LIMITS = {
+  dimensionCompletionPeakGain: { min: 0, max: 1000 },
+  bossPeakGain: { min: 0, max: 1000 },
+} satisfies Record<
+  keyof typeof COMPLETION_PEAK_DEFAULTS,
+  { min: number; max: number }
+>
+
 export const MOUNT_DEFAULTS = {
   mountPriceCommon: 80,
   mountPriceUncommon: 150,
@@ -225,7 +238,8 @@ export interface TGameConfigValues extends Record<
   | keyof typeof QUEST_DEFAULTS
   | keyof typeof MARKET_DEFAULTS
   | keyof typeof BLACKSMITH_DEFAULTS
-  | keyof typeof MOUNT_DEFAULTS,
+  | keyof typeof MOUNT_DEFAULTS
+  | keyof typeof COMPLETION_PEAK_DEFAULTS,
   number
 > {
   enemyAbilityPriorities: TEnemyAbilityPriorities
@@ -284,6 +298,7 @@ export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
   ...MARKET_DEFAULTS,
   ...BLACKSMITH_DEFAULTS,
   ...MOUNT_DEFAULTS,
+  ...COMPLETION_PEAK_DEFAULTS,
   ...COMBAT_NUMERIC_DEFAULTS,
   enemyAbilityPriorities: {
     aggressive: ['highestPower'],
@@ -377,6 +392,7 @@ export const GAME_CONFIG_LIMITS: Readonly<
   ...MARKET_LIMITS,
   ...BLACKSMITH_LIMITS,
   ...MOUNT_LIMITS,
+  ...COMPLETION_PEAK_LIMITS,
   recoverVigorPercent: { min: 0, max: 100 },
   recoverHandSize: { min: 0, max: 200 },
   inventoryCapacity: { min: 0, max: 100 },

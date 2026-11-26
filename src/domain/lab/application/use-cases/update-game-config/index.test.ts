@@ -18,6 +18,36 @@ describe('UpdateGameConfigUseCase', () => {
     sut = new UpdateGameConfigUseCase(repository, new InMemoryCardCatalog())
   })
 
+  it('REQ-165: expõe os padrões e grava os limites de Pico', async () => {
+    const getConfig = new GetGameConfigUseCase(repository)
+    expect((await getConfig.execute()).value.config.values).toMatchObject({
+      dimensionCompletionPeakGain: 25,
+      bossPeakGain: 15,
+    })
+
+    const patch = { dimensionCompletionPeakGain: 0, bossPeakGain: 1000 }
+    expect((await sut.execute({ patch })).isRight()).toBe(true)
+    expect((await getConfig.execute()).value.config.values).toMatchObject(patch)
+  })
+
+  it('REQ-165: um valor de Pico inválido invalida o PATCH inteiro', async () => {
+    const getConfig = new GetGameConfigUseCase(repository)
+    const before = (await getConfig.execute()).value.config.values
+
+    for (const bossPeakGain of [-1, 1001, 1.5]) {
+      const result = await sut.execute({
+        patch: { dimensionCompletionPeakGain: 50, bossPeakGain },
+      })
+      expect(result.isLeft()).toBe(true)
+      if (result.isLeft()) {
+        expect(result.value.details.fields).toEqual([
+          expect.objectContaining({ field: 'bossPeakGain' }),
+        ])
+      }
+      expect((await getConfig.execute()).value.config.values).toEqual(before)
+    }
+  })
+
   it('REQ-117/D-109: grava ajustes de combate e prioridades por perfil', async () => {
     const patch = {
       maxCombatCycles: 100,

@@ -40,6 +40,10 @@ import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game
  * frontend: vira o relatório de REQ-11 no infra (que acrescenta o arquivo).
  */
 export type TCatalogIssueReason =
+  | 'unknownCompletionZone'
+  | 'completionItemRequired'
+  | 'invalidGrandPrizeCard'
+  | 'invalidFinalBossEnemy'
   | 'duplicateId'
   | 'unknownCollection'
   | 'invalidIdFormat'
@@ -279,6 +283,7 @@ export function checkCatalogIntegrity({
         }
         releaseOrders.add(card.releaseOrder)
         checkZoneDecks(card.rewardDecks, 'rewardDecks', cardsById, report)
+        checkDimensionCompletion(card, cardsById, report)
         checkZoneDecks(card.eventDecks ?? [], 'eventDecks', cardsById, report)
         checkEffects(card, report)
         break
@@ -713,6 +718,71 @@ export function isEventDeckCard(card: TCard): boolean {
     card.type === 'combatEvent' ||
     (card.type === 'randomEvent' && card.escapeThreshold !== undefined)
   )
+}
+
+export function checkDimensionCompletion(
+  card: TDimensionCard,
+  cardsById: ReadonlyMap<string, TCard>,
+  report: TReport
+): void {
+  const completion = card.completion
+  if (!completion) return
+
+  const { zoneTitle, requirement, grandPrize, finalBoss } = completion
+  if (
+    ![...cardsById.values()].some(
+      (zone) =>
+        zone.type === 'zone' &&
+        zone.collectionId === card.collectionId &&
+        zone.title === zoneTitle
+    )
+  ) {
+    report('completion.zoneTitle', 'unknownCompletionZone')
+  }
+
+  if (requirement.length === 0) report('completion.requirement', 'empty')
+  const seen = new Set<string>()
+  requirement.forEach(({ cardId, count }, index) => {
+    const path = `completion.requirement.${index}`
+    const item = cardsById.get(cardId)
+    if (item?.type !== 'item' || !item.completionItem) {
+      report(`${path}.cardId`, 'completionItemRequired')
+    }
+    if (seen.has(cardId)) report(`${path}.cardId`, 'duplicateValue')
+    seen.add(cardId)
+    if (!isIntegerBetween(count, 1, Infinity))
+      report(`${path}.count`, 'outOfRange')
+  })
+
+  grandPrize.cards.forEach(({ cardId, copies }, index) => {
+    const path = `completion.grandPrize.cards.${index}`
+    const prize = cardsById.get(cardId)
+    if (
+      prize?.type !== 'attribute' &&
+      prize?.type !== 'equipment' &&
+      prize?.type !== 'mount' &&
+      !(prize?.type === 'item' && !prize.completionItem)
+    ) {
+      report(`${path}.cardId`, 'invalidGrandPrizeCard')
+    }
+    if (!isIntegerBetween(copies, 1, Infinity))
+      report(`${path}.copies`, 'outOfRange')
+  })
+  if (!isIntegerBetween(grandPrize.gold, 0, Infinity)) {
+    report('completion.grandPrize.gold', 'outOfRange')
+  }
+
+  if (finalBoss === null) return
+  if (finalBoss.title.trim() === '')
+    report('completion.finalBoss.title', 'empty')
+  const outcome = { text: '', steps: [] }
+  for (const field of combatExecutionFields({
+    ...finalBoss,
+    goodOutcome: outcome,
+    badOutcome: outcome,
+  })) {
+    report(`completion.finalBoss.${field}`, 'invalidFinalBossEnemy')
+  }
 }
 
 export function isExecutableCombatEvent(

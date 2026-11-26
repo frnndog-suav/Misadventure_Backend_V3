@@ -12,6 +12,12 @@ import type {
  */
 
 const CATALOG_MESSAGES: Record<TCatalogIssueReason, string> = {
+  unknownCompletionZone: 'O título precisa identificar uma zona da coleção.',
+  completionItemRequired: 'A carta precisa ser um item de conclusão.',
+  invalidGrandPrizeCard:
+    'O prêmio aceita atributo, equipamento, item que não seja de conclusão ou montaria.',
+  invalidFinalBossEnemy:
+    'O campo não é válido para um inimigo jogável do chefe final.',
   duplicateId: 'Id repetido.',
   unknownCollection: 'Coleção inexistente.',
   invalidIdFormat:
@@ -176,6 +182,14 @@ export function contentIssueMessage(issue: TContentIssue): string {
       return issue.path === 'cards'
         ? 'Informe a lista de cartas.'
         : 'Formato inválido.'
+    case 'duplicateValue':
+      return /^completion\.requirement\.\d+\.cardId$/.test(issue.path)
+        ? 'O mesmo item de conclusão só pode aparecer uma vez no requisito.'
+        : CATALOG_MESSAGES[reason]
+    case 'empty':
+      return issue.path === 'completion.requirement'
+        ? 'A conclusão precisa exigir pelo menos um item de conclusão.'
+        : CATALOG_MESSAGES[reason]
     case 'unknownCollection':
     case 'duplicateTitle':
     case 'outOfRange':
@@ -185,11 +199,9 @@ export function contentIssueMessage(issue: TContentIssue): string {
     case 'basicAttributeCount':
     case 'enhancedAttributeCount':
     case 'synergyAttributeCount':
-    case 'duplicateValue':
     case 'effectsNotAllowed':
     case 'effectsRequired':
     case 'onlyForWeapons':
-    case 'empty':
     case 'arrowLayoutRequired':
     case 'arrowLayoutNotAllowed':
     case 'tooManyDimensions':
@@ -250,6 +262,10 @@ export function contentIssueMessage(issue: TContentIssue): string {
     case 'blacksmithMismatch':
     case 'duplicateEnchantment':
     case 'enemyOnlyAbility':
+    case 'unknownCompletionZone':
+    case 'completionItemRequired':
+    case 'invalidGrandPrizeCard':
+    case 'invalidFinalBossEnemy':
       return CATALOG_MESSAGES[reason]
     default: {
       const _exhaustive: never = reason

@@ -1,4 +1,7 @@
-import { checkQuestReferences } from '@/domain/catalog/enterprise/catalog-integrity'
+import {
+  checkDimensionCompletion,
+  checkQuestReferences,
+} from '@/domain/catalog/enterprise/catalog-integrity'
 import type {
   TCard,
   TDimensionCard,
@@ -11,6 +14,7 @@ export type TDimensionCompositionInput = Readonly<{
   /** Só as zonas publicadas da coleção. */
   zones: readonly TZoneCard[]
   cards?: readonly TCard[]
+  referenceCards?: readonly TCard[]
 }>
 
 /**
@@ -24,6 +28,7 @@ export function checkDimensionComposition({
   dimension,
   zones,
   cards = [],
+  referenceCards = [],
 }: TDimensionCompositionInput): string[] {
   const problems: string[] = []
 
@@ -60,6 +65,13 @@ export function checkDimensionComposition({
   }
 
   const cardsById = new Map([...cards, ...zones].map((card) => [card.id, card]))
+  if (dimension?.completion) {
+    const completionCards = new Map(cardsById)
+    for (const card of referenceCards) completionCards.set(card.id, card)
+    checkDimensionCompletion(dimension, completionCards, (field) => {
+      problems.push(`A conclusão da dimensão tem um problema em ${field}.`)
+    })
+  }
   const questIds = new Set<string>()
   for (const zone of zones) {
     checkQuestReferences(zone, cardsById, (field) => {

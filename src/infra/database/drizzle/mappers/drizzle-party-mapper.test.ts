@@ -141,6 +141,24 @@ describe('DrizzlePartyMapper', () => {
     })
   })
 
+  it('REQ-165: restaura os padrões de Pico em um save legado', () => {
+    const row = DrizzlePartyMapper.toDrizzle(usedRngParty())
+    const config: Record<string, unknown> = { ...row.state.config }
+    delete config.dimensionCompletionPeakGain
+    delete config.bossPeakGain
+
+    const restored = DrizzlePartyMapper.toDomain({
+      ...row,
+      state: { ...row.state, config } as typeof row.state,
+    })
+
+    expect(restored.config).toMatchObject({
+      dimensionCompletionPeakGain: 25,
+      bossPeakGain: 15,
+      initialGold: 40,
+    })
+  })
+
   it('REQ-123: preserva combate ativo, janela, avanço de habilidades e RNG no save', () => {
     const card = makeCombatEventCard({
       goodOutcome: { text: 'Vitória.', steps: [] },

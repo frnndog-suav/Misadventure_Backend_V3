@@ -56,6 +56,15 @@ export class DeleteCardUseCase {
     // REQ-82: citada em `rewardDecks` de alguma Carta de Dimensão.
     const allCards = await loadAllCards(this.contentStore)
     if (
+      allCards.some(
+        ({ card }) =>
+          card.type === 'dimension' &&
+          card.completion?.requirement.some((entry) => entry.cardId === cardId)
+      )
+    ) {
+      return left(new ContentReferencedError('dimensionCompletion'))
+    }
+    if (
       isCitedInRewardDeck(
         allCards.map(({ card }) => card),
         new Set([cardId])

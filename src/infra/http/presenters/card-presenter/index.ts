@@ -10,6 +10,10 @@ export class CardPresenter {
   static toHTTP(card: TCard): TCardHttp {
     if (card.type === 'zone')
       return { ...card, questDeck: card.questDeck ?? [] }
+    if (card.type === 'item')
+      return { ...card, completionItem: card.completionItem ?? false }
+    if (card.type === 'dimension')
+      return { ...card, completion: card.completion ?? null }
     return card
   }
 }
