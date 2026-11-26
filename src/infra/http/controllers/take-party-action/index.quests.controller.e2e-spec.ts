@@ -1,7 +1,12 @@
 import { eq } from 'drizzle-orm'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { SeededRng } from '@/core/rng/seeded-rng'
+import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
+import { TakePartyActionUseCase } from '@/domain/campaign/application/use-cases/take-party-action'
+import { maxHealthOf } from '@/domain/campaign/enterprise/entities/party-member'
 import { DRIZZLE, type Database } from '@/infra/database/database.tokens'
+import { DrizzlePartyMapper } from '@/infra/database/drizzle/mappers/drizzle-party-mapper'
 import { parties } from '@/infra/database/drizzle/schema'
 import prepare from '../../../../../test/prepare-feat-15.cjs'
 import { createContentApp } from '../../../../../test/content-app'
@@ -82,6 +87,172 @@ describe('Missões e progressão de classes solo (HTTP e save, T-60)', () => {
     await request(server()).post(`/parties/${id}/session/end`).expect(200)
     await request(server()).post(`/parties/${id}/session`).expect(200)
   }
+
+  async function helperTurn(id: string, actionPoints: number) {
+    const source = await ctx.app.get(PartiesRepository).findById(id)
+    if (!source) throw new Error('Save ausente')
+    const row = DrizzlePartyMapper.toDrizzle(source)
+    const [actor] = row.state.members
+    const hostId = '5148382d-fc21-4a82-9e77-046c568aa72a'
+    const helper = {
+      ...actor,
+      kind: 'aiHelper' as const,
+      player: { ...actor.player },
+    }
+    row.state.members = [helper, { ...actor, id: hostId, kind: 'human' }]
+    row.state.hostMemberId = hostId
+    row.state.turnOrder = [actor.id, hostId]
+    row.state.turn.actionPoints = actionPoints
+    return { source, row, helper, hostId }
+  }
+
+  it.each(['avoidKnockout', 'quests'] as const)(
+    'REQ-182/D-156: com um PA, segue a prioridade %s do save',
+    async (priority) => {
+      const id = await setup('mentor-aceite')
+      const before = await get(id).expect(200)
+      const mentorChoices = (
+        player(before.body).questChoices as { type: string; classId?: string }[]
+      ).filter(({ type }) => type === 'trainWithMentor')
+      expect(mentorChoices.length).toBeGreaterThan(1)
+      expect(mentorChoices).toContainEqual(
+        expect.objectContaining({ classId: 'mage' })
+      )
+      const {
+        source,
+        row,
+        helper: savedHelper,
+        hostId,
+      } = await helperTurn(id, 1)
+      savedHelper.player.health = 1
+      const priorities = source.config.aiPlayerPriorities
+      row.state.config.aiPlayerPriorities = [
+        priority,
+        ...priorities.filter((entry) => entry !== priority),
+      ]
+      const party = DrizzlePartyMapper.toDomain(row)
+      const rng = SeededRng.fromState(party.rngState)
+      const expectedMentor =
+        mentorChoices[rng.nextInt(0, mentorChoices.length - 1)]
+      const result = await ctx.app
+        .get(TakePartyActionUseCase)
+        .executeAiTurn(party)
+
+      expect(result.isRight()).toBe(true)
+      const helper = party.members.find(
+        ({ id }) => id.toString() === savedHelper.id
+      )
+      expect(party.turn.memberId.toString()).toBe(hostId)
+      if (priority === 'quests') {
+        expect(helper?.player).toMatchObject({
+          health: 1,
+          gold: savedHelper.player.gold - source.config.mentorBaseGoldCost,
+          openGenericQuests: [
+            { type: 'mentorQuest', classId: expectedMentor.classId },
+          ],
+        })
+        expect(party.rngState).toEqual(rng.state())
+      } else {
+        expect(helper?.player.health).toBeGreaterThan(1)
+        expect(helper?.player.gold).toBe(savedHelper.player.gold)
+        expect(helper?.player.openGenericQuests ?? []).toHaveLength(0)
+      }
+    }
+  )
+
+  it('REQ-182/D-156: sorteia a especialização da provação a partir do RNG salvo', async () => {
+    const id = await setup('provacao')
+    const before = await get(id).expect(200)
+    const choices = (
+      player(before.body).questChoices as {
+        type: string
+        classId: string
+        specializationId: string
+      }[]
+    ).filter(({ type }) => type === 'takeTrialQuest')
+    expect(choices.length).toBeGreaterThan(1)
+    const { row, helper, hostId } = await helperTurn(id, 1)
+    helper.player.openZoneQuests = []
+    helper.player.questOrder = []
+    helper.player.health = maxHealthOf(helper.player)
+    helper.player.vigor = helper.player.peak
+    const zone = row.state.dimension.map.zones.find(
+      ({ zoneId }) => zoneId === helper.player.zoneId
+    )
+    if (!zone) throw new Error('Zona ausente')
+    zone.questBoard = []
+
+    const party = DrizzlePartyMapper.toDomain(row)
+    const rng = SeededRng.fromState(party.rngState)
+    const { classId, specializationId } =
+      choices[rng.nextInt(0, choices.length - 1)]
+    const result = await ctx.app
+      .get(TakePartyActionUseCase)
+      .executeAiTurn(party)
+
+    expect(result.isRight()).toBe(true)
+    expect(party.members[0].player.openGenericQuests).toMatchObject([
+      { type: 'trialQuest', classId, specializationId },
+    ])
+    expect(party.rngState).toEqual(rng.state())
+    expect(party.turn.memberId.toString()).toBe(hostId)
+  })
+
+  it('REQ-182/D-156: ajusta a build para cumprir a trava da especialização concedida', async () => {
+    const id = await setup('concessoes')
+    const { row, helper, hostId } = await helperTurn(id, 2)
+    helper.player.health = maxHealthOf(helper.player)
+    helper.player.vigor = helper.player.peak
+    const zone = row.state.dimension.map.zones.find(
+      ({ zoneId }) => zoneId === helper.player.zoneId
+    )
+    if (!zone) throw new Error('Zona ausente')
+    zone.questBoard = []
+    row.state.config.aiPlayerPriorities = [
+      'quests',
+      'peak',
+      'avoidKnockout',
+      'dimensionCompletion',
+      'gold',
+    ]
+    const party = DrizzlePartyMapper.toDomain(row)
+    const result = await ctx.app
+      .get(TakePartyActionUseCase)
+      .executeAiTurn(party)
+
+    expect(result.isRight()).toBe(true)
+    expect(party.turn.memberId.toString()).toBe(hostId)
+    expect(party.members[0].player.specializations).toMatchObject([
+      { playerClass: 'warrior', specializationId: 'knight', deckLockMet: true },
+    ])
+    expect(party.members[0].player.playerClasses).toMatchObject([
+      { playerClass: 'warrior', deckLockMet: true },
+    ])
+  })
+
+  it('REQ-182/D-156: usa o último PA para chegar à zona de entrega de uma missão', async () => {
+    const id = await setup('quadro')
+    await act(id, { type: 'takeQuest', questCardId: B }).expect(200)
+    const { row, helper, hostId } = await helperTurn(id, 1)
+    helper.player.health = maxHealthOf(helper.player)
+    helper.player.vigor = helper.player.peak
+    expect(helper.player.zoneId).toBe(mine)
+    const origin = row.state.dimension.map.zones.find(
+      ({ zoneId }) => zoneId === mine
+    )
+    if (!origin) throw new Error('Zona de origem ausente')
+    origin.questBoard = []
+
+    const party = DrizzlePartyMapper.toDomain(row)
+    const result = await ctx.app.get(TakePartyActionUseCase).executeAiTurn(party)
+
+    expect(result.isRight()).toBe(true)
+    expect(party.turn.memberId.toString()).toBe(hostId)
+    expect(party.members[0].player.zoneId).toBe(harbor)
+    expect(party.members[0].player.openZoneQuests).toMatchObject([
+      { questCardId: B },
+    ])
+  })
 
   it('REQ-131/REQ-132: aceita do quadro, recusa a zona errada e entrega com recompensa pendente', async () => {
     const id = await setup('quadro')

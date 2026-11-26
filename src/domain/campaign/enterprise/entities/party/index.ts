@@ -732,6 +732,16 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return this.describeCombat(this.eventCatalog)
   }
 
+  combatEffectChoices(cards: ReadonlyMap<string, TCard>) {
+    const combat = this.props.combat
+    if (!combat) return []
+    return this.combatEffectOptions(
+      combat,
+      this.props.members[this.actorIndex()].player,
+      cards
+    )
+  }
+
   get questAttempt() {
     return this.props.questAttempt
   }
@@ -1566,10 +1576,35 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     ids: IdGenerator,
     dimension: TDimensionCard | null = null,
     combatEnabled = true,
-    classes: readonly TClassDefinition[] = []
+    classes: readonly TClassDefinition[] = [],
+    drawGenericQuest = false
   ): Either<TQuestRefusal, undefined> {
-    if (action.type === 'takeTrialQuest' || action.type === 'trainWithMentor')
+    if (action.type === 'takeTrialQuest' || action.type === 'trainWithMentor') {
+      if (drawGenericQuest) {
+        const actor = this.props.members[this.actorIndex()]
+        const options = this.questState(
+          actor,
+          cards,
+          classes
+        ).questChoices.filter(
+          (
+            choice
+          ): choice is Extract<
+            TGenericQuestAction,
+            { type: typeof action.type }
+          > &
+            TZoneQuestChoice => choice.type === action.type
+        )
+        if (options.length > 1) {
+          const rng = SeededRng.fromState(this.props.rngState)
+          const chosen = options[rng.nextInt(0, options.length - 1)]
+          const result = this.takeGenericQuest(chosen, cards, at, ids, classes)
+          if (result.isRight()) this.props.rngState = rng.state()
+          return result
+        }
+      }
       return this.takeGenericQuest(action, cards, at, ids, classes)
+    }
     const index = this.actorIndex()
     const { player } = this.props.members[index]
     const generic = (player.openGenericQuests ?? []).find(

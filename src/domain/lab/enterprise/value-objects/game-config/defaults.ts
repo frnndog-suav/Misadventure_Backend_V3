@@ -243,6 +243,7 @@ export interface TGameConfigValues extends Record<
   number
 > {
   enemyAbilityPriorities: TEnemyAbilityPriorities
+  aiPlayerPriorities: readonly TAiPlayerPriority[]
   escapeVigorPercent: number
   reserveDeck: readonly Readonly<TReserveDeckEntry>[]
   minPlayers: number // README 1.3
@@ -285,12 +286,32 @@ export type TGameConfigKey = keyof TGameConfigValues
 
 export type TNumericGameConfigKey = Exclude<
   TGameConfigKey,
-  'reserveDeck' | 'enemyAbilityPriorities'
+  'reserveDeck' | 'enemyAbilityPriorities' | 'aiPlayerPriorities'
 >
 
 export interface TGameConfigLimit {
   min: number
   max: number
+}
+
+export const AI_PLAYER_PRIORITIES = Object.freeze([
+  'avoidKnockout',
+  'dimensionCompletion',
+  'quests',
+  'peak',
+  'gold',
+] as const)
+
+export type TAiPlayerPriority = (typeof AI_PLAYER_PRIORITIES)[number]
+
+export function isAiPlayerPriorities(
+  value: unknown
+): value is readonly TAiPlayerPriority[] {
+  return (
+    Array.isArray(value) &&
+    value.length === AI_PLAYER_PRIORITIES.length &&
+    AI_PLAYER_PRIORITIES.every((priority) => value.includes(priority))
+  )
 }
 
 export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
@@ -300,6 +321,7 @@ export const GAME_CONFIG_DEFAULTS: Readonly<TGameConfigValues> = Object.freeze({
   ...MOUNT_DEFAULTS,
   ...COMPLETION_PEAK_DEFAULTS,
   ...COMBAT_NUMERIC_DEFAULTS,
+  aiPlayerPriorities: AI_PLAYER_PRIORITIES,
   enemyAbilityPriorities: {
     aggressive: ['highestPower'],
     defensive: ['selfBuffOrContinuous', 'highestPower'],

@@ -10,8 +10,14 @@ interface TGameConfigRow {
   values: unknown
 }
 
+const STRUCTURED_KEYS = [
+  'reserveDeck',
+  'enemyAbilityPriorities',
+  'aiPlayerPriorities',
+] as const
+
 const KEYS = Object.keys(GAME_CONFIG_DEFAULTS).filter(
-  (key) => key !== 'reserveDeck' && key !== 'enemyAbilityPriorities'
+  (key) => !STRUCTURED_KEYS.some((structuredKey) => structuredKey === key)
 ) as TNumericGameConfigKey[]
 
 export class DrizzleGameConfigMapper {
@@ -36,7 +42,7 @@ export class DrizzleGameConfigMapper {
       }
     }
 
-    for (const key of ['reserveDeck', 'enemyAbilityPriorities'] as const) {
+    for (const key of STRUCTURED_KEYS) {
       const result = GameConfig.withDefaults().applyPatch({ [key]: saved[key] })
       if (result.isRight())
         Object.assign(values, { [key]: result.value.values[key] })
@@ -53,7 +59,7 @@ export class DrizzleGameConfigMapper {
         adjusted[key] = current[key]
       }
     }
-    for (const key of ['reserveDeck', 'enemyAbilityPriorities'] as const) {
+    for (const key of STRUCTURED_KEYS) {
       if (
         JSON.stringify(current[key]) !==
         JSON.stringify(GAME_CONFIG_DEFAULTS[key])

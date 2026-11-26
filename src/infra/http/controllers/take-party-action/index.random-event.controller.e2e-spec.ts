@@ -3,7 +3,9 @@ import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { TakePartyActionUseCase } from '@/domain/campaign/application/use-cases/take-party-action'
 import { DRIZZLE, type Database } from '@/infra/database/database.tokens'
+import { DrizzlePartyMapper } from '@/infra/database/drizzle/mappers/drizzle-party-mapper'
 import { parties } from '@/infra/database/drizzle/schema'
 import { createContentApp } from '../../../../../test/content-app'
 import {
@@ -164,6 +166,33 @@ describe('Eventos aleatórios (HTTP e save)', () => {
       requirementId: 'discard',
     }
   }
+
+  it('REQ-182/D-156: paga o descarte aleatório legal e conclui o encontro com sucesso', async () => {
+    const id = await setup(5)
+    await reveal(id)
+    const row = DrizzlePartyMapper.toDrizzle(
+      DrizzlePartyMapper.toDomain(await stored(id))
+    )
+    const [actor] = row.state.members
+    const hostId = '90f93fed-8cf6-47e0-aec7-0a69fbe54d69'
+    row.state.members = [
+      { ...actor, kind: 'aiHelper' },
+      { ...actor, id: hostId, kind: 'human' },
+    ]
+    row.state.hostMemberId = hostId
+    row.state.turnOrder = [actor.id, hostId]
+    const party = DrizzlePartyMapper.toDomain(row)
+
+    const result = await ctx.app.get(TakePartyActionUseCase).executeAiTurn(party)
+
+    expect(result.isRight()).toBe(true)
+    expect(party.members[0].player.lastRandomEvent).toMatchObject({
+      cardId: traveler,
+      resolution: 'success',
+    })
+    expect(party.pendingRewards).toHaveLength(0)
+    expect(party.turn.memberId.toString()).toBe(hostId)
+  })
 
   it('REQ-111/REQ-116: lê save v7, estabiliza IDs de cópia e inicializa o deck sem avançar o RNG', async () => {
     const id = await setup(5)

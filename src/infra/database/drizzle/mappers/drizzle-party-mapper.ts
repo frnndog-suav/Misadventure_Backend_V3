@@ -54,7 +54,9 @@ import {
   MOUNT_LIMITS,
   COMPLETION_PEAK_LIMITS,
   COMBAT_NUMERIC_LIMITS,
+  AI_PLAYER_PRIORITIES,
   GAME_CONFIG_DEFAULTS,
+  isAiPlayerPriorities,
   KNOCKOUT_NUMERIC_LIMITS,
   MARKET_LIMITS,
   QUEST_LIMITS,
@@ -124,6 +126,7 @@ const configKeys = Object.keys(GAME_CONFIG_DEFAULTS).filter(
     key !== 'reserveDeck' &&
     key !== 'escapeVigorPercent' &&
     key !== 'enemyAbilityPriorities' &&
+    key !== 'aiPlayerPriorities' &&
     !Object.hasOwn(optionalNumericConfigLimits, key)
 ) as TLegacyConfigKey[]
 
@@ -134,6 +137,11 @@ const configSchema = z.strictObject(
 )
 
 const currentConfigSchema = configSchema.extend({
+  aiPlayerPriorities: z
+    .array(z.enum(AI_PLAYER_PRIORITIES))
+    .refine(isAiPlayerPriorities)
+    .readonly()
+    .optional(),
   ...(Object.fromEntries(
     Object.entries(optionalNumericConfigLimits).map(([key, { min, max }]) => [
       key,

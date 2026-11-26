@@ -2,7 +2,18 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
 import request from 'supertest'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
+import { TakePartyActionUseCase } from '@/domain/campaign/application/use-cases/take-party-action'
+import { maxHealthOf } from '@/domain/campaign/enterprise/entities/party-member'
+import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import { DRIZZLE, type Database } from '@/infra/database/database.tokens'
 import { DrizzlePartyMapper } from '@/infra/database/drizzle/mappers/drizzle-party-mapper'
 import { parties } from '@/infra/database/drizzle/schema'
@@ -17,6 +28,7 @@ const wolves = 'fixture.howling-wolves'
 const traveler = 'fixture.wounded-traveler'
 const ore = 'fixture.iron-ore'
 const fish = 'fixture.silver-fish'
+const potion = 'fixture.healing-potion'
 
 describe('Combate solo (HTTP e save)', () => {
   let ctx: Awaited<ReturnType<typeof createContentApp>>
@@ -123,6 +135,144 @@ describe('Combate solo (HTTP e save)', () => {
       .where(eq(parties.id, id))
     return id
   }
+
+  async function helperTurn(id: string, healingPotion = false) {
+    const row = DrizzlePartyMapper.toDrizzle(
+      DrizzlePartyMapper.toDomain(await stored(id))
+    )
+    const [actor] = row.state.members
+    const hostId = '31a74bff-27bd-4ea4-a294-3e0045497f4c'
+    // Preserva o ID do combatente em todas as referências do encontro ativo.
+    row.state.members = [
+      {
+        ...actor,
+        kind: 'aiHelper',
+        player: {
+          ...actor.player,
+          health: healingPotion ? 10 : maxHealthOf(actor.player),
+          vigor: actor.player.peak,
+          inventory: healingPotion ? [{ cardId: potion, quantity: 1 }] : [],
+        },
+      },
+      { ...actor, id: hostId, kind: 'human' },
+    ]
+    row.state.hostMemberId = hostId
+    row.state.turnOrder = [actor.id, hostId]
+    return { party: DrizzlePartyMapper.toDomain(row), hostId }
+  }
+
+  it('REQ-182/D-156: inicia um encontro disponível antes de passar a vez', async () => {
+    const id = await setup()
+    const before = await get(id).expect(200)
+    expect(before.body.members[0].player.availableActions).toContain(
+      'startEvent'
+    )
+    const { party, hostId } = await helperTurn(id)
+    const result = await ctx.app
+      .get(TakePartyActionUseCase)
+      .executeAiTurn(party)
+
+    expect(result.isRight()).toBe(true)
+    expect(party.lastCombatResult?.resolution).toBe('victory')
+    expect(party.pendingRewards).toHaveLength(0)
+    expect(party.turn.memberId.toString()).toBe(hostId)
+  })
+
+  it('REQ-182/D-156: resolve o combate e a entrega pendente antes de passar a vez', async () => {
+    const id = await setup()
+    const started = await act(id, { type: 'startEvent' }).expect(200)
+    await act(id, {
+      type: 'revealEvent',
+      encounterId: started.body.randomEventEncounter.id,
+    }).expect(200)
+
+    const { party, hostId } = await helperTurn(id)
+    expect(party.combatActions()).toContain('combatAttack')
+
+    const actions = ctx.app.get(TakePartyActionUseCase)
+    const result = await actions.executeAiTurn(party)
+
+    expect(result.isRight()).toBe(true)
+    expect(party.combat).toBeNull()
+    expect(party.lastCombatResult?.resolution).toBe('victory')
+    expect(party.pendingRewards).toHaveLength(0)
+    expect(party.turn.memberId.toString()).toBe(hostId)
+  })
+
+  it('REQ-182/D-156: usa uma poção de cura legal durante a preparação do combate', async () => {
+    const id = await setup()
+    const started = await act(id, { type: 'startEvent' }).expect(200)
+    await act(id, {
+      type: 'revealEvent',
+      encounterId: started.body.randomEventEncounter.id,
+    }).expect(200)
+    const { party, hostId } = await helperTurn(id, true)
+    const card = await ctx.app.get(CardCatalog).findCard(potion)
+    if (!card) throw new Error('Poção ausente')
+    expect(
+      party.describeCombat(new Map([[card.id, card]]))?.effects
+    ).toHaveLength(1)
+
+    const result = await ctx.app
+      .get(TakePartyActionUseCase)
+      .executeAiTurn(party)
+
+    expect(result.isRight()).toBe(true)
+    expect(party.lastCombatResult?.resolution).toBe('victory')
+    expect(party.turn.memberId.toString()).toBe(hostId)
+    expect(party.members[0].player.health).toBeGreaterThan(10)
+    expect(
+      party.members[0].player.inventory.some(({ cardId }) => cardId === potion)
+    ).toBe(false)
+  })
+
+  it('REQ-182/D-156: usa dano de efeito para evitar a reflexão do ataque básico', async () => {
+    const id = await setup()
+    const started = await act(id, { type: 'startEvent' }).expect(200)
+    await act(id, {
+      type: 'revealEvent',
+      encounterId: started.body.randomEventEncounter.id,
+    }).expect(200)
+    const { party, hostId } = await helperTurn(id, true)
+    const catalog = ctx.app.get(CardCatalog)
+    const findCard = catalog.findCard.bind(catalog)
+    const original = await findCard(potion)
+    if (original?.type !== 'item') throw new Error('Recurso ausente')
+    const offensive = {
+      ...original,
+      effects: original.effects.map((effect) => ({
+        ...effect,
+        activation: [{ kind: 'effectDamage' as const, amount: 1 }],
+      })),
+    }
+    expect(
+      party.describeCombat(new Map([[potion, offensive]]))?.effects[0]
+        ?.targetIds
+    ).toHaveLength(2)
+
+    const lookup = vi
+      .spyOn(catalog, 'findCard')
+      .mockImplementation((cardId) =>
+        cardId === potion ? Promise.resolve(offensive) : findCard(cardId)
+      )
+    try {
+      const result = await ctx.app
+        .get(TakePartyActionUseCase)
+        .executeAiTurn(party)
+
+      expect(result.isRight()).toBe(true)
+      expect(party.lastCombatResult?.resolution).toBe('victory')
+      expect(party.turn.memberId.toString()).toBe(hostId)
+      expect(party.members[0].player.health).toBe(10)
+      expect(
+        party.members[0].player.inventory.some(
+          ({ cardId }) => cardId === potion
+        )
+      ).toBe(false)
+    } finally {
+      lookup.mockRestore()
+    }
+  })
 
   it('REQ-123/REQ-127/REQ-129: preserva a escolha legada sem PA e persiste o respawn no POST', async () => {
     const id = await setup()

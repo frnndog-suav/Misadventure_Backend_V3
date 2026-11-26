@@ -3,6 +3,7 @@ import type { Clock } from '@/core/ports/clock'
 import type { IdGenerator } from '@/core/ports/id-generator'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
+import { aiTurnIntents } from '@/domain/campaign/enterprise/ai-turn'
 import { marketCandidatesOf } from '@/domain/campaign/enterprise/markets'
 import {
   findMarketBoosters,
@@ -10,10 +11,12 @@ import {
 } from '@/domain/campaign/application/market-catalog'
 import {
   parsePartyAction,
+  type TPartyAction,
   type TPrepareOperation,
   type TVaultOperation,
 } from '@/domain/campaign/enterprise/party-action'
 import { rewardSpaces } from '@/domain/campaign/enterprise/rewards'
+import { questBoard } from '@/domain/campaign/enterprise/zone-quests'
 import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import type {
   TAttributeCard,
@@ -95,6 +98,87 @@ export class TakePartyActionUseCase {
       return left(new PartySessionNotActiveError())
     if (!party.turn.memberId.equals(party.hostMemberId))
       return left(new ActionNotAllowedError('zoneActionUnavailable'))
+
+    const result = await this.applyAction(party, action)
+    if (result.isRight()) await save(party)
+    return result
+  }
+
+  /** Executa uma vez no agregado recebido. A persistência pertence ao chamador. */
+  async executeAiTurn(party: Party): Promise<TTakePartyActionUseCaseResponse> {
+    const { memberId, round } = party.turn
+    if (party.status !== 'inSession')
+      return left(new PartySessionNotActiveError())
+    if (
+      !party.members.some(
+        ({ id, kind }) => id.equals(memberId) && kind === 'aiHelper'
+      )
+    )
+      return left(new ActionNotAllowedError('zoneActionUnavailable'))
+
+    const maxChoices = 96
+    const classes = await this.cardCatalog.listClasses()
+    for (let choice = 0; choice < maxChoices; choice++) {
+      const { cards, zone, dimension } = await this.findEventCatalog(party)
+      const canComplete = party.canCompleteDimension(zone, dimension)
+      const board = questBoard(
+        party.dimension.map.zones.find(({ zoneId }) => zoneId === zone?.id),
+        party.config.questBoardSize
+      )
+      const player = party.members.find(({ id }) => id.equals(memberId))?.player
+      const optionCardIds = new Set([
+        ...board.filter((id): id is string => id !== null),
+        ...(player?.openZoneQuests?.length
+          ? party.dimension.map.zones.map(({ zoneId }) => zoneId)
+          : []),
+        ...[
+          ...(player?.build ?? []),
+          ...(player?.tcgFolder ?? []),
+          ...(player?.mount?.tcgFolder ?? []),
+        ].map(({ cardId }) => cardId),
+      ])
+      for (const card of await Promise.all(
+        [...optionCardIds]
+          .filter((id) => !cards.has(id))
+          .map((id) => this.cardCatalog.findCard(id))
+      )) {
+        if (card) cards.set(card.id, card)
+      }
+      let applied = false
+      const canStartEvent =
+        this.eventActionsEnabled &&
+        party.canStartEvent(zone, dimension, cards, this.combatEnabled)
+      for (const action of aiTurnIntents(
+        party,
+        cards,
+        canComplete,
+        classes,
+        canStartEvent
+      )) {
+        const result = await this.applyAction(party, action, classes)
+        if (result.isRight()) {
+          applied = true
+          break
+        }
+        if (result.value instanceof DimensionInvalidError) return result
+      }
+      if (!applied)
+        return left(new ActionNotAllowedError('zoneActionUnavailable'))
+      if (
+        party.status !== 'inSession' ||
+        party.turn.round !== round ||
+        !party.turn.memberId.equals(memberId)
+      )
+        return right({ party })
+    }
+    return this.applyAction(party, { type: 'endTurn' })
+  }
+
+  private async applyAction(
+    party: Party,
+    action: TPartyAction,
+    aiClasses?: readonly TClassDefinition[]
+  ): Promise<TTakePartyActionUseCaseResponse> {
     await this.provideMarketCandidates(party)
     const blocked =
       action.type === 'saveRespawnPoint' ? null : party.eventActionBlock(action)
@@ -139,7 +223,8 @@ export class TakePartyActionUseCase {
           this.ids,
           dimension,
           this.combatEnabled,
-          await this.cardCatalog.listClasses()
+          aiClasses ?? (await this.cardCatalog.listClasses()),
+          aiClasses !== undefined
         )
         if (result.isLeft())
           return left(new ActionNotAllowedError(result.value))
@@ -619,8 +704,6 @@ export class TakePartyActionUseCase {
         }
       }
     }
-    await save(party)
-
     return right({ party })
   }
 
@@ -1046,9 +1129,11 @@ export class TakePartyActionUseCase {
       member.id.equals(party.turn.memberId)
     )
     const cardIds = new Set(
-      [...(actor?.player.build ?? []), ...(actor?.player.tcgFolder ?? [])].map(
-        (entry) => entry.cardId
-      )
+      [
+        ...(actor?.player.build ?? []),
+        ...(actor?.player.tcgFolder ?? []),
+        ...(actor?.player.mount?.tcgFolder ?? []),
+      ].map((entry) => entry.cardId)
     )
     const cards: TAttributeCard[] = []
     for (const cardId of cardIds) {

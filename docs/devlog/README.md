@@ -125,6 +125,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 105 | FEAT-33 | [Validação integrada na T-99](105-FEAT-33-validada.md) | concluída |
 | 106 | FEAT-20 | [Planejamento e contraproposta](106-FEAT-20-planejamento.md) | acordo sincronizado |
 | 107 | T-88 | [Criação com ajudantes](107-T-88-criacao-com-ajudantes.md) | concluída |
+| 108 | T-89 | [Configuração e política da IA](108-T-89-configuracao-e-politica-da-ia.md) | em andamento |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

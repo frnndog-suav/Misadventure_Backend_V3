@@ -8,6 +8,7 @@ import {
 import {
   GAME_CONFIG_DEFAULTS,
   GAME_CONFIG_LIMITS,
+  isAiPlayerPriorities,
   type TGameConfigKey,
   type TEnemyAbilityPriorities,
   type TGameConfigValues,
@@ -33,6 +34,7 @@ export type TGameConfigIssue =
         | 'outOfRange'
         | 'minAboveMax'
         | 'sumMismatch'
+        | 'invalidPriorities'
     }
 
 /** Valores ajustáveis do Apêndice A em vigor (D-11). */
@@ -69,6 +71,14 @@ export class GameConfig extends ValueObject<TGameConfigValues> {
       }
       if (field === 'reserveDeck') {
         next.reserveDeck = validateReserveDeck(value, issues)
+        continue
+      }
+      if (field === 'aiPlayerPriorities') {
+        if (isAiPlayerPriorities(value)) {
+          next.aiPlayerPriorities = [...value]
+        } else {
+          issues.push({ field, reason: 'invalidPriorities' })
+        }
         continue
       }
       if (field === 'enemyAbilityPriorities') {
