@@ -1339,6 +1339,200 @@ function rewardState(party: ReturnType<typeof makeParty>) {
   }
 }
 
+describe('TakePartyActionUseCase — chefe final (T-83)', () => {
+  const shard = makeItemCard({ id: 'fixture.shard', completionItem: true })
+  const items = [{ cardId: shard.id, quantity: 2 }]
+  const enemy = makeEnemy({
+    count: 1,
+    enemyCategory: 'boss',
+    health: 1,
+    modifiers: {
+      ...combat.enemies[0].modifiers,
+      attack: 0,
+      accuracy: 0,
+      defense: 0,
+      evasion: 0,
+      celerity: 0,
+      reflection: 0,
+    },
+  })
+  const completion = {
+    zoneTitle: harbor.title,
+    requirement: [{ cardId: shard.id, count: 2 }],
+    grandPrize: { cards: [], gold: 0 },
+    finalBoss: {
+      title: 'Guardião',
+      flavorText: null,
+      enemies: [enemy],
+      noEscape: false,
+      escapeThreshold: 0,
+    },
+  }
+  const complete = { type: 'completeDimension' }
+
+  it.each([
+    { reason: 'noActionPoints', actionPoints: 0, rule: null, quantity: 0 },
+    { reason: 'noCompletion', actionPoints: 1, rule: null, quantity: 0 },
+    {
+      reason: 'notCompletionZone',
+      actionPoints: 1,
+      rule: { ...completion, zoneTitle: 'Outra zona' },
+      quantity: 0,
+    },
+    {
+      reason: 'completionRequirementNotMet',
+      actionPoints: 1,
+      rule: completion,
+      quantity: 1,
+    },
+  ])(
+    'REQ-167: recusa $reason sem salvar nem avançar o RNG',
+    async ({ reason, actionPoints, rule, quantity }) => {
+      const game = setup({
+        completion: rule,
+        actionPoints,
+        player: { completionItems: [{ cardId: shard.id, quantity }] },
+        otherMember:
+          reason === 'completionRequirementNotMet'
+            ? makePlayerState({
+                completionItems: [{ cardId: shard.id, quantity: 1 }],
+              })
+            : undefined,
+        additionalCards: [shard],
+      })
+      await game.refuse(complete, { reason })
+      expect(game.party().turn.actionPoints).toBe(actionPoints)
+      expect(game.party().combat).toBeNull()
+    }
+  )
+
+  it.each(['escapeSucceeded', 'cycleLimit', 'playerDown'] as const)(
+    'REQ-167/REQ-168: abre o chefe e preserva os itens em %s',
+    async (cause) => {
+      const noEscape = cause === 'cycleLimit'
+      const finalBoss = {
+        ...completion.finalBoss,
+        noEscape,
+        enemies: [
+          cause === 'playerDown'
+            ? {
+                ...enemy,
+                modifiers: { ...enemy.modifiers, attack: 100, accuracy: 100 },
+              }
+            : enemy,
+        ],
+      }
+      const game = setup({
+        completion: { ...completion, finalBoss },
+        actionPoints: 2,
+        player: {
+          completionItems: items,
+          health: 1,
+          vigor: 6,
+          modifiers: { ...makePlayerState().modifiers, evasion: 0 },
+        },
+        additionalCards: [shard],
+        rewardConfig: { ...GAME_CONFIG_DEFAULTS, maxCombatCycles: 1 },
+      })
+
+      const started = await game.accept(complete)
+      expect(started.turn.actionPoints).toBe(1)
+      expect(game.playerState().completionItems).toEqual(items)
+      expect(started.combat).toMatchObject({
+        finalBoss: true,
+        card: {
+          id: started.dimension.dimensionCardId,
+          title: finalBoss.title,
+          enemies: finalBoss.enemies,
+          noEscape,
+          goodOutcome: { text: '' },
+          badOutcome: { text: '' },
+        },
+      })
+      const battle = started.combat!
+      const turn = { combatId: battle.id, turnId: battle.turn.id }
+      if (noEscape) {
+        await game.refuse(
+          { type: 'escapeCombat', ...turn },
+          { reason: 'escapeForbidden' }
+        )
+      }
+      const finished = await game.accept({
+        type: cause === 'escapeSucceeded' ? 'escapeCombat' : 'endCombatTurn',
+        ...turn,
+      })
+      expect(finished.combat).toBeNull()
+      expect(finished.lastCombatResult).toMatchObject({
+        finalBoss: true,
+        resolution: cause === 'playerDown' ? 'defeat' : 'escaped',
+        cause,
+      })
+      expect(game.playerState().completionItems).toEqual(items)
+      expect(finished.eventDecks).toEqual([])
+    }
+  )
+
+  it('REQ-165/REQ-168: a vitória contra o chefe soma o Pico uma vez', async () => {
+    const game = setup({
+      completion,
+      player: { completionItems: items },
+      additionalCards: [shard],
+      rewardConfig: { ...GAME_CONFIG_DEFAULTS, bossPeakGain: 23 },
+    })
+    const started = await game.accept(complete)
+    expect(started.combatUpdates).toContainEqual(
+      expect.objectContaining({
+        type: 'combatStarted',
+        cardTitle: completion.finalBoss.title,
+      })
+    )
+    const battle = started.combat!
+    const victory = await game.accept({
+      type: 'combatAttack',
+      combatId: battle.id,
+      turnId: battle.turn.id,
+      targetId: battle.enemies[0].id,
+    })
+    expect(victory.lastCombatResult).toMatchObject({
+      finalBoss: true,
+      resolution: 'victory',
+      peakDelta: 23,
+    })
+    expect(game.playerState().peak).toBe(33)
+  })
+
+  it.each([0, 37])(
+    'REQ-165: aplica bossPeakGain = %i por chefe em evento',
+    async (bossPeakGain) => {
+      const game = setup({
+        combatOnly: true,
+        combatCard: makeCombatEventCard({
+          enemies: [{ ...enemy, count: 2 }],
+          goodOutcome: emptyOutcome,
+          badOutcome: emptyOutcome,
+        }),
+        rewardConfig: { ...GAME_CONFIG_DEFAULTS, bossPeakGain },
+      })
+      await game.reveal()
+      for (const index of [0, 1]) {
+        const battle = game.party().combat!
+        await game.accept({
+          type: 'combatAttack',
+          combatId: battle.id,
+          turnId: battle.turn.id,
+          targetId: battle.enemies[index].id,
+        })
+      }
+      expect(game.party().lastCombatResult).toMatchObject({
+        finalBoss: false,
+        resolution: 'victory',
+        peakDelta: bossPeakGain * 2,
+      })
+      expect(game.playerState().peak).toBe(10 + bossPeakGain * 2)
+    }
+  )
+})
+
 function setup({
   requirements = [minimum],
   player = {},
@@ -1355,6 +1549,8 @@ function setup({
   rewardConfig = GAME_CONFIG_DEFAULTS,
   additionalCards = [],
   dimensionEffects = [],
+  completion,
+  otherMember,
   zone = harbor,
 }: {
   requirements?: readonly TRandomEventRequirement[]
@@ -1372,6 +1568,8 @@ function setup({
   rewardConfig?: typeof GAME_CONFIG_DEFAULTS
   additionalCards?: TCard[]
   dimensionEffects?: ReturnType<typeof makeDimensionCard>['effects']
+  completion?: ReturnType<typeof makeDimensionCard>['completion']
+  otherMember?: TPlayerState
   zone?: typeof harbor
 } = {}) {
   const event = makeRandomEventCard({
@@ -1383,6 +1581,7 @@ function setup({
   })
   const dimension = makeDimensionCard({
     id: 'fixture.test-dimension',
+    completion,
     effects: dimensionEffects,
     eventDecks: [
       {
@@ -1403,9 +1602,19 @@ function setup({
     },
     memberId
   )
+  const members = [member]
+  if (otherMember) {
+    members.push(
+      PartyMember.create(
+        { characterName: 'Rui', kind: 'human', player: otherMember },
+        new UniqueEntityID('member-2')
+      )
+    )
+  }
   let party = makeParty({
     status: 'inSession',
-    members: [member],
+    members,
+    turnOrder: members.map(({ id }) => id),
     hostMemberId: memberId,
     turn: { round: 1, memberId, actionPoints },
     rngState,

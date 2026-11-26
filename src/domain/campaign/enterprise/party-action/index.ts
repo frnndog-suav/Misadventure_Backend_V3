@@ -153,6 +153,7 @@ export type TPartyAction =
   | TResolveRewardAction
   | { type: 'move'; zoneId: string; viaZoneId?: string }
   | { type: 'endTurn' }
+  | { type: 'completeDimension' }
   | { type: 'saveRespawnPoint' }
   | { type: 'recover'; option: TRecoverOption }
   | { type: 'adjustDeck'; build: { cardId: string; copies: number }[] }
@@ -240,6 +241,10 @@ export function parsePartyAction(
       return parseMove(body)
     case 'endTurn':
       return parseEndTurn(body)
+    case 'completeDimension': {
+      const issues = extraKeys(body, ['type'])
+      return issues.length ? left(issues) : right({ type: 'completeDimension' })
+    }
     case 'saveRespawnPoint': {
       const issues = extraKeys(body, ['type'])
       return issues.length ? left(issues) : right({ type: 'saveRespawnPoint' })

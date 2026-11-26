@@ -197,89 +197,94 @@ describe('DrizzlePartyMapper', () => {
     })
   })
 
-  it('REQ-123: preserva combate ativo, janela, avanço de habilidades e RNG no save', () => {
-    const card = makeCombatEventCard({
-      goodOutcome: { text: 'Vitória.', steps: [] },
-      badOutcome: { text: 'Derrota.', steps: [] },
-    })
-    const combat = {
-      id: 'fight',
-      card,
-      memberId: 'member-1',
-      cycle: 2,
-      maxCycles: 20,
-      order: ['member-1', 'enemy-1'],
-      turn: {
-        id: 'fight:2:member-1',
-        actorId: 'member-1',
-        phase: 'attack' as const,
-        attacksRemaining: 1,
-      },
-      enemies: [
-        {
-          id: 'enemy-1',
-          blockIndex: 0,
-          copyIndex: 0,
-          health: 3,
-          maxHealth: 10,
-          vigor: null,
-          element: null,
-          effectiveModifiers: card.enemies[0].modifiers,
-          statuses: [
-            {
-              statusId: 'enemy-status',
-              sourceCardId: card.id,
-              effectIndex: 0,
-              text: 'Ataque reduzido.',
-              mark: 'debuff' as const,
-              activation: [
-                {
-                  kind: 'modifierFlat' as const,
-                  changes: [{ modifier: 'attack' as const, amount: -1 }],
-                },
-              ],
-              duration: { kind: 'forOwnCombatTurns' as const, turns: 2 },
-              remaining: 1,
-            },
-          ],
-        },
-      ],
-      abilityUsage: [
-        {
+  it.each([false, true])(
+    'REQ-123/REQ-168: preserva combate ativo e RNG no save (chefe final: %s)',
+    (finalBoss) => {
+      const card = makeCombatEventCard({
+        goodOutcome: finalBoss ? { text: '' } : { text: 'Vitória.', steps: [] },
+        badOutcome: finalBoss ? { text: '' } : { text: 'Derrota.', steps: [] },
+      })
+      const combat = {
+        id: 'fight',
+        card,
+        ...(finalBoss && { finalBoss }),
+        memberId: 'member-1',
+        cycle: 2,
+        maxCycles: 20,
+        order: ['member-1', 'enemy-1'],
+        turn: {
+          id: 'fight:2:member-1',
           actorId: 'member-1',
-          equipmentSlot: null,
-          abilityId: 'channel',
-          sourceCardId: 'fixture.channel',
-          element: null,
-          uses: 1,
-          cooldown: 2,
-          charges: 1,
-          channelHealth: 8,
-          activeUntilCycle: null,
+          phase: 'attack' as const,
+          attacksRemaining: 1,
         },
-      ],
-      actedThisCycle: ['enemy-1'],
-    }
-    const party = makeParty({
-      status: 'inSession',
-      combat,
-      combatZone: 'urban',
-      rngState: usedRngParty().rngState,
-    })
-    const row = DrizzlePartyMapper.toDrizzle(party)
-    const restored = DrizzlePartyMapper.toDomain({
-      ...row,
-      state: JSON.parse(JSON.stringify(row.state)),
-    })
+        enemies: [
+          {
+            id: 'enemy-1',
+            blockIndex: 0,
+            copyIndex: 0,
+            health: 3,
+            maxHealth: 10,
+            vigor: null,
+            element: null,
+            effectiveModifiers: card.enemies[0].modifiers,
+            statuses: [
+              {
+                statusId: 'enemy-status',
+                sourceCardId: card.id,
+                effectIndex: 0,
+                text: 'Ataque reduzido.',
+                mark: 'debuff' as const,
+                activation: [
+                  {
+                    kind: 'modifierFlat' as const,
+                    changes: [{ modifier: 'attack' as const, amount: -1 }],
+                  },
+                ],
+                duration: { kind: 'forOwnCombatTurns' as const, turns: 2 },
+                remaining: 1,
+              },
+            ],
+          },
+        ],
+        abilityUsage: [
+          {
+            actorId: 'member-1',
+            equipmentSlot: null,
+            abilityId: 'channel',
+            sourceCardId: 'fixture.channel',
+            element: null,
+            uses: 1,
+            cooldown: 2,
+            charges: 1,
+            channelHealth: 8,
+            activeUntilCycle: null,
+          },
+        ],
+        actedThisCycle: ['enemy-1'],
+      }
+      const party = makeParty({
+        status: 'inSession',
+        combat,
+        combatZone: 'urban',
+        rngState: usedRngParty().rngState,
+      })
+      const row = DrizzlePartyMapper.toDrizzle(party)
+      const restored = DrizzlePartyMapper.toDomain({
+        ...row,
+        state: JSON.parse(JSON.stringify(row.state)),
+      })
 
-    expect(restored.combat).toEqual(party.combat)
-    expect(DrizzlePartyMapper.toDrizzle(restored).state).toMatchObject({
-      schemaVersion: 11,
-      combat,
-      combatZone: 'urban',
-      rngState: [...party.rngState],
-    })
-  })
+      expect(restored.combat).toEqual(party.combat)
+      expect(restored.combat?.finalBoss).toBe(finalBoss)
+      expect(DrizzlePartyMapper.toDrizzle(restored).state).toMatchObject({
+        schemaVersion: 11,
+        combat,
+        combatZone: 'urban',
+        rngState: [...party.rngState],
+      })
+    }
+  )
 
   it('REQ-123: preserva recompensa de vitória pendente e queda por Reflexão', () => {
     const card = makeCombatEventCard({

@@ -574,8 +574,17 @@ const element = z.enum(ELEMENTS)
 const combatCard = cardFileSchemas.combatEvent.omit({ status: true }).extend({
   type: z.literal('combatEvent'),
   collectionId: id,
+  goodOutcome: z.union([
+    cardFileSchemas.combatEvent.shape.goodOutcome,
+    z.strictObject({ text: z.literal('') }),
+  ]),
+  badOutcome: z.union([
+    cardFileSchemas.combatEvent.shape.badOutcome,
+    z.strictObject({ text: z.literal('') }),
+  ]),
 })
 const combat = z.strictObject({
+  finalBoss: z.boolean().optional(),
   id,
   card: combatCard,
   memberId: id,
@@ -630,6 +639,7 @@ const combatOutcome = z.strictObject({
   victoryPeak: count,
 })
 const combatResult = z.strictObject({
+  finalBoss: z.boolean().optional(),
   combatId: id,
   cardId: id,
   memberId: id,
@@ -748,7 +758,12 @@ const triggeredEffects = z.strictObject({
   continuation: z
     .discriminatedUnion('type', [
       z.strictObject({ type: z.enum(['combatTurn', 'combatEscape']) }),
-      z.strictObject({ type: z.literal('combatEntry'), id, card: combatCard }),
+      z.strictObject({
+        type: z.literal('combatEntry'),
+        id,
+        card: combatCard,
+        finalBoss: z.literal(true).optional(),
+      }),
     ])
     .optional(),
   defeats: z

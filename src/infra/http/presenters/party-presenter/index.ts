@@ -440,7 +440,8 @@ function playerToHTTP(
       party.describeCombat(cards),
       zone?.zoneType === 'urban',
       quests.questChoices,
-      boosterCardIds
+      boosterCardIds,
+      party.canCompleteDimension(zone, dimension)
     ),
     build: copiesToHTTP(player.build),
     buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),

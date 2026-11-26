@@ -34,7 +34,8 @@ export function availableActions(
   inUrbanZone = false,
   questChoices: readonly TZoneQuestChoice[] = [],
   /** Os ids do inventário do membro que são boosters (REQ-144; `openBooster`). */
-  boosterCardIds: ReadonlySet<string> = new Set()
+  boosterCardIds: ReadonlySet<string> = new Set(),
+  canCompleteDimension = false
 ): TPartyActionType[] {
   const { turn } = party
   const choice = party.triggeredEffectChoice
@@ -127,6 +128,7 @@ export function availableActions(
   )
     actions.push('saveRespawnPoint')
   if (startEvent && !questChoices.length) actions.push('startEvent')
+  if (canCompleteDimension) actions.push('completeDimension')
   actions.push('endTurn')
   return actions
 }

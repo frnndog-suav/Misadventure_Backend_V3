@@ -245,6 +245,7 @@ type CombatEnemy = {
 }
 
 export type TCombatState = {
+  finalBoss?: boolean
   id: string
   card: TCombatEventCard
   memberId: string

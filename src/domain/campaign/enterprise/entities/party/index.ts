@@ -377,7 +377,12 @@ type TriggeredEffectChoice = {
 
 type TriggerContinuation =
   | { type: 'combatTurn' | 'combatEscape' }
-  | { type: 'combatEntry'; id: string; card: TCombatEventCard }
+  | {
+      type: 'combatEntry'
+      id: string
+      card: TCombatEventCard
+      finalBoss?: true
+    }
 
 type PendingTriggeredEffects = {
   effects: PendingTriggeredEffect[]
@@ -403,6 +408,7 @@ export type TTriggeredEffectRefusal =
   | 'paymentInvalid'
 
 export type TCombatResult = {
+  finalBoss?: boolean
   combatId: string
   cardId: string
   memberId: string
@@ -657,8 +663,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return this.props.pendingTriggeredEffects?.choice ?? null
   }
 
-  get lastCombatResult(): TCombatResult | null {
-    return this.props.lastCombatResult ?? null
+  get lastCombatResult() {
+    const result = this.props.lastCombatResult
+    return result ? { ...result, finalBoss: result.finalBoss ?? false } : null
   }
 
   get combatOutcomeZone() {
@@ -710,6 +717,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return {
       id: state.id,
       card: state.card,
+      finalBoss: state.finalBoss ?? false,
       ...(this.questAttempt?.encounterId === state.id && {
         cardId: state.card.id,
       }),
@@ -1057,6 +1065,73 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       default:
         return 'choicePending'
     }
+  }
+
+  private completionRefusal(
+    zone: TZoneCard | null,
+    dimension: TDimensionCard | null
+  ) {
+    if (this.turn.actionPoints < 1) return 'noActionPoints'
+    const completion = dimension?.completion
+    if (!completion) return 'noCompletion'
+    if (zone?.title !== completion.zoneTitle) return 'notCompletionZone'
+    const { completionItems } = this.props.members[this.actorIndex()].player
+    if (
+      !completion.requirement.every(
+        ({ cardId, count }) =>
+          (completionItems.find((item) => item.cardId === cardId)?.quantity ??
+            0) >= count
+      )
+    )
+      return 'completionRequirementNotMet'
+    return null
+  }
+
+  canCompleteDimension(
+    zone: TZoneCard | null,
+    dimension: TDimensionCard | null
+  ) {
+    return (
+      this.status === 'inSession' &&
+      this.eventActionBlock({ type: 'completeDimension' }) === null &&
+      this.completionRefusal(zone, dimension) === null
+    )
+  }
+
+  completeDimension(
+    zone: TZoneCard | null,
+    dimension: TDimensionCard | null,
+    cards: ReadonlyMap<string, TCard>,
+    now: Date,
+    ids: IdGenerator
+  ): Either<NonNullable<ReturnType<Party['completionRefusal']>>, void> {
+    const refusal = this.completionRefusal(zone, dimension)
+    if (refusal) return left(refusal)
+    const boss = dimension?.completion?.finalBoss
+    this.spendActionPoint()
+    // T-84 conecta a ação sem chefe e a vitória ao desfecho da dimensão.
+    if (boss) {
+      this.engageCombat(
+        this.actorIndex(),
+        ids.next().toString(),
+        undefined,
+        {
+          ...boss,
+          type: 'combatEvent',
+          id: dimension.id,
+          collectionId: dimension.collectionId,
+          goodOutcome: { text: '' },
+          badOutcome: { text: '' },
+        },
+        zone,
+        dimension,
+        cards,
+        this.rngState,
+        true
+      )
+    }
+    this.props.savedAt = now
+    return right(undefined)
   }
 
   questState(
@@ -2072,6 +2147,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     }
     this.props.combat = null
     this.props.lastCombatResult = {
+      ...(state.finalBoss && { finalBoss: true }),
       combatId: state.id,
       cardId: state.card.id,
       memberId: state.memberId,
@@ -2089,34 +2165,39 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     )
     const zoneType = this.props.combatZone
     this.props.combatZone = undefined
+    const hasOutcomePeak = state.card.goodOutcome.steps?.some(
+      (step) =>
+        step.type === 'effect' &&
+        step.effect.activation.some(({ kind }) => kind === 'gainPeak')
+    )
+    const victoryPeak = won
+      ? state.card.enemies.reduce(
+          (total, enemy) =>
+            total +
+            enemy.count *
+              (enemy.enemyCategory === 'boss'
+                ? this.config.bossPeakGain
+                : hasOutcomePeak
+                  ? 0
+                  : enemy.enemyCategory === 'elite'
+                    ? 3
+                    : 1),
+          0
+        )
+      : 0
     if (zoneType === undefined) {
+      if (state.finalBoss && won) {
+        player = { ...player, peak: player.peak + victoryPeak }
+        this.props.lastCombatResult.peakDelta += victoryPeak
+      }
       this.replaceActor(index, player)
       this.updates.push({
         type: 'combatEnded',
         combatId: state.id,
-        result: this.props.lastCombatResult,
+        result: this.lastCombatResult!,
       })
       return
     }
-    const victoryPeak =
-      won &&
-      !state.card.goodOutcome.steps?.some(
-        (step) =>
-          step.type === 'effect' &&
-          step.effect.activation.some(({ kind }) => kind === 'gainPeak')
-      )
-        ? state.card.enemies.reduce(
-            (total, enemy) =>
-              total +
-              enemy.count *
-                (enemy.enemyCategory === 'boss'
-                  ? 15
-                  : enemy.enemyCategory === 'elite'
-                    ? 3
-                    : 1),
-            0
-          )
-        : 0
     this.props.combatOutcome = {
       card: state.card,
       zoneType,
@@ -2128,7 +2209,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     this.updates.push({
       type: 'combatEnded',
       combatId: state.id,
-      result: this.props.lastCombatResult!,
+      result: this.lastCombatResult!,
     })
   }
 
@@ -3015,7 +3096,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           index,
           changed.player,
           cards,
-          changed.rngState
+          changed.rngState,
+          continuation.finalBoss
         )
       } else if (battle) {
         if (continuation?.type === 'combatTurn') {
@@ -3590,12 +3672,13 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   private engageCombat(
     index: number,
     id: string,
-    zoneType: TEventDeck['zoneType'],
+    zoneType: TEventDeck['zoneType'] | undefined,
     card: TCombatEventCard,
     zone: TZoneCard | null,
     dimension: TDimensionCard | null,
     cards: ReadonlyMap<string, TCard>,
-    rngState: RngState
+    rngState: RngState,
+    finalBoss?: true
   ) {
     const started = this.resolveAbilityTriggers(
       this.props.members[index].player,
@@ -3615,7 +3698,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       dimension,
       undefined,
       undefined,
-      { type: 'combatEntry', id, card }
+      { type: 'combatEntry', id, card, ...(finalBoss && { finalBoss }) }
     )
     this.eventCatalog = cards
     this.props.eventEncounter = null
@@ -3625,7 +3708,15 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.props.rngState = started.rngState
       this.replaceActor(index, started.player)
     } else {
-      this.startCombat(id, card, index, started.player, cards, started.rngState)
+      this.startCombat(
+        id,
+        card,
+        index,
+        started.player,
+        cards,
+        started.rngState,
+        finalBoss
+      )
     }
   }
 
@@ -3635,7 +3726,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     index: number,
     player: TPlayerState,
     cards: ReadonlyMap<string, TCard>,
-    rngState: RngState
+    rngState: RngState,
+    finalBoss?: true
   ) {
     player = { ...player, abilityUsage: undefined }
     const state = createCombat(
@@ -3645,6 +3737,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.combatPlayer(player, cards),
       this.config
     )
+    if (finalBoss) state.finalBoss = finalBoss
     this.updates.push(
       {
         type: 'combatStarted',

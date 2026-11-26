@@ -540,6 +540,24 @@ export class TakePartyActionUseCase {
           )
         break
       }
+      case 'completeDimension': {
+        if (!this.ids)
+          return left(
+            new ActionInvalidError([{ field: 'type', reason: 'unknownAction' }])
+          )
+        const { zone, dimension, cards } = await this.findEventCatalog(party)
+        const completed = party.completeDimension(
+          zone,
+          dimension,
+          cards,
+          this.clock.now(),
+          this.ids
+        )
+        if (completed.isLeft())
+          return left(new ActionNotAllowedError(completed.value))
+        party.completeKnockout(this.ids)
+        break
+      }
       case 'endTurn': {
         const ended = party.endTurn(this.clock.now())
         if (ended.isLeft()) {
