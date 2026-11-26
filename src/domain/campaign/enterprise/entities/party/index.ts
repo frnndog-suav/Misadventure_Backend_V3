@@ -116,6 +116,7 @@ import {
   decayMarkets,
   drawMarkets,
   marketZonesOf,
+  marketCandidatesOf,
   type TMarket,
   type TMarketCandidate,
   type TMarketPoolEntry,
@@ -212,7 +213,7 @@ export const PARTY_NAME_MAX_LENGTH = 40
 export const CHARACTER_NAME_MAX_LENGTH = 24
 
 /** Máquina de estados do save (D-27); `frozen` entra na FEAT-19. */
-export type TPartyStatus = 'idle' | 'inSession'
+export type TPartyStatus = 'idle' | 'inSession' | 'frozen'
 
 /** Motivos de CONTRATO FEAT-05/FEAT-06 (`PartyInvalidDetails`). */
 export type TPartyIssue =
@@ -437,6 +438,27 @@ type CombatOutcome = {
   victoryPeak: number
 }
 
+export type TDimensionCompletionResult = {
+  completedDimensionCardId: string
+  completedDimensionName: string
+  completedByMemberId: string
+  finalBossDefeated: boolean
+  members: {
+    memberId: string
+    peakDelta: number
+    gold: number
+    cards: {
+      cardId: string
+      copies: number
+      destination: TReceiveSpace | 'mount'
+    }[]
+  }[]
+  next:
+    | { type: 'nextDimension'; dimensionCardId: string; name: string }
+    | { type: 'frozen' }
+  completedAt: string
+}
+
 export interface TPartyProps {
   name: string
   members: PartyMember[]
@@ -461,6 +483,8 @@ export interface TPartyProps {
   pendingTriggeredEffects?: PendingTriggeredEffects | null
   triggeredEffectSequence?: number
   pendingReward?: TPendingReward | null
+  grandPrizeRewards?: readonly TPendingReward[]
+  lastDimensionCompletion?: TDimensionCompletionResult | null
   questRewardDelivery?: QuestRewardDelivery
   /** Cartas do booster ainda à espera da entrega pendente, na ordem do sorteio (D-128). */
   boosterQueue?: BoosterQueue
@@ -572,7 +596,13 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   }
 
   get pendingRewards(): readonly TPendingReward[] {
-    return this.props.pendingReward ? [this.props.pendingReward] : []
+    return this.props.pendingReward
+      ? [this.props.pendingReward]
+      : (this.props.grandPrizeRewards ?? [])
+  }
+
+  get lastDimensionCompletion(): TDimensionCompletionResult | null {
+    return this.props.lastDimensionCompletion ?? null
   }
 
   get questRewardDelivery(): QuestRewardDelivery | undefined {
@@ -1049,7 +1079,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     if (this.triggeredEffectChoice) return 'choicePending'
     if (this.props.combat) return 'combatInProgress'
     if (action.type === 'resolveReward') return null
-    if (this.props.pendingReward) return 'choicePending'
+    if (this.pendingRewards.length) return 'choicePending'
     if (this.props.members[this.actorIndex()]?.player.down) return 'playerDown'
     if ('encounterId' in action) return null
     const encounter = this.eventEncounter
@@ -1109,7 +1139,6 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     if (refusal) return left(refusal)
     const boss = dimension?.completion?.finalBoss
     this.spendActionPoint()
-    // T-84 conecta a ação sem chefe e a vitória ao desfecho da dimensão.
     if (boss) {
       this.engageCombat(
         this.actorIndex(),
@@ -1132,6 +1161,235 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     }
     this.props.savedAt = now
     return right(undefined)
+  }
+
+  applyDimensionCompletion(
+    dimension: TDimensionCard,
+    cards: ReadonlyMap<string, TCard>,
+    successor: { dimension: TDimensionCard; cards: readonly TCard[] } | null,
+    at: Date,
+    ids: IdGenerator | undefined,
+    bossPeak: number | null,
+    ended: TPartyTurn
+  ): Either<Extract<TCreatePartyFailure, { type: 'dimensionInvalid' }>, void> {
+    const completion = dimension.completion
+    if (!completion) return right(undefined)
+    const rng = SeededRng.fromState(this.rngState)
+    const prepared =
+      successor &&
+      prepareDimensionMap(
+        successor.dimension,
+        successor.cards,
+        this.config,
+        rng
+      )
+    if (prepared?.isLeft()) return left(prepared.value)
+
+    const rewards: TPendingReward[] = []
+    const members = this.members.map((member, index) => {
+      const memberId = member.id.toString()
+      const peak = this.config.dimensionCompletionPeakGain
+      const receipt: TDimensionCompletionResult['members'][number] = {
+        memberId,
+        peakDelta:
+          peak + (member.id.equals(ended.memberId) ? (bossPeak ?? 0) : 0),
+        gold: 0,
+        cards: [],
+      }
+      let player: TPlayerState = {
+        ...member.player,
+        peak: member.player.peak + peak,
+        completionItems: [],
+      }
+      const gold = Math.min(
+        completion.grandPrize.gold,
+        Math.max(
+          0,
+          capacitiesOf(this.config, player.expansions).purse - player.gold
+        )
+      )
+      player = { ...player, gold: player.gold + gold }
+      receipt.gold = gold
+      for (const { cardId, copies } of completion.grandPrize.cards) {
+        const card = cards.get(cardId)
+        if (!card) continue
+        for (let copy = 0; copy < copies; copy++) {
+          let destination: TReceiveSpace | 'mount' | null = null
+          if (card.type === 'mount') {
+            if (!player.mount) destination = 'mount'
+            player = this.deliverMountReward(
+              player,
+              { cardId, origin: { type: 'fixed' } },
+              ids,
+              member.id
+            )
+          } else if (
+            card.type === 'attribute' ||
+            card.type === 'item' ||
+            card.type === 'equipment'
+          ) {
+            const delivered = this.addReward(player, card)
+            if (delivered) {
+              player = delivered.player
+              destination = delivered.space
+            } else {
+              rewards.push(
+                this.makePendingReward(
+                  player,
+                  card,
+                  { type: 'fixed' },
+                  { type: 'grandPrize', dimensionCardId: dimension.id },
+                  ids,
+                  memberId
+                )
+              )
+            }
+          }
+          if (destination) {
+            const existing = receipt.cards.find(
+              (entry) =>
+                entry.cardId === cardId && entry.destination === destination
+            )
+            if (existing) existing.copies++
+            else receipt.cards.push({ cardId, copies: 1, destination })
+          }
+        }
+      }
+      this.replaceActor(index, player)
+      return receipt
+    })
+    this.props.grandPrizeRewards = rewards.map((reward) => {
+      const member = this.members.find(
+        ({ id }) => id.toString() === reward.memberId
+      )!
+      return {
+        ...reward,
+        discardOptions: this.rewardDiscardOptions(
+          member.player,
+          reward.destination
+        ),
+      }
+    })
+    this.props.savedAt = at
+    this.props.lastDimensionCompletion = {
+      completedDimensionCardId: dimension.id,
+      completedDimensionName: dimension.name,
+      completedByMemberId: ended.memberId.toString(),
+      finalBossDefeated: bossPeak !== null,
+      members,
+      next: successor
+        ? {
+            type: 'nextDimension',
+            dimensionCardId: successor.dimension.id,
+            name: successor.dimension.name,
+          }
+        : { type: 'frozen' },
+      completedAt: at.toISOString(),
+    }
+    const base = { occurredAt: at, aggregateId: this.id }
+    this.addDomainEvent({
+      type: 'TurnEnded',
+      memberId: ended.memberId,
+      round: ended.round,
+      ...base,
+    })
+    if (successor && prepared?.isRight()) {
+      this.enterNextDimension(successor, prepared.value, rng, at)
+    } else {
+      this.props.turn = { ...ended, actionPoints: 0 }
+      this.props.status = 'frozen'
+      this.addDomainEvent({ type: 'SessionEnded', ...base })
+    }
+    return right(undefined)
+  }
+
+  private enterNextDimension(
+    next: { dimension: TDimensionCard; cards: readonly TCard[] },
+    prepared: { startingCityZoneId: string; mapWithQuestDecks: TPartyMap },
+    rng: SeededRng,
+    at: Date
+  ): void {
+    const { startingCityZoneId, mapWithQuestDecks } = prepared
+    const { dimension, cards } = next
+    this.props.dimension = {
+      dimensionCardId: dimension.id,
+      startingCityZoneId,
+      map: mapWithQuestDecks,
+    }
+    this.members.forEach(({ player }, index) => {
+      const pile = shuffle(
+        [...player.deck, ...player.hand, ...player.discard],
+        rng
+      )
+      const hand = pile.slice(0, this.config.initialHandSize)
+      this.replaceActor(index, {
+        ...player,
+        hand,
+        deck: pile.slice(hand.length),
+        discard: [],
+        handCopies: undefined,
+        zoneId: startingCityZoneId,
+        respawnZoneId: startingCityZoneId,
+        openZoneQuests: [],
+        openGenericQuests: [],
+        questOrder: [],
+        completedZoneQuests: [],
+        statuses: player.statuses.filter(
+          ({ duration }) =>
+            duration.kind !== 'untilPartyEnd' &&
+            duration.kind !== 'untilLeaveZone'
+        ),
+        abilityUsage: undefined,
+        nextTurnActionPointDebt: 0,
+        skipNextTurn: false,
+      })
+    })
+    this.props.turnOrder = rollTurnOrder(
+      this.members.map(({ id }) => id),
+      rng
+    )
+    this.props.rewardDecks = assembleRewardDecks(dimension.rewardDecks, rng)
+    const cardsById = new Map(cards.map((card) => [card.id, card]))
+    this.props.eventDecks = dimension.eventDecks?.map(
+      ({ zoneType, cards: entries }) => {
+        const pile = entries.flatMap(({ cardId, copies }) =>
+          Array.from({ length: copies }, () => cardId)
+        )
+        const isPlayable = (id: string) => isPlayableEvent(cardsById.get(id))
+        return {
+          zoneType,
+          cards: [
+            ...shuffle(pile.filter(isPlayable), rng),
+            ...pile.filter((id) => !isPlayable(id)),
+          ],
+          discard: [],
+        }
+      }
+    )
+    this.props.upgradedCombatDecks = undefined
+    const markets = drawMarkets(
+      marketZonesOf(
+        mapWithQuestDecks.zones.map(({ zoneId }) => zoneId),
+        cards.filter((card): card is TZoneCard => card.type === 'zone')
+      ),
+      marketCandidatesOf(cards),
+      this.config,
+      rng
+    )
+    this.props.markets = markets.markets
+    this.props.marketPool = markets.pool
+    this.props.rngState = rng.state()
+    const memberId = this.props.turnOrder[0]
+    this.props.turn = {
+      round: 1,
+      memberId,
+      actionPoints: this.config.actionPointsPerTurn,
+    }
+    const base = { occurredAt: at, aggregateId: this.id }
+    this.addDomainEvent({ type: 'MapAssembled', ...base })
+    this.addDomainEvent({ type: 'TurnOrderDecided', ...base })
+    this.addDomainEvent({ type: 'PlayersArrived', ...base })
+    this.addDomainEvent({ type: 'TurnStarted', memberId, round: 1, ...base })
   }
 
   questState(
@@ -4202,7 +4460,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   private deliverMountReward(
     player: TPlayerState,
     reward: { cardId: string; origin: TRewardOrigin },
-    ids: IdGenerator | undefined
+    ids: IdGenerator | undefined,
+    memberId = this.turn.memberId
   ): TPlayerState {
     const { cardId, origin } = reward
     let disposition: TRewardDelivery['disposition'] = 'kept'
@@ -4215,7 +4474,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.updateRewardDeck(origin.zoneType, [...(deck?.cards ?? []), cardId])
       disposition = 'returnedToDeck'
     } else {
-      this.limboSink.push({ cardId, quantity: 1, from: 'mount' })
+      this.pendingLimbo.push({ cardId, quantity: 1, from: 'mount', memberId })
       disposition = 'sentToLimbo'
     }
     return {
@@ -4244,8 +4503,42 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     source: TPendingReward['source'],
     ids: IdGenerator | undefined
   ): void {
+    this.props.pendingReward = this.makePendingReward(
+      player,
+      card,
+      origin,
+      source,
+      ids,
+      this.turn.memberId.toString()
+    )
+  }
+
+  private makePendingReward(
+    player: TPlayerState,
+    card: TAttributeCard | TItemCard | TEquipmentCard,
+    origin: TRewardOrigin,
+    source: TPendingReward['source'],
+    ids: IdGenerator | undefined,
+    memberId: string
+  ): TPendingReward {
     const destination = card.type === 'attribute' ? 'tcgFolder' : 'inventory'
     // REQ-159: uma opção por carta e espaço, principal antes da montaria.
+    return {
+      id: this.nextRewardId(ids),
+      memberId,
+      cardId: card.id,
+      origin,
+      source,
+      destination,
+      discardOptions: this.rewardDiscardOptions(player, destination),
+      decisionDeadlineAt: null,
+    }
+  }
+
+  private rewardDiscardOptions(
+    player: TPlayerState,
+    destination: TPendingReward['destination']
+  ) {
     const discardOptions = rewardSpaces(destination).flatMap((space) => {
       const holdings = new Map<string, number>()
       for (const { cardId, copies } of holdingsIn(player, space))
@@ -4256,16 +4549,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         maxCopies,
       }))
     })
-    this.props.pendingReward = {
-      id: this.nextRewardId(ids),
-      memberId: this.turn.memberId.toString(),
-      cardId: card.id,
-      origin,
-      source,
-      destination,
-      discardOptions: sortedByCardId(discardOptions),
-      decisionDeadlineAt: null,
-    }
+    return sortedByCardId(discardOptions)
   }
 
   resolveReward(
@@ -4274,14 +4558,17 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     at: Date,
     ids: IdGenerator | undefined
   ): Either<TRewardRefusal, void> {
-    const reward = this.props.pendingReward
+    const reward = this.pendingRewards.find(({ id }) => id === action.rewardId)
+    if (!reward) return left('staleReward')
     if (
-      !reward ||
-      reward.id !== action.rewardId ||
+      reward.source.type !== 'grandPrize' &&
       reward.memberId !== this.turn.memberId.toString()
     )
       return left('staleReward')
-    const index = this.actorIndex()
+    const index = this.members.findIndex(
+      ({ id }) => id.toString() === reward.memberId
+    )
+    if (index < 0) return left('staleReward')
     const actor = this.props.members[index]
     let { player } = actor
     const { cardId, origin, source, destination } = reward
@@ -4425,7 +4712,22 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     }
     this.props.pendingReward = null
     this.props.savedAt = at
-    if (source.type === 'scavenge') {
+    if (source.type === 'grandPrize') {
+      this.replaceActor(index, player)
+      this.props.grandPrizeRewards = this.props.grandPrizeRewards
+        ?.filter(({ id }) => id !== reward.id)
+        .map((pending) =>
+          pending.memberId === reward.memberId
+            ? {
+                ...pending,
+                discardOptions: this.rewardDiscardOptions(
+                  player,
+                  pending.destination
+                ),
+              }
+            : pending
+        )
+    } else if (source.type === 'scavenge') {
       this.replaceActor(index, {
         ...player,
         lastScavenge: {
@@ -4586,7 +4888,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       ]),
       ...this.pendingRewards.map(({ cardId }) => cardId),
       ...this.pendingRewards.flatMap(({ source }) =>
-        source.type === 'quest' ? [source.questCardId] : []
+        source.type === 'quest'
+          ? [source.questCardId]
+          : source.type === 'grandPrize'
+            ? [source.dimensionCardId]
+            : []
       ),
       ...(this.props.boosterQueue?.remaining ?? []),
       ...(this.questRewardDelivery?.steps.flatMap((step) =>
@@ -4692,44 +4998,15 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     }
 
     const rng = SeededRng.fromState(input.rngState)
-    const assembled = assembleMap({
-      zones,
-      arrivalZoneTitle: dimension.arrivalZoneTitle,
+    const prepared = prepareDimensionMap(
+      dimension,
+      input.dimensionCards ?? [],
+      input.config,
       rng,
-      maxAttempts: input.config.mapMaxAttempts,
-    })
-    if (assembled.isLeft()) {
-      return left({
-        type: 'dimensionInvalid',
-        dimensionCardId: dimension.id,
-        problems: [mapAttemptsProblem(input.config.mapMaxAttempts)],
-      })
-    }
-    const { startingCityZoneId, map } = assembled.value
-    const questDecks = new Map(
-      zones.map(({ id, questDeck }) => [id, questDeck])
+      zones
     )
-    const questCards = new Map(
-      (input.dimensionCards ?? []).flatMap((card) =>
-        card.type === 'zoneQuest' ? [[card.id, card] as const] : []
-      )
-    )
-    const mapWithQuestDecks = {
-      ...map,
-      zones: map.zones.map((zone) => {
-        const deck = questDecks.get(zone.zoneId)
-        if (!deck?.length) return zone
-        const references = deck.flatMap((id) => {
-          const card = questCards.get(id)
-          return card ? questReferenceIds(card) : []
-        })
-        return {
-          ...zone,
-          questDeck: [...deck],
-          questReferenceIds: [...new Set(references)],
-        }
-      }),
-    }
+    if (prepared.isLeft()) return left(prepared.value)
+    const { startingCityZoneId, map, mapWithQuestDecks } = prepared.value
 
     const partyId = ids.next()
     const host = PartyMember.create(
@@ -4834,6 +5111,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   startSession(at: Date): boolean {
     switch (this.props.status) {
       case 'inSession':
+      case 'frozen':
         return false
       case 'idle':
         this.props.status = 'inSession'
@@ -4860,6 +5138,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       return left('combatInProgress')
     switch (this.props.status) {
       case 'idle':
+      case 'frozen':
         return left('sessionNotActive')
       case 'inSession':
         this.props.status = 'idle'
@@ -4898,6 +5177,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   > {
     switch (this.props.status) {
       case 'idle':
+      case 'frozen':
         return left('sessionNotActive')
       case 'inSession':
         break
@@ -5160,6 +5440,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   endTurn(at: Date): Either<'sessionNotActive', void> {
     switch (this.props.status) {
       case 'idle':
+      case 'frozen':
         return left('sessionNotActive')
       case 'inSession':
         break
@@ -5272,6 +5553,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   ): Either<'sessionNotActive' | 'noActionPoints', void> {
     switch (this.props.status) {
       case 'idle':
+      case 'frozen':
         return left('sessionNotActive')
       case 'inSession':
         break
@@ -5371,6 +5653,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   ): Either<TAdjustDeckRefusal, void> {
     switch (this.props.status) {
       case 'idle':
+      case 'frozen':
         return left('sessionNotActive')
       case 'inSession':
         break
@@ -5476,6 +5759,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   ): Either<TUseVaultRefusal, void> {
     switch (this.props.status) {
       case 'idle':
+      case 'frozen':
         return left('sessionNotActive')
       case 'inSession':
         break
@@ -5564,6 +5848,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   ): Either<TVisitMarketRefusal, void> {
     switch (this.props.status) {
       case 'idle':
+      case 'frozen':
         return left('sessionNotActive')
       case 'inSession':
         break
@@ -5657,7 +5942,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     catalog: { zone: TZoneCard | null; cards: readonly TCard[] },
     at: Date
   ): Either<TVisitBlacksmithRefusal, void> {
-    if (this.props.status === 'idle') return left('sessionNotActive')
+    if (this.props.status !== 'inSession') return left('sessionNotActive')
     const actionPoints = this.props.turn.actionPoints
     if (actionPoints < 1) return left('noActionPoints')
     const { zone } = catalog
@@ -5709,7 +5994,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     catalog: { cards: readonly TCard[] },
     at: Date
   ): Either<TArtificerWorkshopRefusal, void> {
-    if (this.props.status === 'idle') return left('sessionNotActive')
+    if (this.props.status !== 'inSession') return left('sessionNotActive')
     if (this.props.turn.actionPoints < 1) return left('noActionPoints')
     const index = this.actorIndex()
     const actor = this.props.members[index]
@@ -5783,11 +6068,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     | 'zoneActionUnavailable',
     void
   > {
-    if (this.status === 'idle') return left('sessionNotActive')
+    if (this.status !== 'inSession') return left('sessionNotActive')
     if (this.props.combat) return left('combatInProgress')
     if (
       this.triggeredEffectChoice ||
-      this.props.pendingReward ||
+      this.pendingRewards.length ||
       this.eventEncounter
     )
       return left('choicePending')
@@ -5827,6 +6112,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   ): Either<TScavengeRefusal, void> {
     switch (this.props.status) {
       case 'idle':
+      case 'frozen':
         return left('sessionNotActive')
       case 'inSession':
         break
@@ -5968,6 +6254,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   ): Either<TPrepareRefusal, void> {
     switch (this.props.status) {
       case 'idle':
+      case 'frozen':
         return left('sessionNotActive')
       case 'inSession':
         break
@@ -6649,4 +6936,56 @@ function openQuestCount(player: TPlayerState): number {
     (player.openZoneQuests?.length ?? 0) +
     (player.openGenericQuests?.length ?? 0)
   )
+}
+
+function prepareDimensionMap(
+  dimension: TDimensionCard,
+  cards: readonly TCard[],
+  config: TGameConfigValues,
+  rng: SeededRng,
+  zones: readonly TZoneCard[] = cards.filter(
+    (card): card is TZoneCard => card.type === 'zone'
+  )
+): Either<
+  Extract<TCreatePartyFailure, { type: 'dimensionInvalid' }>,
+  { startingCityZoneId: string; map: TPartyMap; mapWithQuestDecks: TPartyMap }
+> {
+  const assembled = assembleMap({
+    zones,
+    arrivalZoneTitle: dimension.arrivalZoneTitle,
+    rng,
+    maxAttempts: config.mapMaxAttempts,
+  })
+  if (assembled.isLeft()) {
+    return left({
+      type: 'dimensionInvalid',
+      dimensionCardId: dimension.id,
+      problems: [mapAttemptsProblem(config.mapMaxAttempts)],
+    })
+  }
+  const { startingCityZoneId, map } = assembled.value
+  const questDecks = new Map(zones.map(({ id, questDeck }) => [id, questDeck]))
+  const questCards = new Map(
+    cards.flatMap((card) =>
+      card.type === 'zoneQuest' ? [[card.id, card] as const] : []
+    )
+  )
+  const mapWithQuestDecks = {
+    ...map,
+    zones: map.zones.map((zone) => {
+      const deck = questDecks.get(zone.zoneId)
+      if (!deck?.length) return zone
+      const references = deck.flatMap((id) => {
+        const card = questCards.get(id)
+        return card ? questReferenceIds(card) : []
+      })
+      return {
+        ...zone,
+        questDeck: [...deck],
+        questReferenceIds: [...new Set(references)],
+      }
+    }),
+  }
+
+  return right({ startingCityZoneId, map, mapWithQuestDecks })
 }

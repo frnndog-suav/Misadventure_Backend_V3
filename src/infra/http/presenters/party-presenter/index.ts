@@ -245,6 +245,7 @@ export interface TPartyHttp {
   pendingRewards: readonly TPendingReward[]
   combat: Party['combat']
   lastCombatResult: Party['lastCombatResult']
+  lastDimensionCompletion: Party['lastDimensionCompletion']
   createdAt: string
   savedAt: string
 }
@@ -648,6 +649,7 @@ export class PartyPresenter {
       pendingRewards: party.pendingRewards,
       combat: party.describeCombat(cards),
       lastCombatResult: party.lastCombatResult,
+      lastDimensionCompletion: party.lastDimensionCompletion,
       createdAt: party.createdAt.toISOString(),
       savedAt: party.savedAt.toISOString(),
     }

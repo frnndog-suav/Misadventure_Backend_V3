@@ -441,6 +441,7 @@ const pendingReward = z.strictObject({
     z.strictObject({ type: z.literal('combatEvent'), combatId: id }),
     z.strictObject({ type: z.literal('quest'), questId: id, questCardId: id }),
     z.strictObject({ type: z.literal('booster'), boosterCardId: id }),
+    z.strictObject({ type: z.literal('grandPrize'), dimensionCardId: id }),
   ]),
   destination: z.enum(['inventory', 'tcgFolder']),
   // REQ-159: `space` ausente nos saves de antes da T-77 = o espaço principal.
@@ -456,6 +457,35 @@ const pendingReward = z.strictObject({
 const boosterQueue = z.strictObject({
   boosterCardId: id,
   remaining: z.array(id).min(1),
+})
+const dimensionCompletion = z.strictObject({
+  completedDimensionCardId: id,
+  completedDimensionName: z.string(),
+  completedByMemberId: id,
+  finalBossDefeated: z.boolean(),
+  members: z.array(
+    z.strictObject({
+      memberId: id,
+      peakDelta: count,
+      gold: count,
+      cards: z.array(
+        z.strictObject({
+          cardId: id,
+          copies,
+          destination: z.union([receiveSpace, z.literal('mount')]),
+        })
+      ),
+    })
+  ),
+  next: z.discriminatedUnion('type', [
+    z.strictObject({ type: z.literal('frozen') }),
+    z.strictObject({
+      type: z.literal('nextDimension'),
+      dimensionCardId: id,
+      name: z.string(),
+    }),
+  ]),
+  completedAt: z.iso.datetime(),
 })
 const boosterOpeningSchema = z.strictObject({
   boosterCardId: id,
@@ -1146,6 +1176,8 @@ const v10State = v8State.extend({
 // REQ-157, D-146: a montaria (`null` sem montaria).
 const v11State = v8State.extend({
   schemaVersion: z.literal(SCHEMA_VERSION),
+  grandPrizeRewards: z.array(pendingReward).optional(),
+  lastDimensionCompletion: dimensionCompletion.nullable().optional(),
   ...v9Fields,
   ...stateFields(
     currentConfigSchema,
@@ -1182,7 +1214,7 @@ const stateSchema: z.ZodType<TStoredState> = z
     { message: 'turn.memberId fora de turnOrder' }
   )
 
-const partyStatusSchema = z.enum(['idle', 'inSession'])
+const partyStatusSchema = z.enum(['idle', 'inSession', 'frozen'])
 
 export interface TPartyRow {
   id: string
@@ -1236,6 +1268,13 @@ export class DrizzlePartyMapper {
         dimension: state.dimension,
         // D-87: save antigo fica sem decks de recompensas.
         rewardDecks: 'rewardDecks' in state ? (state.rewardDecks ?? []) : [],
+        ...(state.schemaVersion === SCHEMA_VERSION && {
+          grandPrizeRewards: state.grandPrizeRewards?.flatMap((reward) => {
+            const upgraded = upgradePendingReward(reward)
+            return upgraded ? [upgraded] : []
+          }),
+          lastDimensionCompletion: state.lastDimensionCompletion,
+        }),
         ...((state.schemaVersion === 8 ||
           state.schemaVersion === 9 ||
           state.schemaVersion === 10 ||
@@ -1442,8 +1481,17 @@ export class DrizzlePartyMapper {
         ...(party.eventEncounter && {
           eventEncounter: eventEncounter.parse(party.eventEncounter),
         }),
-        ...(party.pendingRewards[0] && {
-          pendingReward: pendingReward.parse(party.pendingRewards[0]),
+        ...(party.pendingRewards[0]?.source.type === 'grandPrize' && {
+          grandPrizeRewards: party.pendingRewards.map((reward) =>
+            pendingReward.parse(reward)
+          ),
+        }),
+        ...(party.pendingRewards[0] &&
+          party.pendingRewards[0].source.type !== 'grandPrize' && {
+            pendingReward: pendingReward.parse(party.pendingRewards[0]),
+          }),
+        ...(party.lastDimensionCompletion && {
+          lastDimensionCompletion: party.lastDimensionCompletion,
         }),
         ...(party.questRewardDelivery && {
           questRewardDelivery: questRewardDelivery.parse(

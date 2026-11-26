@@ -23,6 +23,7 @@ import type {
 
 import { ActionInvalidError } from '../_errors/action-invalid-error'
 import { ActionNotAllowedError } from '../_errors/action-not-allowed-error'
+import { DimensionInvalidError } from '../_errors/dimension-invalid-error'
 import { PartyNotFoundError } from '../_errors/party-not-found-error'
 import { PartySessionNotActiveError } from '../_errors/party-session-not-active-error'
 
@@ -36,7 +37,8 @@ export type TTakePartyActionUseCaseResponse = Either<
   | PartyNotFoundError
   | ActionInvalidError
   | PartySessionNotActiveError
-  | ActionNotAllowedError,
+  | ActionNotAllowedError
+  | DimensionInvalidError,
   { party: Party }
 >
 
@@ -85,13 +87,15 @@ export class TakePartyActionUseCase {
     }
 
     const action = parsed.value
-    if (party.status === 'idle') return left(new PartySessionNotActiveError())
+    if (party.status !== 'inSession')
+      return left(new PartySessionNotActiveError())
     await this.provideMarketCandidates(party)
     const blocked =
       action.type === 'saveRespawnPoint' ? null : party.eventActionBlock(action)
     if (typeof blocked === 'string')
       return left(new ActionNotAllowedError(blocked))
     party.clearCombatUpdates()
+    const turnBeforeAction = party.turn
     switch (action.type) {
       case 'takeQuest':
       case 'continueQuest':
@@ -161,9 +165,10 @@ export class TakePartyActionUseCase {
         break
       }
       case 'resolveReward': {
-        const pending = party.pendingRewards[0]
-        if (pending?.id !== action.rewardId)
-          return left(new ActionNotAllowedError('staleReward'))
+        const pending = party.pendingRewards.find(
+          ({ id }) => id === action.rewardId
+        )
+        if (!pending) return left(new ActionNotAllowedError('staleReward'))
         // REQ-159: `space` fora dos espaços do destino → 400 `unknownOption`.
         if (action.choice === 'keep') {
           const spaces = rewardSpaces(pending.destination)
@@ -579,9 +584,57 @@ export class TakePartyActionUseCase {
       }
     }
 
+    const bossVictory = party.combatUpdates.find(
+      (update) =>
+        update.type === 'combatEnded' &&
+        update.result.finalBoss &&
+        update.result.resolution === 'victory'
+    )
+    if (action.type === 'completeDimension' || bossVictory) {
+      const { dimension, cards } = await this.findEventCatalog(party)
+      if (
+        dimension?.completion &&
+        (bossVictory || !dimension.completion.finalBoss)
+      ) {
+        const result = party.applyDimensionCompletion(
+          dimension,
+          cards,
+          await this.findSuccessor(dimension),
+          this.clock.now(),
+          this.ids,
+          bossVictory?.type === 'combatEnded'
+            ? bossVictory.result.peakDelta
+            : null,
+          turnBeforeAction
+        )
+        if (result.isLeft()) {
+          const { dimensionCardId, problems } = result.value
+          return left(new DimensionInvalidError(dimensionCardId, problems))
+        }
+      }
+    }
     await save(party)
 
     return right({ party })
+  }
+
+  private async findSuccessor(current: TDimensionCard) {
+    let successor: {
+      dimension: TDimensionCard
+      cards: readonly TCard[]
+    } | null = null
+    for (const { id } of await this.cardCatalog.listCollections()) {
+      const cards = await this.cardCatalog.listCards(id)
+      for (const card of cards) {
+        if (
+          card.type === 'dimension' &&
+          card.releaseOrder > current.releaseOrder &&
+          (!successor || card.releaseOrder < successor.dimension.releaseOrder)
+        )
+          successor = { dimension: card, cards }
+      }
+    }
+    return successor
   }
 
   /** REQ-139: o fim da rodada pode precisar de um novo pool; o agregado recebe as elegíveis da coleção vigente (D-116, D-125). */
@@ -634,6 +687,8 @@ export class TakePartyActionUseCase {
           ]
         : undefined
     const ids = new Set([
+      ...(dimension?.completion?.grandPrize.cards.map(({ cardId }) => cardId) ??
+        []),
       ...(player?.openZoneQuests?.map(({ questCardId }) => questCardId) ?? []),
       ...(reservedCardId ? [reservedCardId] : []),
       ...(questStage?.type === 'randomEvent' ? [questStage.eventCardId] : []),

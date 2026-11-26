@@ -286,6 +286,54 @@ describe('DrizzlePartyMapper', () => {
     }
   )
 
+  it('REQ-169: preserva o recibo de montaria e todas as pendências do prêmio', () => {
+    const party = makeParty({
+      status: 'frozen',
+      lastDimensionCompletion: {
+        completedDimensionCardId: 'fixture.test-dimension',
+        completedDimensionName: 'Reino Enevoado',
+        completedByMemberId: 'member-1',
+        finalBossDefeated: false,
+        members: [
+          {
+            memberId: 'member-1',
+            peakDelta: 25,
+            gold: 10,
+            cards: [
+              { cardId: 'fixture.plow-horse', copies: 1, destination: 'mount' },
+            ],
+          },
+        ],
+        next: { type: 'frozen' },
+        completedAt: '2026-11-26T12:00:00.000Z',
+      },
+      grandPrizeRewards: ['reward-1', 'reward-2'].map((id) => ({
+        id,
+        memberId: 'member-1',
+        cardId: 'fixture.iron-ore',
+        source: {
+          type: 'grandPrize',
+          dimensionCardId: 'fixture.test-dimension',
+        },
+        origin: { type: 'fixed' },
+        destination: 'inventory',
+        discardOptions: [],
+        decisionDeadlineAt: null,
+      })),
+    })
+    const row = DrizzlePartyMapper.toDrizzle(party)
+    const restored = DrizzlePartyMapper.toDomain({
+      ...row,
+      state: JSON.parse(JSON.stringify(row.state)),
+    })
+
+    expect(restored.status).toBe('frozen')
+    expect(restored.lastDimensionCompletion).toEqual(
+      party.lastDimensionCompletion
+    )
+    expect(restored.pendingRewards).toEqual(party.pendingRewards)
+  })
+
   it('REQ-123: preserva recompensa de vitória pendente e queda por Reflexão', () => {
     const card = makeCombatEventCard({
       goodOutcome: {
@@ -943,7 +991,7 @@ describe('DrizzlePartyMapper', () => {
     ],
     [
       'status desconhecido',
-      (r: ReturnType<typeof validRow>) => (r.status = 'frozen'),
+      (r: ReturnType<typeof validRow>) => (r.status = 'unknown'),
     ],
     [
       'state não objeto',

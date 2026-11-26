@@ -71,7 +71,15 @@ function snapshot(party: Party): Party {
       eventDecks: structuredClone(party.eventDecks),
       eventEncounter: structuredClone(party.eventEncounter),
       ...structuredClone(party.combatSnapshot()),
-      pendingReward: structuredClone(party.pendingRewards[0]),
+      pendingReward: structuredClone(
+        party.pendingRewards.find(({ source }) => source.type !== 'grandPrize')
+      ),
+      grandPrizeRewards: structuredClone(
+        party.pendingRewards.filter(
+          ({ source }) => source.type === 'grandPrize'
+        )
+      ),
+      lastDimensionCompletion: structuredClone(party.lastDimensionCompletion),
       questRewardDelivery: structuredClone(party.questRewardDelivery),
       boosterQueue: structuredClone(party.boosterQueue),
       questAttempt: structuredClone(party.questAttempt),

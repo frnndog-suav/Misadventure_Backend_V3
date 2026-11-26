@@ -30,6 +30,7 @@ export type TPendingReward = {
     | { type: 'quest'; questId: string; questCardId: string }
     | { type: 'scavenge' }
     | { type: 'booster'; boosterCardId: string }
+    | { type: 'grandPrize'; dimensionCardId: string }
   destination: 'inventory' | 'tcgFolder'
   /** Uma entrada por carta e espaço (REQ-159), em ordem de `cardId` e depois principal → montaria. */
   discardOptions: { cardId: string; space: TReceiveSpace; maxCopies: number }[]

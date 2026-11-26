@@ -1339,6 +1339,133 @@ function rewardState(party: ReturnType<typeof makeParty>) {
   }
 }
 
+describe('TakePartyActionUseCase — prêmio de montaria (T-84)', () => {
+  const shard = makeItemCard({ id: 'fixture.shard', completionItem: true })
+  const horse = makeMountCard()
+  const pony = makeMountCard({ id: 'fixture.war-pony', name: 'Pônei' })
+  const owned = {
+    cardId: pony.id,
+    inventory: [{ cardId: ore.id, quantity: 1 }],
+    tcgFolder: [],
+  }
+
+  it.each([
+    { slot: 'vazio', existingMount: null, copiesToLimbo: 1 },
+    { slot: 'ocupado', existingMount: owned, copiesToLimbo: 2 },
+  ])(
+    'REQ-167/REQ-169: distribui o prêmio de montaria com slot $slot',
+    async ({ existingMount, copiesToLimbo }) => {
+      const game = setup({
+        completion: {
+          zoneTitle: harbor.title,
+          requirement: [{ cardId: shard.id, count: 1 }],
+          grandPrize: { cards: [{ cardId: horse.id, copies: 2 }], gold: 0 },
+          finalBoss: null,
+        },
+        player: {
+          completionItems: [{ cardId: shard.id, quantity: 1 }],
+          mount: existingMount,
+        },
+        additionalCards: [shard, horse, pony],
+      })
+
+      const result = await game.accept({ type: 'completeDimension' })
+
+      expect(result.pendingRewards).toEqual([])
+      expect(result).toHaveProperty(
+        'lastDimensionCompletion.members.0.cards',
+        existingMount
+          ? []
+          : [{ cardId: horse.id, copies: 1, destination: 'mount' }]
+      )
+      expect(game.playerState().mount).toEqual(
+        existingMount ?? { cardId: horse.id, inventory: [], tcgFolder: [] }
+      )
+      const lostCopies = result.pullDomainEvents().reduce((total, event) => {
+        if (
+          event.type === 'SentToLimbo' &&
+          event.cardId === horse.id &&
+          event.from === 'mount'
+        ) {
+          return total + event.quantity
+        }
+        return total
+      }, 0)
+      expect(lostCopies).toBe(copiesToLimbo)
+    }
+  )
+})
+
+it('REQ-169/REQ-170: avança pela ordem de lançamento com o prêmio pendente do dono', async () => {
+  const shard = makeItemCard({ id: 'fixture.shard', completionItem: true })
+  const next = makeDimensionCard({
+    id: 'fixture-next.dimension',
+    collectionId: 'fixture-next',
+    releaseOrder: 2,
+  })
+  const later = makeDimensionCard({
+    id: 'fixture-later.dimension',
+    collectionId: 'fixture-later',
+    releaseOrder: 3,
+  })
+  const city = makeUrbanZoneCard({
+    id: 'fixture-next.city',
+    collectionId: next.collectionId,
+  })
+  const game = setup({
+    completion: {
+      zoneTitle: harbor.title,
+      requirement: [{ cardId: shard.id, count: 1 }],
+      grandPrize: { cards: [{ cardId: potion.id, copies: 1 }], gold: 10 },
+      finalBoss: null,
+    },
+    rewardConfig: { ...GAME_CONFIG_DEFAULTS, inventoryCapacity: 1 },
+    player: {
+      completionItems: [{ cardId: shard.id, quantity: 1 }],
+      inventory: [{ cardId: ore.id, quantity: 1 }],
+      gold: GAME_CONFIG_DEFAULTS.purseCapacity - 2,
+      hand: [strength.id],
+      discard: [strength.id],
+    },
+    additionalCards: [shard, later, next, city],
+    publishedCollections: [later.collectionId, next.collectionId],
+  })
+
+  const advanced = await game.accept({ type: 'completeDimension' })
+  expect(advanced.status).toBe('inSession')
+  expect(advanced.dimension.dimensionCardId).toBe(next.id)
+  expect(game.playerState()).toMatchObject({
+    zoneId: city.id,
+    respawnZoneId: city.id,
+    completionItems: [],
+    gold: GAME_CONFIG_DEFAULTS.purseCapacity,
+    discard: [],
+  })
+  expect([...game.playerState().hand].sort()).toEqual(
+    [strength.id, strength.id, endurance.id].sort()
+  )
+  expect(advanced.lastDimensionCompletion).toMatchObject({
+    members: [{ memberId: 'member-1', gold: 2, peakDelta: 25, cards: [] }],
+    next: { type: 'nextDimension', dimensionCardId: next.id },
+  })
+  expect(advanced.pendingRewards).toMatchObject([
+    {
+      memberId: 'member-1',
+      cardId: potion.id,
+      source: { type: 'grandPrize', dimensionCardId: 'fixture.test-dimension' },
+    },
+  ])
+  const resolved = await game.accept({
+    type: 'resolveReward',
+    rewardId: advanced.pendingRewards[0].id,
+    choice: 'leave',
+  })
+  expect(resolved.pendingRewards).toEqual([])
+  expect(resolved.lastDimensionCompletion).toEqual(
+    advanced.lastDimensionCompletion
+  )
+})
+
 describe('TakePartyActionUseCase — chefe final (T-83)', () => {
   const shard = makeItemCard({ id: 'fixture.shard', completionItem: true })
   const items = [{ cardId: shard.id, quantity: 2 }]
@@ -1498,7 +1625,11 @@ describe('TakePartyActionUseCase — chefe final (T-83)', () => {
       resolution: 'victory',
       peakDelta: 23,
     })
-    expect(game.playerState().peak).toBe(33)
+    expect(game.playerState().peak).toBe(58)
+    expect(victory.lastDimensionCompletion).toMatchObject({
+      finalBossDefeated: true,
+      members: [{ memberId: 'member-1', peakDelta: 48 }],
+    })
   })
 
   it.each([0, 37])(
@@ -1551,6 +1682,7 @@ function setup({
   dimensionEffects = [],
   completion,
   otherMember,
+  publishedCollections = [],
   zone = harbor,
 }: {
   requirements?: readonly TRandomEventRequirement[]
@@ -1570,6 +1702,7 @@ function setup({
   dimensionEffects?: ReturnType<typeof makeDimensionCard>['effects']
   completion?: ReturnType<typeof makeDimensionCard>['completion']
   otherMember?: TPlayerState
+  publishedCollections?: string[]
   zone?: typeof harbor
 } = {}) {
   const event = makeRandomEventCard({
@@ -1631,6 +1764,7 @@ function setup({
       party = updated
     })
   const catalog = new InMemoryCardCatalog()
+  catalog.collections = publishedCollections.map((id) => ({ id, name: id }))
   catalog.cards = [
     event,
     combatCard,

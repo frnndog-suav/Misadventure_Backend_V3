@@ -38,14 +38,20 @@ export function availableActions(
   canCompleteDimension = false
 ): TPartyActionType[] {
   const { turn } = party
+  if (party.status === 'frozen') return []
   const choice = party.triggeredEffectChoice
   if (choice)
     return choice.memberId === memberId.toString()
       ? ['resolveTriggeredEffect']
       : []
+  if (party.pendingRewards.length)
+    return party.pendingRewards.some(
+      (reward) => reward.memberId === memberId.toString()
+    )
+      ? ['resolveReward']
+      : []
   if (!turn.memberId.equals(memberId)) return []
   if (combat) return party.combatActions(combat)
-  if (party.pendingRewards.length) return ['resolveReward']
   if (encounter) {
     if (encounter.phase === 'success' || encounter.phase === 'setback')
       return []

@@ -118,6 +118,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 098 | T-81 | [Conteúdo da conclusão e Pico no laboratório](098-T-81-conteudo-da-conclusao.md) | concluída |
 | 099 | T-82 | [Área de itens de conclusão](099-T-82-itens-de-conclusao.md) | concluída |
 | 100 | T-83 | [Elegibilidade e chefe final](100-T-83-elegibilidade-e-chefe-final.md) | concluída |
+| 101 | T-84 | [Desfecho, prêmio e passagem](101-T-84-desfecho-premio-e-passagem.md) | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

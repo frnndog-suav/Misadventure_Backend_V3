@@ -78,7 +78,7 @@ describe('loadContent', () => {
           { ...makeZoneCard(), questDeck: [] },
           makeAttributeCard(),
           makeEquipmentCard(),
-          makeItemCard(),
+          makeItemCard({ completionItem: false }),
           makeRandomEventCard(),
           makeCombatEventCard(),
         ].map((card) => ({ status: 'published', card })),
@@ -113,7 +113,7 @@ describe('loadContent', () => {
         ],
         cards: [
           { status: 'draft', card: makeAttributeCard() },
-          { status: 'published', card: makeItemCard() },
+          { status: 'published', card: makeItemCard({ completionItem: false }) },
         ],
         classes: [],
       },
@@ -153,7 +153,7 @@ describe('loadContent', () => {
     const result = await loadContent(root)
 
     expect(result.ok && result.content.cards).toEqual([
-      { status: 'published', card: makeItemCard() },
+      { status: 'published', card: makeItemCard({ completionItem: false }) },
     ])
   })
 

@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.96 · **Data:** 2026-11-25
+> **Versão do contrato:** 0.97 · **Data:** 2026-11-26
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -3771,7 +3771,7 @@ Regras: README 3.2, 12.1, 12.2, 18.3, 19.1 (item 10), 21.1, 23, 24.5, 28.1 ("Ir 
 - **Sem chefe:** o POST já conclui. **Com chefe:** o POST abre o combate (FEAT-13) com `CombatState.finalBoss: true`; `escape` segue `noEscape`. A vitória conclui no mesmo POST que encerra o combate; outro resultado não conclui nada.
 - **Conclusão** (README 28.1, "Ir para nova dimensão"): todos os membros recebem o prêmio e o Pico de conclusão; o Pico de Chefe vai para quem venceu (as fontes somam). A vez termina, os itens de conclusão saem do jogo e, havendo próxima dimensão lançada, o backend faz a nova preparação completa (menos classe e deck) no mesmo POST. Sem próxima, a sessão termina e o save fica `frozen`.
 - **Próxima dimensão** = a Carta de Dimensão publicada com o menor `releaseOrder` maior que o da atual. "Lançar", no dev, é publicar no editor.
-- **Prêmio sem espaço (README Apêndice B.21, V1):** as cartas do prêmio seguem o destino automático (U2); a cópia que não couber vira `PendingReward` com `source: { type: 'grandPrize'; dimensionCardId }`, resolvida pelo dono já na nova dimensão (ou ao descongelar). `leave` manda a cópia ao limbo. Ouro: o excesso é perdido, como nas outras recompensas.
+- **Prêmio sem espaço (README Apêndice B.21, V1):** as cartas do prêmio seguem o destino automático (U2); a cópia que não couber vira `PendingReward` com `source: { type: 'grandPrize'; dimensionCardId }`, resolvida pelo dono já na nova dimensão (ou ao descongelar). `leave` manda a cópia ao limbo. Montarias seguem o README §26: equipar a primeira cópia se o membro estiver sem montaria e mandar ao limbo cada cópia recebida com o slot ocupado. Só a cópia equipada consta no recibo, com `destination: 'mount'`. Ouro: o excesso é perdido, como nas outras recompensas.
 - **Resumo persistido:** `lastDimensionCompletion` fica gravado até a próxima conclusão, para o painel sobreviver a GET e reabertura.
 - **Pico de Chefe (v0.96, BE):** `bossPeakGain` fica. Até a v0.95 o backend aplicava o +15 de Chefe sem chave de laboratório (valor fixo); na FEAT-19 esse valor passa a vir de `bossPeakGain`, também nos combates de evento. O chefe final ganha esse Pico pelo cálculo normal da vitória (por inimigo `boss` derrotado), sem contagem dupla: 1 chefe → 15 + 25 = 40.
 
@@ -3864,8 +3864,8 @@ interface DimensionCompletionResult {
     peakDelta: number
     /** Ouro efetivamente recebido (após o limite da bolsa). */
     gold: number
-    /** Cópias entregues; as que não couberam estão em pendingRewards. */
-    cards: { cardId: string; copies: number; destination: ReceiveSpace }[]
+    /** Cópias entregues. As que não couberam ficam em pendingRewards, exceto montarias, que vão ao limbo. 'mount' é exclusivo deste recibo. */
+    cards: { cardId: string; copies: number; destination: ReceiveSpace | 'mount' }[]
   }[]
   next: { type: 'nextDimension'; dimensionCardId: string; name: string } | { type: 'frozen' }
   completedAt: string
@@ -3897,6 +3897,8 @@ Contra a `fixture`, com o que o backend acrescenta nesta FEAT: `F` = `fixture.sh
 | Concluir e congelar | `fixture-next` não publicada; mesmo POST | `200`, `next: { type: "frozen" }`, `status: "frozen"`. `GET /parties` lista G como `frozen`. `POST /parties/G/session` → `409 PARTY_FROZEN`. |
 | Descongelar | Publicar `fixture-next` | `GET /parties` → G `idle`; `POST …/session` → `200` na Segunda Dimensão, com `next.type: "nextDimension"`. |
 | Prêmio sem espaço | Inventário, pasta e montaria cheios; concluir | `members[0].cards: []`, `pendingRewards[0].source = { type: "grandPrize", dimensionCardId: "fixture.test-dimension" }` e `availableActions: ["resolveReward"]` na nova dimensão. `leave` → a cópia vai ao limbo. |
+| Prêmio de montaria com slot vazio | Concluir com duas cópias da mesma montaria no prêmio e o membro sem montaria | A primeira é equipada e o recibo traz `{ cardId, copies: 1, destination: 'mount' }`. A segunda vai ao limbo, sem recibo nem pendência. |
+| Prêmio de montaria com slot ocupado | Concluir com montaria no prêmio e o membro já equipado | A montaria equipada é preservada. As cópias do prêmio vão ao limbo, sem recibo nem pendência. |
 | Chefe final | Dimensão editada com `finalBoss` (1 inimigo `boss`, `noEscape: true`); POST | `200`, `combat.finalBoss: true`, `combatStarted.cardTitle` = título do chefe, `escape.unavailableReason` não nulo. Vitória → `lastCombatResult.finalBoss: true`, `lastDimensionCompletion.finalBossDefeated: true`, `peakDelta: 40`. Derrota ou limite de ciclos → nenhum `lastDimensionCompletion` novo, F mantidos, e a ação volta quando M estiver apto de novo. |
 | Editor | Salvar a Carta de Dimensão com `requirement[0].cardId: "fixture.healing-potion"` | `400 CONTENT_INVALID` com um item em `completion.requirement.0.cardId` (carta que não é item de conclusão). Com `zoneTitle: "Nenhuma"` → item em `completion.zoneTitle`. |
 
@@ -4027,3 +4029,4 @@ Contra a `fixture`, com o que o backend acrescenta nesta FEAT: `F` = `fixture.sh
 | 0.94 | 2026-11-25 | FE | FEAT-18 `validado` (T-87): os cenários das 5 campanhas do preparador `test/prepare-feat-18.cjs` passaram com chamadas HTTP contra o backend real (health 0.93), os saves reais passam nos schemas do frontend e as telas foram conferidas pelo autor com o MSW desligado. Sem mudança de forma. |
 | 0.95 | 2026-11-25 | FE | FEAT-19 proposta (`proposto (FE)`): `ItemCard.completionItem`, `DimensionCard.completion` (zona, requisito, prêmio máximo, chefe final), `PlayerState.completionItems`, ação `completeDimension` e 3 motivos, `Party.lastDimensionCompletion`, `PartyStatus` `frozen` e o código `PARTY_FROZEN`, `finalBoss` em `CombatState`/`CombatResult`, `PendingReward.source` `grandPrize`, 2 chaves de Pico, caminhos do editor; glossário §2.18. Prêmio sem espaço vira recompensa pendente (decisão do autor; README B.21 a aplicar no backend, que tem a B.20). Nota da FEAT-16: reprint sai da FEAT-19. |
 | 0.96 | 2026-11-25 | BE | FEAT-19 `acordado`, sem mudança de forma. Esclarecimentos: (1) `bossPeakGain` fica; o backend tinha o +15 de Chefe como valor fixo e passa a lê-lo dessa chave, também nos combates de evento; o chefe final ganha pelo cálculo normal da vitória, sem contagem dupla; (2) o editor segue `ContentInvalidDetails` da FEAT-31 (`path` + `message` pt-BR), sem códigos de motivo; os textos exatos vão na `implementado (BE)`. README com a B.21 (V1) aplicada no backend. |
+| 0.97 | 2026-11-26 | BE | FEAT-19 `acordado`: frontend aceitou `destination: 'mount'` no recibo de conclusão (T-84). A cópia equipada aparece no recibo, e o excedente segue para o limbo conforme o README §26. |
