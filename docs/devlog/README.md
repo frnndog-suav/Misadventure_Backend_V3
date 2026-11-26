@@ -122,6 +122,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 102 | T-85 | [Save congelado e retomada HTTP](102-T-85-save-congelado-e-retomada-http.md) | concluída |
 | 103 | T-86 | [Campanhas da FEAT-19](103-T-86-campanhas-da-feat-19.md) | concluída |
 | 104 | T-87 | [Coleções estendidas e reprint](104-T-87-colecoes-estendidas-e-reprint.md) | implementado (BE) |
+| 105 | FEAT-33 | [Validação integrada na T-99](105-FEAT-33-validada.md) | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
