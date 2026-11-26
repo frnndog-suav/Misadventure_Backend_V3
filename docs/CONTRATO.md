@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.97 · **Data:** 2026-11-26
+> **Versão do contrato:** 0.98 · **Data:** 2026-11-26
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -3885,7 +3885,7 @@ Mensagem: `PARTY_FROZEN` "Este save está congelado até o lançamento da próxi
 
 #### Cenários de validação
 
-Contra a `fixture`, com o que o backend acrescenta nesta FEAT: `F` = `fixture.shard` ("Fragmento", item, `completionItem: true`); `fixture.test-dimension` com `completion = { zoneTitle: "Mina Velha", requirement: [{ cardId: F, count: 3 }], grandPrize: { cards: [{ cardId: "fixture.blade-of-dusk", copies: 1 }], gold: 100 }, finalBoss: null }`; e a coleção `fixture-next` com a Carta de Dimensão `fixture.next-dimension` ("Segunda Dimensão", `releaseOrder: 2`), publicada ou não conforme o cenário. Laboratório no padrão. `G` = grupo solo em sessão; `M` = o membro.
+Contra a `fixture`, com o que o backend acrescenta nesta FEAT: `F` = `fixture.shard` ("Fragmento", item, `completionItem: true`); `fixture.test-dimension` com `completion = { zoneTitle: "Mina Velha", requirement: [{ cardId: F, count: 3 }], grandPrize: { cards: [{ cardId: "fixture.blade-of-dusk", copies: 1 }], gold: 100 }, finalBoss: null }`; e a coleção `fixture-next` com a Carta de Dimensão `fixture-next.next-dimension` ("Segunda Dimensão", `releaseOrder: 2`), publicada ou não conforme o cenário. Laboratório no padrão. `G` = grupo solo em sessão; `M` = o membro.
 
 | Cenário | Dado / Quando | Então |
 |---|---|---|
@@ -3893,7 +3893,7 @@ Contra a `fixture`, com o que o backend acrescenta nesta FEAT: `F` = `fixture.sh
 | Doação | `POST /grants` `{ type: "card", cardId: F, quantity: 3 }` com o inventário cheio | `200`, `completionItems: [{ cardId: F, quantity: 3 }]`, inventário igual. |
 | Ação disponível | M na Mina Velha com 3 F e ≥ 1 PA | `availableActions` tem `completeDimension` antes de `endTurn`. Com 2 F ou em outra zona: ausente. |
 | Recusas | POST `{ type: "completeDimension" }` no Porto Cinzento com 3 F | `409 ACTION_NOT_ALLOWED`, `details.reason: "notCompletionZone"`. Na Mina Velha com 2 F → `completionRequirementNotMet`; com 0 PA → `noActionPoints`. Nada muda. |
-| Concluir com próxima | `fixture-next` publicada; POST na Mina Velha com 3 F | `200`: `lastDimensionCompletion` com `finalBossDefeated: false`, `members[0] = { peakDelta: 25, gold: 100, cards: [{ cardId: "fixture.blade-of-dusk", copies: 1, destination: "inventory" }] }`, `next: { type: "nextDimension", dimensionCardId: "fixture.next-dimension", name: "Segunda Dimensão" }`; `dimension.dimensionCardId: "fixture.next-dimension"`; `completionItems: []`; `openQuests: []`; mão com 7 cartas; zona atual e respawn = a cidade inicial nova; `status: "inSession"`. O GET devolve o mesmo resumo. |
+| Concluir com próxima | `fixture-next` publicada; POST na Mina Velha com 3 F | `200`: `lastDimensionCompletion` com `finalBossDefeated: false`, `members[0] = { peakDelta: 25, gold: 100, cards: [{ cardId: "fixture.blade-of-dusk", copies: 1, destination: "inventory" }] }`, `next: { type: "nextDimension", dimensionCardId: "fixture-next.next-dimension", name: "Segunda Dimensão" }`; `dimension.dimensionCardId: "fixture-next.next-dimension"`; `completionItems: []`; `openQuests: []`; mão com 7 cartas; zona atual e respawn = a cidade inicial nova; `status: "inSession"`. O GET devolve o mesmo resumo. |
 | Concluir e congelar | `fixture-next` não publicada; mesmo POST | `200`, `next: { type: "frozen" }`, `status: "frozen"`. `GET /parties` lista G como `frozen`. `POST /parties/G/session` → `409 PARTY_FROZEN`. |
 | Descongelar | Publicar `fixture-next` | `GET /parties` → G `idle`; `POST …/session` → `200` na Segunda Dimensão, com `next.type: "nextDimension"`. |
 | Prêmio sem espaço | Inventário, pasta e montaria cheios; concluir | `members[0].cards: []`, `pendingRewards[0].source = { type: "grandPrize", dimensionCardId: "fixture.test-dimension" }` e `availableActions: ["resolveReward"]` na nova dimensão. `leave` → a cópia vai ao limbo. |
@@ -4030,3 +4030,4 @@ Contra a `fixture`, com o que o backend acrescenta nesta FEAT: `F` = `fixture.sh
 | 0.95 | 2026-11-25 | FE | FEAT-19 proposta (`proposto (FE)`): `ItemCard.completionItem`, `DimensionCard.completion` (zona, requisito, prêmio máximo, chefe final), `PlayerState.completionItems`, ação `completeDimension` e 3 motivos, `Party.lastDimensionCompletion`, `PartyStatus` `frozen` e o código `PARTY_FROZEN`, `finalBoss` em `CombatState`/`CombatResult`, `PendingReward.source` `grandPrize`, 2 chaves de Pico, caminhos do editor; glossário §2.18. Prêmio sem espaço vira recompensa pendente (decisão do autor; README B.21 a aplicar no backend, que tem a B.20). Nota da FEAT-16: reprint sai da FEAT-19. |
 | 0.96 | 2026-11-25 | BE | FEAT-19 `acordado`, sem mudança de forma. Esclarecimentos: (1) `bossPeakGain` fica; o backend tinha o +15 de Chefe como valor fixo e passa a lê-lo dessa chave, também nos combates de evento; o chefe final ganha pelo cálculo normal da vitória, sem contagem dupla; (2) o editor segue `ContentInvalidDetails` da FEAT-31 (`path` + `message` pt-BR), sem códigos de motivo; os textos exatos vão na `implementado (BE)`. README com a B.21 (V1) aplicada no backend. |
 | 0.97 | 2026-11-26 | BE | FEAT-19 `acordado`: frontend aceitou `destination: 'mount'` no recibo de conclusão (T-84). A cópia equipada aparece no recibo, e o excedente segue para o limbo conforme o README §26. |
+| 0.98 | 2026-11-26 | BE | FEAT-19: frontend confirmou o ID `fixture-next.next-dimension` para a Segunda Dimensão. Corrigidas a descrição da fixture e as duas expectativas de ID em “Concluir com próxima”. |

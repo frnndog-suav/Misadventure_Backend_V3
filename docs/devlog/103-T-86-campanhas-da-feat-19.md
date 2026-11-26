@@ -1,16 +1,16 @@
 # 103 — T-86 — Campanhas da FEAT-19
 
 - Data — 2026-11-26
-- Status — aguardando acordo sobre o ID da sucessora e verificação local
+- Status — aguardando verificação local
 - Spec — v1.07, REQ-164 a REQ-172
-- Contrato — v0.97, FEAT-19 `acordado`
+- Contrato — v0.98, FEAT-19 `acordado`
 - Horas — a preencher pelo autor
 
 ## Alterações
 
 - `test/prepare-feat-19.cjs` copia as fixtures para um diretório temporário por perfil. Cria o Fragmento, configura a conclusão na Mina Velha e acrescenta a Segunda Dimensão.
 - O preparador usa criação e doação pela API. Ajusta apenas os saves recém-criados, no Postgres local da API, para posicionar o personagem e montar os pontos de partida. Imprime URL, ID do grupo, ID do membro e ações disponíveis.
-- A fixture usa `fixture-next.next-dimension`. O carregador rejeitou `fixture.next-dimension` na coleção `fixture-next`, pois exige o prefixo da coleção no ID. A correção no texto compartilhado aguarda acordo.
+- A fixture usa `fixture-next.next-dimension`. O carregador rejeitou `fixture.next-dimension` na coleção `fixture-next`, pois exige o prefixo da coleção no ID. O frontend confirmou a correção, aplicada em `docs/CONTRATO.md` v0.98. A conferência estática confirmou os três IDs e `git diff --check` passou. A cópia compartilhada aguarda envio ao frontend.
 
 ## Roteiro e resultados esperados
 

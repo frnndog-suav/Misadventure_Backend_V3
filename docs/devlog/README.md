@@ -120,7 +120,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 100 | T-83 | [Elegibilidade e chefe final](100-T-83-elegibilidade-e-chefe-final.md) | concluída |
 | 101 | T-84 | [Desfecho, prêmio e passagem](101-T-84-desfecho-premio-e-passagem.md) | concluída |
 | 102 | T-85 | [Save congelado e retomada HTTP](102-T-85-save-congelado-e-retomada-http.md) | concluída |
-| 103 | T-86 | [Campanhas da FEAT-19](103-T-86-campanhas-da-feat-19.md) | aguardando acordo e verificação local |
+| 103 | T-86 | [Campanhas da FEAT-19](103-T-86-campanhas-da-feat-19.md) | aguardando verificação local |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
