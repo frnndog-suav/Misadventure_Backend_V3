@@ -1,6 +1,6 @@
 # Misadventures — Roadmap de desenvolvimento
 
-> **Versão:** 0.92 · **Data:** 2026-11-26
+> **Versão:** 0.94 · **Data:** 2026-11-26
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend; o autor copia o arquivo inteiro quando ele muda. Base: README Parte III (III.2 e III.4). As regras estão em [`README.md`](README.md); o que trafega entre os lados, em [`CONTRATO.md`](CONTRATO.md).
 
@@ -78,7 +78,7 @@ Situação por lado: `a fazer` · `em andamento` · `aguardando outro lado` · `
 
 | FEAT | Título | README | FE | BE |
 |---|---|---|---|---|
-| FEAT-20 | Ajudantes de IA na criação do grupo, jogando suas vezes na ordem (BE: IA de jogador heurística com sorteio de classes) | II.7, 28.1, 11.2 | a fazer | a fazer |
+| FEAT-20 | Ajudantes de IA na criação do grupo, jogando suas vezes na ordem (BE: IA de jogador heurística com sorteio de classes) | II.7, 28.1, 11.2 | aguardando outro lado | aguardando outro lado |
 | FEAT-21 | Ver as vezes dos outros jogadores "ao vivo" (depende da P-02) | 11.4 | a fazer | a fazer |
 | FEAT-22 | Recrutar ajudantes e combate em grupo | 19.5 | a fazer | a fazer |
 | FEAT-23 | Negociação | 23 | a fazer | a fazer |
@@ -206,3 +206,5 @@ Situação por lado: `a fazer` · `em andamento` · `aguardando outro lado` · `
 | 0.90 | 2026-11-26 | FEAT-33 com contrato `acordado` (CONTRATO v1.02). T-96 liberada com MSW. |
 | 0.91 | 2026-11-26 | FEAT-33 implementada no backend (CONTRATO v1.03) e campanhas disponíveis para validação integrada na T-99. |
 | 0.92 | 2026-11-26 | FEAT-33 validada nos dois lados após a T-99 (devlog frontend 130, CONTRATO v1.04). |
+| 0.93 | 2026-11-26 | FEAT-20 aprovada no FE (SPEC-FRONTEND v1.10, REQ-102 a REQ-106 e T-100 a T-104), CONTRATO v1.05 `proposto (FE)`. FE `aguardando outro lado`. |
+| 0.94 | 2026-11-26 | FEAT-20 revisada pelo backend (CONTRATO v1.06, proposto (BE), devlog BE 106). T-100 aguarda aceite. |
