@@ -1,8 +1,8 @@
 # 100 — T-83 — Elegibilidade e chefe final
 
 - Data — 2026-11-26
-- Status — aguardando testes do autor
-- Spec — v1.04, REQ-165, REQ-167 e REQ-168
+- Status — concluída
+- Spec — v1.05, REQ-165, REQ-167 e REQ-168
 - Contrato — v0.96, FEAT-19 `acordado`
 - Horas — a preencher pelo autor
 
@@ -15,7 +15,7 @@
 
 ## Verificação
 
-O autor confirmou 10 falhas esperadas e 58 casos aprovados antes da implementação. Os testes em `random-event.test.ts`, `completion.test.ts` e `drizzle-party-mapper.test.ts` verificam recusas, requisito dividido entre membros, projeção, Sem fuga, fuga, derrota, limite de ciclos, vitória, Pico configurável e reabertura. As suítes são unitárias e dispensam serviços locais. A reexecução pelo autor está pendente.
+O autor confirmou 10 falhas esperadas e 58 casos aprovados antes da implementação. Os testes em `random-event.test.ts`, `completion.test.ts` e `drizzle-party-mapper.test.ts` verificam recusas, requisito dividido entre membros, projeção, Sem fuga, fuga, derrota, limite de ciclos, vitória, Pico configurável e reabertura. O autor confirmou a aprovação das três suítes unitárias após a implementação.
 
 TypeScript e ESLint passaram. O agregado usa as portas existentes para horário e IDs e mantém o RNG do combate no fluxo semeado.
 
@@ -24,6 +24,6 @@ TypeScript e ESLint passaram. O agregado usa as portas existentes para horário 
 - A T-84 liga a ação sem chefe e a vitória ao desfecho comum, com prêmio, Pico de conclusão e passagem. Nesta etapa, a ação sem chefe valida e cobra o PA.
 - A validação integrada da FEAT-19 permanece na T-86.
 
-## Commit sugerido
+## Commit de implementação
 
-`feat/add dimension eligibility and final boss combat (t-83)`
+`1dd9b94 feat/add dimension eligibility and final boss combat (t-83)`
