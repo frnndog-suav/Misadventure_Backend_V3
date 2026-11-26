@@ -1134,7 +1134,10 @@ const v11State = v8State.extend({
   ...v9Fields,
   ...stateFields(
     currentConfigSchema,
-    v10PlayerSchema.extend({ mount: mountSchema.nullable() })
+    v10PlayerSchema.extend({
+      mount: mountSchema.nullable(),
+      completionItems: slotQuantities.optional(),
+    })
   ),
 })
 
@@ -1301,6 +1304,9 @@ export class DrizzlePartyMapper {
             build: m.player.build.map((e) => ({ ...e })),
             tcgFolder: m.player.tcgFolder.map((e) => ({ ...e })),
             inventory: m.player.inventory.map(storedSlot),
+            ...(m.player.completionItems.length > 0 && {
+              completionItems: [...m.player.completionItems],
+            }),
             vault: {
               slots: m.player.vault.slots.map(storedSlot),
               decks: m.player.vault.decks.map((deck) =>
@@ -1505,6 +1511,7 @@ type TStoredPlayer = Omit<z.infer<typeof legacyPlayerSchema>, 'mount'> & {
       TPlayerState,
       | 'tcgFolder'
       | 'inventory'
+      | 'completionItems'
       | 'equipment'
       | 'vault'
       | 'lastScavenge'
@@ -1550,6 +1557,7 @@ function upgradePlayer(
         : player.build,
     tcgFolder: player.tcgFolder ?? [],
     inventory: player.inventory ?? [],
+    completionItems: player.completionItems ?? [],
     mount: player.mount ?? null,
     equipment: player.equipment ?? emptyEquipment(),
     vault: player.vault ?? emptyVault(),

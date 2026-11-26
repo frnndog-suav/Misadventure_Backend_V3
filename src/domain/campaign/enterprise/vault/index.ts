@@ -242,6 +242,7 @@ export function applyVaultOperations(input: {
         const card = cardOf(cardId)
         if (
           !card ||
+          (card.type === 'item' && card.completionItem) ||
           (card.type !== 'attribute' &&
             card.type !== 'equipment' &&
             card.type !== 'item')

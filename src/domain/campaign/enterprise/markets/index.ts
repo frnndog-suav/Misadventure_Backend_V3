@@ -79,7 +79,8 @@ export function marketCandidatesOf(
         case 'equipment':
           return [{ cardId: card.id, rarity: card.rarity }]
         case 'item':
-          return card.itemCategory === 'treasure' ||
+          return card.completionItem ||
+            card.itemCategory === 'treasure' ||
             card.itemCategory === 'booster'
             ? []
             : [{ cardId: card.id, rarity: card.rarity }]

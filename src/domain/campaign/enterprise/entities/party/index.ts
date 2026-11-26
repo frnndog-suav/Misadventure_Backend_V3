@@ -4065,10 +4065,30 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       : { ...entry, origin: { type: 'reserveDeck' } }
   }
 
+  private addCompletionItem(
+    player: TPlayerState,
+    cardId: string,
+    quantity: number
+  ): TPlayerState {
+    const owned = player.completionItems.find(
+      (entry) => entry.cardId === cardId
+    )
+    return {
+      ...player,
+      completionItems: sortedByCardId([
+        ...player.completionItems.filter((entry) => entry.cardId !== cardId),
+        { cardId, quantity: (owned?.quantity ?? 0) + quantity },
+      ]),
+    }
+  }
+
   private addReward(
     player: TPlayerState,
     card: TAttributeCard | TItemCard | TEquipmentCard
-  ): { player: TPlayerState; space: TReceiveSpace } | null {
+  ): { player: TPlayerState; space: TReceiveSpace | null } | null {
+    if (card.type === 'item' && card.completionItem) {
+      return { player: this.addCompletionItem(player, card.id, 1), space: null }
+    }
     // REQ-159: inventário/pasta e, cheio, a montaria.
     const received = receiveCard(
       player,
@@ -5773,7 +5793,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
               ? kept
                 ? kept.space === 'mountInventory'
                   ? 'mountInventory'
-                  : 'inventory'
+                  : kept.space === 'inventory'
+                    ? 'inventory'
+                    : 'none'
                 : 'pending'
               : 'none',
           }
@@ -6251,6 +6273,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             ...player,
             mount: { cardId: card.id, inventory: [], tcgFolder: [] },
           }
+        } else if (card.type === 'item' && card.completionItem) {
+          next = this.addCompletionItem(player, card.id, quantity)
         } else {
           // REQ-159: o que não cabe no inventário/pasta vai à montaria.
           const received = receiveCard(

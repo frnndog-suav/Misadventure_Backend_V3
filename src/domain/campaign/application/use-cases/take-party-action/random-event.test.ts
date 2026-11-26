@@ -6,6 +6,7 @@ import type {
   TCard,
   TExecutableAbility,
   TRandomEventRequirement,
+  TZoneQuestCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import { availableActions } from '../../../enterprise/available-actions'
@@ -911,6 +912,92 @@ describe('TakePartyActionUseCase — desfechos de combate (T-48)', () => {
 })
 
 describe('TakePartyActionUseCase — recompensas de encontro (T-42)', () => {
+  it.each(['grantReward', 'drawRewards', 'searchReward'] as const)(
+    'REQ-166: %s entrega item de conclusão sem ocupar inventário ou montaria',
+    async (type) => {
+      const shard = { ...ore, id: 'fixture.shard', completionItem: true }
+      const inventory = [{ cardId: spare.id, quantity: 1 }]
+      const mount = {
+        cardId: 'fixture.plow-horse',
+        inventory: [],
+        tcgFolder: [],
+      }
+      const step =
+        type === 'drawRewards'
+          ? { type, count: 1 }
+          : type === 'grantReward'
+            ? { type, cardId: shard.id, copies: 2 }
+            : { type, cardId: shard.id }
+      const game = setup({
+        player: { inventory, mount },
+        additionalCards: [shard, makeMountCard({ id: mount.cardId })],
+        rewardCards: [shard.id],
+        rewardConfig: {
+          ...GAME_CONFIG_DEFAULTS,
+          inventoryCapacity: 1,
+          mountInventorySlots: 1,
+        },
+        outcome: { text: 'Receba fragmentos.', steps: [step] },
+      })
+      const encounterId = await game.reveal()
+      const finished = await game.accept({ type: 'resolveEvent', encounterId })
+
+      expect(finished.pendingRewards).toEqual([])
+      expect(game.playerState()).toMatchObject({
+        inventory,
+        mount,
+        completionItems: [
+          { cardId: shard.id, quantity: type === 'grantReward' ? 2 : 1 },
+        ],
+      })
+    }
+  )
+
+  it('REQ-166: entrega item de conclusão de missão com inventário cheio', async () => {
+    const shard = { ...ore, id: 'fixture.shard', completionItem: true }
+    const inventory = [{ cardId: spare.id, quantity: 1 }]
+    const quest: TZoneQuestCard = {
+      type: 'zoneQuest',
+      id: 'fixture.shard-quest',
+      collectionId: 'fixture',
+      title: 'Fragmentos',
+      summary: 'Receba fragmentos.',
+      stages: [
+        {
+          type: 'interaction',
+          location: { type: 'zoneType', zoneType: 'urban' },
+          text: 'Entregue a missão.',
+        },
+      ],
+      rewards: [{ type: 'grantReward', cardId: shard.id, copies: 2 }],
+    }
+    const questId = 'quest-1'
+    const game = setup({
+      player: {
+        inventory,
+        openZoneQuests: [
+          {
+            questId,
+            questCardId: quest.id,
+            originZoneId: harbor.id,
+            stageIndex: 0,
+          },
+        ],
+      },
+      additionalCards: [quest, shard],
+      rewardConfig: { ...GAME_CONFIG_DEFAULTS, inventoryCapacity: 1 },
+    })
+
+    const finished = await game.accept({ type: 'finishQuest', questId })
+
+    expect(finished.pendingRewards).toEqual([])
+    expect(game.playerState()).toMatchObject({
+      inventory,
+      openZoneQuests: [],
+      completionItems: [{ cardId: shard.id, quantity: 2 }],
+    })
+  })
+
   it('REQ-114/REQ-115: pausa na primeira cópia, valida o descarte e retoma pela reserva uma vez', async () => {
     const inventory = [{ cardId: spare.id, quantity: 2 }]
     const heal = {

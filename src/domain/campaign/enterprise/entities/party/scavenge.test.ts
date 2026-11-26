@@ -254,6 +254,34 @@ describe('Party.scavenge (REQ-91, REQ-92, REQ-96)', () => {
     expect(player.lastRewardDelivery?.space).toBe('mountInventory')
   })
 
+  it('REQ-166: vasculhar entrega item de conclusão com inventário cheio', () => {
+    const shard = { ...FISH, completionItem: true }
+    const inventory = [slot(ROD.id)]
+    const party = partyOf(
+      { inventory },
+      {
+        config: { ...GAME_CONFIG_DEFAULTS, inventoryCapacity: 1 },
+        rewardDecks: [{ zoneType: 'urban', cards: [shard.id] }],
+      }
+    )
+
+    expect(
+      party
+        .scavenge(
+          shard.id,
+          { ...catalog(), cards: [ROD, shard, RELIC, POTION] },
+          LATER,
+          sequentialIds()
+        )
+        .isRight()
+    ).toBe(true)
+    expect(party.pendingRewards).toEqual([])
+    expect(playerOf(party)).toMatchObject({
+      inventory,
+      completionItems: [slot(shard.id)],
+    })
+  })
+
   it('REQ-91: carta que empilha e já tem slot → soma no slot (REQ-70)', () => {
     const party = partyOf({ inventory: [slot(ROD.id), slot(FISH.id, 2)] })
 

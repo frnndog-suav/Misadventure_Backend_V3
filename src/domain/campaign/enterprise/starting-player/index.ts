@@ -86,6 +86,7 @@ export function createStartingPlayer({
     tcgFolder: [],
     // README 9.1: primeira aventura sem equipamentos nem recursos (REQ-70).
     inventory: [],
+    completionItems: [],
     equipment: emptyEquipment(),
     vault: emptyVault(),
     expansions: noExpansions(),

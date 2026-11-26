@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 1.03 · **Data:** 2026-11-26
+> **Versão da spec:** 1.04 · **Data:** 2026-11-26
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -823,7 +823,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 ### FEAT-19 — Conclusão da dimensão, chefe final, passagem e save congelado
 
 - [x] **T-81 — Conteúdo, editor e laboratório (REQ-164, REQ-165).** Contrato `acordado` na v0.96. Schemas, catálogo, editor, integridade e chaves entregues. O autor confirmou as cinco suítes unitárias. A pendência de duplicação de dimensão segue em D-60(j). Concluída no devlog 098.
-- [ ] **T-82 — Área de itens de conclusão (REQ-166, REQ-172).** Integrar doações e recompensas, persistir as quantidades e aplicar filtros de distribuição. Verificar acúmulo, ordenação, inventário cheio e exclusão dos fluxos proibidos.
+- [x] **T-82 — Área de itens de conclusão (REQ-166, REQ-172).** Integrar doações e recompensas, persistir as quantidades e aplicar filtros de distribuição. Verificar acúmulo, ordenação, inventário cheio e exclusão dos fluxos proibidos.
 - [ ] **T-83 — Elegibilidade e chefe final (REQ-165, REQ-167, REQ-168).** Integrar parser, projeções e combate. Verificar recusas, requisito dividido entre membros, Sem fuga, fuga, derrota, limite de ciclos e Pico configurado também nos eventos. Ligar a vitória ao desfecho da T-84.
 - [ ] **T-84 — Desfecho, prêmio e passagem (REQ-167 a REQ-170).** Ligar ação direta e vitória ao mesmo desfecho. Verificar recibos por membro, bolsa, destinos, pendências V1, ordem de lançamento e a tabela “Mantém / Reinicia” do README 28.1. Confirmar o recibo da montaria antes de implementá-lo: o contrato admite montaria no prêmio e `ReceiveSpace` não representa recebê-la equipada (D-154).
 - [ ] **T-85 — Save, congelamento e retomada HTTP (REQ-171, REQ-172).** Verificar legado, reabertura de combate e de pendência, consultas sem efeitos, publicação posterior, retomada sem duplicação e RNG determinístico.
@@ -936,6 +936,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 1.01 | 2026-11-25 | T-80: preparador `test/prepare-feat-18.cjs` e campanhas da FEAT-18 (devlog 097); FEAT-18 `implementado (BE)` no CONTRATO v0.93. A T-80 fecha com o `validado`. |
 | 1.02 | 2026-11-26 | Planejamento da FEAT-19 com base no CONTRATO v0.96: REQ-164 a REQ-172 e T-81 a T-86. Retomada na T-81. |
 | 1.03 | 2026-11-26 | T-81 concluída (devlog 098) após confirmação dos testes pelo autor. Retomada na T-82 (REQ-166, REQ-172). |
+| 1.04 | 2026-11-26 | T-82 concluída (devlog 099) após confirmação dos testes pelo autor. Retomada na T-83 (REQ-165, REQ-167, REQ-168). |
 
 ## Apêndice A — Conteúdo de teste
 

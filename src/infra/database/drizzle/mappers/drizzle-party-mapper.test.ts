@@ -11,7 +11,10 @@ import { PartyMember } from '@/domain/campaign/enterprise/entities/party-member'
 import { noExpansions } from '@/domain/campaign/enterprise/markets'
 import { PartyPresenter } from '@/infra/http/presenters/party-presenter'
 import { removePostV6Config } from '../../../../../test/factories/remove-post-v6-config'
-import { makeCombatEventCard } from '../../../../../test/factories/make-card'
+import {
+  makeCombatEventCard,
+  makeItemCard,
+} from '../../../../../test/factories/make-card'
 import {
   makeParty,
   makePlayerState,
@@ -30,6 +33,41 @@ function usedRngParty() {
 }
 
 describe('DrizzlePartyMapper', () => {
+  it('REQ-172: preserva quantidades de conclusão no save e na projeção HTTP', () => {
+    const party = usedRngParty()
+    const card = makeItemCard({ id: 'fixture.shard', completionItem: true })
+    const completionItems = [{ cardId: card.id, quantity: 3 }]
+    expect(
+      party
+        .grant(
+          party.members[0].id,
+          { type: 'card', card, quantity: 3 },
+          party.savedAt
+        )
+        .isRight()
+    ).toBe(true)
+
+    const row = DrizzlePartyMapper.toDrizzle(party)
+    expect(row.state.members[0].player).toMatchObject({ completionItems })
+
+    const restored = DrizzlePartyMapper.toDomain(row)
+    expect(restored.rngState).toEqual(party.rngState)
+    expect(restored.members[0].player).toMatchObject({ completionItems })
+    expect(
+      PartyPresenter.toHTTP(restored, new Map()).members[0].player
+    ).toMatchObject({ completionItems })
+  })
+
+  it('REQ-172: save sem o campo de conclusão abre com a lista vazia', () => {
+    const row = DrizzlePartyMapper.toDrizzle(usedRngParty())
+    expect(row.state.members[0].player).not.toHaveProperty('completionItems')
+
+    const restored = DrizzlePartyMapper.toDomain(row)
+    expect(
+      PartyPresenter.toHTTP(restored, new Map()).members[0].player
+    ).toMatchObject({ completionItems: [] })
+  })
+
   it('REQ-135: lê um save v9 com padrões de missão e projeções vazias', () => {
     const party = usedRngParty()
     const row = DrizzlePartyMapper.toDrizzle(party)
@@ -329,14 +367,15 @@ describe('DrizzlePartyMapper', () => {
     expect(restored.rngState).toEqual(party.rngState)
   })
 
-  it('D-31/D-87/REQ-103: guarda o state v10 com a lista de status', () => {
+  it('D-31/D-87/REQ-103: guarda o state v11 com a lista de status', () => {
     const party = usedRngParty()
-    const { lastKnockout, skipNextTurn, ...storedPlayer } =
+    const { completionItems, lastKnockout, skipNextTurn, ...storedPlayer } =
       party.members[0].player
 
     const row = DrizzlePartyMapper.toDrizzle(party)
 
     expect(storedPlayer.statuses).toEqual([])
+    expect(completionItems).toEqual([])
     expect(lastKnockout).toBeNull()
     expect(skipNextTurn).toBe(false)
     expect(row).toEqual({

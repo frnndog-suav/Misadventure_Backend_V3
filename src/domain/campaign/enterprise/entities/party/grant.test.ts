@@ -44,6 +44,34 @@ function partyOf(
 const playerOf = (party: ReturnType<typeof partyOf>) => party.members[0].player
 
 describe('Party.grant (REQ-76, REQ-77)', () => {
+  it('REQ-166: acumula doações em ordem de ID com inventário cheio', () => {
+    const inventory = Array.from(
+      { length: GAME_CONFIG_DEFAULTS.inventoryCapacity },
+      () => ({ cardId: K.id, quantity: 1 })
+    )
+    const party = partyOf({ inventory })
+    const shard = { ...K, id: 'fixture.shard', completionItem: true }
+    const fragment = { ...K, id: 'fixture.fragment', completionItem: true }
+
+    for (const [card, quantity] of [
+      [shard, 2],
+      [fragment, 1],
+      [shard, 3],
+    ] as const) {
+      expect(
+        party.grant(MEMBER, { type: 'card', card, quantity }, LATER).isRight()
+      ).toBe(true)
+    }
+
+    expect(playerOf(party)).toMatchObject({
+      inventory,
+      completionItems: [
+        { cardId: fragment.id, quantity: 1 },
+        { cardId: shard.id, quantity: 5 },
+      ],
+    })
+  })
+
   it('REQ-77: item que empilha → soma no mesmo slot; vale com o grupo idle; savedAt; LabGrantApplied', () => {
     const party = partyOf()
     const before = party.rngState

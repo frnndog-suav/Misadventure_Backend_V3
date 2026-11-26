@@ -63,6 +63,7 @@ export type TPlayerState = Readonly<{
   tcgFolder: readonly TStarterDeckEntry[]
   /** Inventário (README 6.2; REQ-70, D-75): slots na ordem de chegada. */
   inventory: readonly TInventorySlot[]
+  completionItems: readonly Readonly<{ cardId: string; quantity: number }>[]
   /** Equipamento em uso por categoria (README 5.1; REQ-70). */
   equipment: Readonly<Record<TEquipmentSlot, string | null>>
   /** Montaria (README 26; REQ-157): `null`/ausente = sem montaria. */

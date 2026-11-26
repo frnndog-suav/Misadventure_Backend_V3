@@ -154,6 +154,7 @@ export interface TPlayerStateHttp {
   tcgFolderCapacity: number
   /** FEAT-10 (REQ-70, REQ-71). */
   inventory: TInventorySlotHttp[]
+  completionItems: TPlayerState['completionItems']
   inventoryCapacity: number
   equipment: Record<TEquipmentSlot, string | null>
   /** FEAT-17 (REQ-147): estado do equipamento em uso; `null` onde não há. */
@@ -446,6 +447,7 @@ function playerToHTTP(
     tcgFolder: copiesToHTTP(player.tcgFolder),
     tcgFolderCapacity: capacities.tcgFolder,
     inventory: player.inventory.map((slot) => slotToHTTP(slot, cards)),
+    completionItems: player.completionItems,
     statuses: player.statuses,
     activatableEffects: effects,
     inventoryCapacity: party.config.inventoryCapacity,

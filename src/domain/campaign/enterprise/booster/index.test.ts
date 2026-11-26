@@ -109,6 +109,15 @@ describe('drawBoosterCards (REQ-144; D-122)', () => {
 })
 
 describe('boosterCandidatesOf (REQ-144, mesmo filtro da REQ-138)', () => {
+  it('REQ-166: exclui itens de conclusão do booster', () => {
+    const ordinary = makeItemCard({ id: 'fixture.ordinary' })
+    const shard = makeItemCard({ id: 'fixture.shard', completionItem: true })
+
+    expect(boosterCandidatesOf([shard, ordinary], 'fixture')).toMatchObject([
+      { cardId: ordinary.id },
+    ])
+  })
+
   it('só a coleção do booster; sem tesouro nem booster; ordenadas por id', () => {
     const cards = [
       makeAttributeCard({ id: 'fixture.b' }),

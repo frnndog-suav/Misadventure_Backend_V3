@@ -21,6 +21,15 @@ import {
 
 type TStep = readonly [min: number, max: number, value: number]
 
+it('REQ-166: exclui itens de conclusão do pool de singles', () => {
+  const ordinary = makeItemCard({ id: 'fixture.ordinary' })
+  const shard = makeItemCard({ id: 'fixture.shard', completionItem: true })
+
+  expect(marketCandidatesOf([shard, ordinary])).toMatchObject([
+    { cardId: ordinary.id },
+  ])
+})
+
 /** RNG com chamadas `nextInt(min, max)` roteirizadas: confere a faixa de cada uma e o fim do roteiro. */
 function scriptedRng(steps: readonly TStep[]) {
   const queue = [...steps]

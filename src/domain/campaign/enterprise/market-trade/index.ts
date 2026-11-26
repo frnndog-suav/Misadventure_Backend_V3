@@ -138,6 +138,7 @@ export function sellValue(
 ): { price: number; lotSize: number } | null {
   switch (card.type) {
     case 'item':
+      if (card.completionItem) return null
       if (card.stockPrice !== null) {
         return {
           price: Math.max(1, Math.floor(card.stockPrice / 2)),
@@ -261,6 +262,7 @@ export function marketBoosters(
     .filter(
       (card): card is TItemCard =>
         card.type === 'item' &&
+        !card.completionItem &&
         card.itemCategory === 'booster' &&
         card.boosterCollectionId === collectionId
     )
@@ -379,7 +381,9 @@ export function describeMarket(input: {
 
   const stock = input.zoneStock.flatMap((cardId) => {
     const card = cards.get(cardId)
-    return card?.type === 'item' && card.stockPrice !== null
+    return card?.type === 'item' &&
+      !card.completionItem &&
+      card.stockPrice !== null
       ? [
           {
             cardId,
@@ -396,6 +400,7 @@ export function describeMarket(input: {
           slotIndex,
           offer:
             card === undefined ||
+            (card.type === 'item' && card.completionItem) ||
             (card.type !== 'attribute' &&
               card.type !== 'equipment' &&
               card.type !== 'item')
@@ -671,6 +676,7 @@ export function applyMarketOperations(input: {
         if (
           !input.zoneStock.includes(cardId) ||
           card?.type !== 'item' ||
+          card.completionItem ||
           card.stockPrice === null
         ) {
           return refuse('notInMarketStock', cardId)
@@ -723,6 +729,7 @@ export function applyMarketOperations(input: {
         const card = cardId === null ? undefined : cards.get(cardId)
         if (
           cardId === null ||
+          (card?.type === 'item' && card.completionItem) ||
           (card?.type !== 'attribute' &&
             card?.type !== 'equipment' &&
             card?.type !== 'item')
