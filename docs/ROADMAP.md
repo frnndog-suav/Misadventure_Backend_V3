@@ -1,6 +1,6 @@
 # Misadventures — Roadmap de desenvolvimento
 
-> **Versão:** 0.94 · **Data:** 2026-11-26
+> **Versão:** 0.95 · **Data:** 2026-11-26
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend; o autor copia o arquivo inteiro quando ele muda. Base: README Parte III (III.2 e III.4). As regras estão em [`README.md`](README.md); o que trafega entre os lados, em [`CONTRATO.md`](CONTRATO.md).
 
@@ -208,3 +208,4 @@ Situação por lado: `a fazer` · `em andamento` · `aguardando outro lado` · `
 | 0.92 | 2026-11-26 | FEAT-33 validada nos dois lados após a T-99 (devlog frontend 130, CONTRATO v1.04). |
 | 0.93 | 2026-11-26 | FEAT-20 aprovada no FE (SPEC-FRONTEND v1.10, REQ-102 a REQ-106 e T-100 a T-104), CONTRATO v1.05 `proposto (FE)`. FE `aguardando outro lado`. |
 | 0.94 | 2026-11-26 | FEAT-20 revisada pelo backend (CONTRATO v1.06, proposto (BE), devlog BE 106). T-100 aguarda aceite. |
+| 0.95 | 2026-11-26 | FEAT-20 revisada no CONTRATO v1.07, `proposto (BE)`. Resposta completa da ação no reenvio idempotente e ampliação do cenário 4. O aceite do frontend libera a T-100 com MSW. |

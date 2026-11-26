@@ -22,6 +22,13 @@ Revisados README §§1.3, 10.1, 11.2, 11.3, 28.1, II.7 e decisões J2, J4, J5, L
 - `docs/CONTRATO.md` v1.06 e `docs/ROADMAP.md` v0.94, baseados nas cópias integrais recebidas.
 - `docs/devlog/README.md` e esta entrada registram o ponto de retomada.
 
+## Revisão da resposta e do cenário 4 — 2026-11-26
+
+- **Arquivos** — CONTRATO v1.07 e ROADMAP v0.95, com históricos atualizados.
+- **Verificação** — Conferidos o tipo de retorno do controller de ações, as expectativas existentes de `combatUpdates` e a distinção entre os POSTs e o GET no contrato. Revisão documental, sem execução de testes.
+- **Roteiro** — Concluir o avanço pendente pelo POST de sessão e reenviar a intenção original. Esperar o `PartyActionResponse` completo, inclusive o lote de combate. Aplicar uma jogada com chave nova e reenviar a intenção original novamente. Esperar a mesma resposta original no POST e o estado da jogada posterior no GET, com versão, RNG e jogadas preservados durante o reenvio.
+- **Ponte com o frontend** — A proposta v1.07 aguarda aceite para liberar T-100 com MSW. Os critérios do backend entram na spec após o acordo.
+
 ## Commit sugerido
 
-`docs/propose feat-20 backend contract (contract v1.06)`
+`docs/refine feat-20 action replay (contract v1.07)`
