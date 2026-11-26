@@ -36,6 +36,10 @@ import { fixedClock } from '../../../../../../test/fakes/fixed-clock'
 import { InMemoryCardCatalog } from '../../../../../../test/fakes/in-memory-card-catalog'
 import { sequentialIds } from '../../../../../../test/fakes/sequential-ids'
 import { InMemoryPartiesRepository } from '../../../../../../test/repositories/in-memory-parties-repository'
+import { GetPartyUseCase } from '../get-party'
+import { ListPartiesUseCase } from '../list-parties'
+import { ResumeLegacyKnockout } from '../resume-legacy-knockout'
+import { StartSessionUseCase } from '../start-session'
 import { TakePartyActionUseCase } from '.'
 
 const strength = makeAttributeCard()
@@ -1664,6 +1668,136 @@ describe('TakePartyActionUseCase — chefe final (T-83)', () => {
   )
 })
 
+it('REQ-171/REQ-172: reabre o save congelado, projeta idle após publicação e prepara a sucessora uma vez', async () => {
+  const shard = makeItemCard({ id: 'fixture.shard', completionItem: true })
+  const next = makeDimensionCard({
+    id: 'fixture-next.dimension',
+    collectionId: 'fixture-next',
+    releaseOrder: 2,
+  })
+  const city = makeUrbanZoneCard({
+    id: 'fixture-next.city',
+    collectionId: next.collectionId,
+  })
+  const game = setup({
+    completion: {
+      zoneTitle: harbor.title,
+      requirement: [{ cardId: shard.id, count: 1 }],
+      grandPrize: { cards: [{ cardId: potion.id, copies: 1 }], gold: 10 },
+      finalBoss: null,
+    },
+    rewardConfig: { ...GAME_CONFIG_DEFAULTS, inventoryCapacity: 1 },
+    player: {
+      completionItems: [{ cardId: shard.id, quantity: 1 }],
+      inventory: [{ cardId: ore.id, quantity: 1 }],
+    },
+    additionalCards: [shard, next, city],
+  })
+  const frozen = await game.accept({ type: 'completeDimension' })
+  expect(frozen.status).toBe('frozen')
+  expect(frozen.lastDimensionCompletion?.next).toEqual({ type: 'frozen' })
+  expect(frozen.pendingRewards).toHaveLength(1)
+
+  const repository = new InMemoryPartiesRepository()
+  await repository.create(frozen)
+  const save = vi.spyOn(repository, 'save')
+  const partyId = frozen.id.toString()
+  const clock = fixedClock('2026-11-26T12:00:00Z')
+  const resumeKnockout = new ResumeLegacyKnockout(game.catalog, sequentialIds())
+  const start = new StartSessionUseCase(
+    repository,
+    clock,
+    resumeKnockout,
+    game.catalog
+  )
+  const get = new GetPartyUseCase(
+    repository,
+    clock,
+    resumeKnockout,
+    game.catalog
+  )
+  const list = new ListPartiesUseCase(repository, game.catalog)
+
+  const frozenDetail = await get.execute({ partyId })
+  expect(frozenDetail.value).toHaveProperty('party.status', 'frozen')
+  expect(
+    (await list.execute()).value.parties.map(({ status }) => status)
+  ).toEqual(['frozen'])
+  const denied = await start.execute({ partyId })
+  expect(denied.value).toMatchObject({
+    code: 'PARTY_FROZEN',
+    message: 'Este save está congelado até o lançamento da próxima dimensão.',
+  })
+  expect(save).not.toHaveBeenCalled()
+
+  game.catalog.collections.push({
+    id: next.collectionId,
+    name: next.collectionId,
+  })
+  const idle = await get.execute({ partyId })
+  expect(idle.value).toHaveProperty('party.status', 'idle')
+  expect(idle.value).toHaveProperty('party.rngState', frozen.rngState)
+  expect(idle.value).toHaveProperty(
+    'party.lastDimensionCompletion',
+    frozen.lastDimensionCompletion
+  )
+  expect(
+    (await list.execute()).value.parties.map(({ status }) => status)
+  ).toEqual(['idle'])
+  expect(save).not.toHaveBeenCalled()
+  expect(await repository.findById(partyId)).toHaveProperty('status', 'frozen')
+
+  game.catalog.cards = game.catalog.cards.filter(({ id }) => id !== city.id)
+  const invalid = await start.execute({ partyId })
+  expect(invalid.value).toMatchObject({ code: 'DIMENSION_INVALID' })
+  expect(save).not.toHaveBeenCalled()
+  expect(await repository.findById(partyId)).toHaveProperty(
+    'rngState',
+    frozen.rngState
+  )
+  game.catalog.cards.push(city)
+
+  const started = await start.execute({ partyId })
+  if (started.isLeft()) throw new Error(started.value.message)
+  const resumed = started.value.party
+  expect(resumed.status).toBe('inSession')
+  expect(resumed.dimension.dimensionCardId).toBe(next.id)
+  expect(resumed.lastDimensionCompletion).toEqual({
+    ...frozen.lastDimensionCompletion,
+    next: { type: 'nextDimension', dimensionCardId: next.id, name: next.name },
+  })
+  expect(resumed.pendingRewards).toEqual(frozen.pendingRewards)
+  expect(resumed.members[0].player).toMatchObject({
+    zoneId: city.id,
+    respawnZoneId: city.id,
+    peak: frozen.members[0].player.peak,
+    gold: frozen.members[0].player.gold,
+    completionItems: [],
+  })
+  const repeated = await start.execute({ partyId })
+  expect(repeated.value).toHaveProperty('party.rngState', resumed.rngState)
+  expect(repeated.value).toHaveProperty(
+    'party.pendingRewards',
+    frozen.pendingRewards
+  )
+  expect(save).toHaveBeenCalledTimes(1)
+
+  const replayRepository = new InMemoryPartiesRepository()
+  await replayRepository.create(frozen)
+  const replay = await new StartSessionUseCase(
+    replayRepository,
+    clock,
+    resumeKnockout,
+    game.catalog
+  ).execute({ partyId })
+  if (replay.isLeft()) throw new Error(replay.value.message)
+  expect(replay.value.party.rngState).toEqual(resumed.rngState)
+  expect(replay.value.party.dimension).toEqual(resumed.dimension)
+  expect(replay.value.party.members[0].player.hand).toEqual(
+    resumed.members[0].player.hand
+  )
+})
+
 function setup({
   requirements = [minimum],
   player = {},
@@ -1822,6 +1956,7 @@ function setup({
   const handCopies = () => playerState().handCopies ?? []
   return {
     accept,
+    catalog,
     refuse,
     start,
     reveal,

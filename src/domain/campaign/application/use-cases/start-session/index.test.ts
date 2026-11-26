@@ -19,10 +19,12 @@ let sut: StartSessionUseCase
 describe('StartSessionUseCase', () => {
   beforeEach(() => {
     repository = new InMemoryPartiesRepository()
+    const catalog = new InMemoryCardCatalog()
     sut = new StartSessionUseCase(
       repository,
       fixedClock(NOW),
-      new ResumeLegacyKnockout(new InMemoryCardCatalog(), sequentialIds())
+      new ResumeLegacyKnockout(catalog, sequentialIds()),
+      catalog
     )
   })
 

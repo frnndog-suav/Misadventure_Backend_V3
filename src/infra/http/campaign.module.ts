@@ -77,9 +77,9 @@ import { TakePartyActionController } from './controllers/take-party-action/index
     },
     {
       provide: ListPartiesUseCase,
-      inject: [PartiesRepository],
-      useFactory: (parties: PartiesRepository) =>
-        new ListPartiesUseCase(parties),
+      inject: [PartiesRepository, CardCatalog],
+      useFactory: (parties: PartiesRepository, catalog: CardCatalog) =>
+        new ListPartiesUseCase(parties, catalog),
     },
     {
       provide: ResumeLegacyKnockout,
@@ -89,21 +89,23 @@ import { TakePartyActionController } from './controllers/take-party-action/index
     },
     {
       provide: GetPartyUseCase,
-      inject: [PartiesRepository, Clock, ResumeLegacyKnockout],
+      inject: [PartiesRepository, Clock, ResumeLegacyKnockout, CardCatalog],
       useFactory: (
         parties: PartiesRepository,
         clock: Clock,
-        resume: ResumeLegacyKnockout
-      ) => new GetPartyUseCase(parties, clock, resume),
+        resume: ResumeLegacyKnockout,
+        catalog: CardCatalog
+      ) => new GetPartyUseCase(parties, clock, resume, catalog),
     },
     {
       provide: StartSessionUseCase,
-      inject: [PartiesRepository, Clock, ResumeLegacyKnockout],
+      inject: [PartiesRepository, Clock, ResumeLegacyKnockout, CardCatalog],
       useFactory: (
         parties: PartiesRepository,
         clock: Clock,
-        resume: ResumeLegacyKnockout
-      ) => new StartSessionUseCase(parties, clock, resume),
+        resume: ResumeLegacyKnockout,
+        catalog: CardCatalog
+      ) => new StartSessionUseCase(parties, clock, resume, catalog),
     },
     {
       provide: EndSessionUseCase,

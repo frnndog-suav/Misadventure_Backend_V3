@@ -17,10 +17,12 @@ let sut: GetPartyUseCase
 describe('GetPartyUseCase', () => {
   beforeEach(() => {
     repository = new InMemoryPartiesRepository()
+    const catalog = new InMemoryCardCatalog()
     sut = new GetPartyUseCase(
       repository,
       fixedClock(),
-      new ResumeLegacyKnockout(new InMemoryCardCatalog(), sequentialIds())
+      new ResumeLegacyKnockout(catalog, sequentialIds()),
+      catalog
     )
   })
 

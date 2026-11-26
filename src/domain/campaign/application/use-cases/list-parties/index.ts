@@ -1,6 +1,8 @@
 import { type Either, right } from '@/core/error/either'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
+import type { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
+import { findFrozenDimensionSuccessor } from '../find-dimension-successor'
 
 export type TListPartiesUseCaseResponse = Either<never, { parties: Party[] }>
 
@@ -9,7 +11,10 @@ export type TListPartiesUseCaseResponse = Either<never, { parties: Party[] }>
  * empate por `id` crescente (comparação por código de caractere, como D-23).
  */
 export class ListPartiesUseCase {
-  constructor(private readonly partiesRepository: PartiesRepository) {}
+  constructor(
+    private readonly partiesRepository: PartiesRepository,
+    private readonly catalog: CardCatalog
+  ) {}
 
   async execute(): Promise<TListPartiesUseCaseResponse> {
     const parties = await this.partiesRepository.findAll()
@@ -22,6 +27,13 @@ export class ListPartiesUseCase {
       return idA < idB ? -1 : idA > idB ? 1 : 0
     })
 
-    return right({ parties: sorted })
+    const projected = await Promise.all(
+      sorted.map(async (party) =>
+        (await findFrozenDimensionSuccessor(this.catalog, party))
+          ? party.projectFrozenAsIdle()
+          : party
+      )
+    )
+    return right({ parties: projected })
   }
 }

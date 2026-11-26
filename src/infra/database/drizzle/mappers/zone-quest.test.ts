@@ -685,7 +685,7 @@ describe('T-57 — tentativas e progresso de missão de zona', () => {
       const request = { partyId: game.party.id.toString() }
       const { repository, clock, catalog, ids } = game
       const resume = new ResumeLegacyKnockout(catalog, ids)
-      const getParty = new GetPartyUseCase(repository, clock, resume)
+      const getParty = new GetPartyUseCase(repository, clock, resume, catalog)
       const read = await getParty.execute(request)
       if (read.isLeft()) throw read.value
       expect(await game.project(read.value.party)).toMatchObject(expected)
@@ -697,7 +697,8 @@ describe('T-57 — tentativas e progresso de missão de zona', () => {
       const reopened = await new StartSessionUseCase(
         repository,
         clock,
-        resume
+        resume,
+        catalog
       ).execute(request)
       if (reopened.isLeft()) throw reopened.value
       expect(await game.project(reopened.value.party)).toMatchObject(expected)
@@ -773,9 +774,14 @@ describe('T-57 — Pico na conclusão de missão de zona', () => {
       const partyId = party.id.toString()
       const request = { partyId }
       const resume = new ResumeLegacyKnockout(catalog, ids)
-      const getParty = new GetPartyUseCase(repository, clock, resume)
+      const getParty = new GetPartyUseCase(repository, clock, resume, catalog)
       const endSession = new EndSessionUseCase(repository, clock)
-      const startSession = new StartSessionUseCase(repository, clock, resume)
+      const startSession = new StartSessionUseCase(
+        repository,
+        clock,
+        resume,
+        catalog
+      )
       const expectedPlayer = { peak: expectedPeak, vigor: 4, openQuests: [] }
       const completion = {
         dimensionCardId: party.dimension.dimensionCardId,

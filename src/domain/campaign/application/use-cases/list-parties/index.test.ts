@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { makeParty } from '../../../../../../test/factories/make-party'
 import { fixedClock } from '../../../../../../test/fakes/fixed-clock'
+import { InMemoryCardCatalog } from '../../../../../../test/fakes/in-memory-card-catalog'
 import { InMemoryPartiesRepository } from '../../../../../../test/repositories/in-memory-parties-repository'
 
 import { ListPartiesUseCase } from '.'
@@ -15,7 +16,7 @@ const at = (iso: string) => fixedClock(iso).now()
 describe('ListPartiesUseCase', () => {
   beforeEach(() => {
     repository = new InMemoryPartiesRepository()
-    sut = new ListPartiesUseCase(repository)
+    sut = new ListPartiesUseCase(repository, new InMemoryCardCatalog())
   })
 
   it('REQ-18: sem saves → []', async () => {

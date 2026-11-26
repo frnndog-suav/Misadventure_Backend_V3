@@ -2,8 +2,12 @@ import { type Either, left, right } from '@/core/error/either'
 import type { Clock } from '@/core/ports/clock'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
+import type { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 
+import { DimensionInvalidError } from '../_errors/dimension-invalid-error'
+import { PartyFrozenError } from '../_errors/party-frozen-error'
 import { PartyNotFoundError } from '../_errors/party-not-found-error'
+import { findFrozenDimensionSuccessor } from '../find-dimension-successor'
 import type { ResumeLegacyKnockout } from '../resume-legacy-knockout'
 
 export interface TStartSessionUseCaseRequest {
@@ -11,7 +15,7 @@ export interface TStartSessionUseCaseRequest {
 }
 
 export type TStartSessionUseCaseResponse = Either<
-  PartyNotFoundError,
+  PartyNotFoundError | PartyFrozenError | DimensionInvalidError,
   { party: Party }
 >
 
@@ -20,7 +24,8 @@ export class StartSessionUseCase {
   constructor(
     private readonly partiesRepository: PartiesRepository,
     private readonly clock: Clock,
-    private readonly resumeKnockout: ResumeLegacyKnockout
+    private readonly resumeKnockout: ResumeLegacyKnockout,
+    private readonly catalog: CardCatalog
   ) {}
 
   execute({
@@ -31,6 +36,21 @@ export class StartSessionUseCase {
       async (party, save) => {
         if (!party) return left(new PartyNotFoundError())
         const at = this.clock.now()
+        if (party.status === 'frozen') {
+          const successor = await findFrozenDimensionSuccessor(
+            this.catalog,
+            party
+          )
+          if (!successor) return left(new PartyFrozenError())
+          const resumed = party.resumeFrozenDimension(successor, at)
+          if (resumed.isLeft()) {
+            const { dimensionCardId, problems } = resumed.value
+            return left(new DimensionInvalidError(dimensionCardId, problems))
+          }
+          if (!resumed.value) return left(new PartyFrozenError())
+          await save(party)
+          return right({ party })
+        }
         const started = party.startSession(at)
         const resumed = await this.resumeKnockout.execute(party, at)
         if (started || resumed) await save(party)

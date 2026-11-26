@@ -1303,6 +1303,41 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return right(undefined)
   }
 
+  projectFrozenAsIdle(): Party {
+    if (this.status !== 'frozen') return this
+    return Party.restore({ ...this.props, status: 'idle' }, this.id)
+  }
+
+  resumeFrozenDimension(
+    successor: { dimension: TDimensionCard; cards: readonly TCard[] },
+    at: Date
+  ): Either<
+    Extract<TCreatePartyFailure, { type: 'dimensionInvalid' }>,
+    boolean
+  > {
+    const completion = this.lastDimensionCompletion
+    if (this.status !== 'frozen' || completion?.next.type !== 'frozen')
+      return right(false)
+
+    const { dimension, cards } = successor
+    const rng = SeededRng.fromState(this.rngState)
+    const prepared = prepareDimensionMap(dimension, cards, this.config, rng)
+    if (prepared.isLeft()) return left(prepared.value)
+
+    this.props.lastDimensionCompletion = {
+      ...completion,
+      next: {
+        type: 'nextDimension',
+        dimensionCardId: dimension.id,
+        name: dimension.name,
+      },
+    }
+    this.props.status = 'idle'
+    this.startSession(at)
+    this.enterNextDimension(successor, prepared.value, rng, at)
+    return right(true)
+  }
+
   private enterNextDimension(
     next: { dimension: TDimensionCard; cards: readonly TCard[] },
     prepared: { startingCityZoneId: string; mapWithQuestDecks: TPartyMap },

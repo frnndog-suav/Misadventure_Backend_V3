@@ -26,6 +26,7 @@ import { ActionNotAllowedError } from '../_errors/action-not-allowed-error'
 import { DimensionInvalidError } from '../_errors/dimension-invalid-error'
 import { PartyNotFoundError } from '../_errors/party-not-found-error'
 import { PartySessionNotActiveError } from '../_errors/party-session-not-active-error'
+import { findDimensionSuccessor } from '../find-dimension-successor'
 
 export interface TTakePartyActionUseCaseRequest {
   partyId: string
@@ -599,7 +600,7 @@ export class TakePartyActionUseCase {
         const result = party.applyDimensionCompletion(
           dimension,
           cards,
-          await this.findSuccessor(dimension),
+          await findDimensionSuccessor(this.cardCatalog, dimension),
           this.clock.now(),
           this.ids,
           bossVictory?.type === 'combatEnded'
@@ -616,25 +617,6 @@ export class TakePartyActionUseCase {
     await save(party)
 
     return right({ party })
-  }
-
-  private async findSuccessor(current: TDimensionCard) {
-    let successor: {
-      dimension: TDimensionCard
-      cards: readonly TCard[]
-    } | null = null
-    for (const { id } of await this.cardCatalog.listCollections()) {
-      const cards = await this.cardCatalog.listCards(id)
-      for (const card of cards) {
-        if (
-          card.type === 'dimension' &&
-          card.releaseOrder > current.releaseOrder &&
-          (!successor || card.releaseOrder < successor.dimension.releaseOrder)
-        )
-          successor = { dimension: card, cards }
-      }
-    }
-    return successor
   }
 
   /** REQ-139: o fim da rodada pode precisar de um novo pool; o agregado recebe as elegíveis da coleção vigente (D-116, D-125). */
