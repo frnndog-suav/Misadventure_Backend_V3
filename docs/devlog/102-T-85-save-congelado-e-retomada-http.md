@@ -1,8 +1,8 @@
 # 102 — T-85 — Save congelado e retomada HTTP
 
 - Data — 2026-11-26
-- Status — aguardando testes do autor
-- Spec — v1.06, REQ-171 e REQ-172
+- Status — concluída
+- Spec — v1.07, REQ-171 e REQ-172
 - Contrato — v0.97, FEAT-19 `acordado`
 - Horas — a preencher pelo autor
 
@@ -17,8 +17,10 @@
 
 - O autor executou o cenário antes da implementação. O único teste selecionado falhou na asserção de `PARTY_FROZEN`, com o save congelado na resposta de sucesso.
 - TypeScript, ESLint nos arquivos alterados e `git diff --check` passaram. A preparação usa o RNG semeado e recebe a data pela porta de relógio.
-- Aguardando a suíte unitária do autor. Depois, verificar o E2E com Postgres e confirmar a conclusão da T-85. A campanha para validação no frontend segue na T-86.
+- O autor confirmou que `npm test` passou sem erros e fez o commit `9f07787`.
+- O autor confirmou que o E2E de conclusão e retomada HTTP passou com Postgres.
+- Retomada na T-86 após autorização do autor. Preparar a campanha e a validação integrada da FEAT-19 (REQ-164 a REQ-172).
 
-## Commit sugerido
+## Commit de implementação
 
-`feat/resume frozen saves over http (t-85)`
+`9f07787 feat/resume frozen saves over http (t-85)`

@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 1.06 · **Data:** 2026-11-26
+> **Versão da spec:** 1.07 · **Data:** 2026-11-26
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -826,7 +826,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 - [x] **T-82 — Área de itens de conclusão (REQ-166, REQ-172).** Integrar doações e recompensas, persistir as quantidades e aplicar filtros de distribuição. Verificar acúmulo, ordenação, inventário cheio e exclusão dos fluxos proibidos.
 - [x] **T-83 — Elegibilidade e chefe final (REQ-165, REQ-167, REQ-168).** Parser, projeções e combate entregues. Recusas, requisito dividido entre membros, Sem fuga, fuga, derrota, limite de ciclos e Pico configurável confirmados (devlog 100). A ligação ao desfecho fica na T-84.
 - [x] **T-84 — Desfecho, prêmio e passagem (REQ-167 a REQ-170).** Ação direta e vitória ligadas ao mesmo desfecho, com recibos por membro, limite da bolsa, pendências V1 e preparação da sucessora pela ordem de lançamento. Recibo de montaria acordado no CONTRATO v0.97. Suíte unitária aprovada pelo autor (devlog 101).
-- [ ] **T-85 — Save, congelamento e retomada HTTP (REQ-171, REQ-172).** Verificar legado, reabertura de combate e de pendência, consultas sem efeitos, publicação posterior, retomada sem duplicação e RNG determinístico.
+- [x] **T-85 — Save, congelamento e retomada HTTP (REQ-171, REQ-172).** Legado, reabertura de combate e de pendência, consultas sem efeitos, publicação posterior, retomada sem duplicação e RNG determinístico. Suíte unitária e E2E com Postgres aprovados pelo autor (devlog 102).
 - [ ] **T-86 — Campanhas e validação integrada (REQ-164 a REQ-172).** Preparar os cenários do contrato com `fixture.shard`, Mina Velha e `fixture-next`, incluindo chefe, falta de espaço e publicação posterior. Após as verificações do autor, registrar `implementado (BE)` com as mensagens do editor e entregar URL, IDs e cenários ao frontend. Registrar `validado` após o retorno integrado.
 
 ## 8. Histórico
@@ -939,6 +939,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 1.04 | 2026-11-26 | T-82 concluída (devlog 099) após confirmação dos testes pelo autor. Retomada na T-83 (REQ-165, REQ-167, REQ-168). |
 | 1.05 | 2026-11-26 | T-83 concluída (devlog 100) após confirmação dos testes pelo autor. Retomada na T-84 (REQ-167 a REQ-170). |
 | 1.06 | 2026-11-26 | T-84 concluída (devlog 101) após confirmação dos testes pelo autor. Próxima tarefa T-85 (REQ-171 e REQ-172). |
+| 1.07 | 2026-11-26 | T-85 concluída (devlog 102) após aprovação da suíte unitária e do E2E com Postgres. Próxima tarefa T-86 (REQ-164 a REQ-172). |
 
 ## Apêndice A — Conteúdo de teste
 
