@@ -42,3 +42,13 @@ Revisados README §§1.3, 10.1, 11.2, 11.3, 28.1, II.7 e decisões J2, J4, J5, L
 
 - CONTRATO v1.08 e ROADMAP v0.96 copiados integralmente do frontend e comparados por SHA-256. As duas cópias são idênticas às originais.
 - Próxima etapa no backend: planejar os requisitos e as tarefas da FEAT-20 na SPEC-BACKEND. A T-100 está liberada com MSW no frontend.
+
+## Proposta na SPEC-BACKEND — 2026-11-26
+
+- **Situação** — planejamento entregue para revisão do autor. Retomada proposta na T-88 após aprovação.
+- **Arquivos** — `docs/SPEC-BACKEND.md` v1.10 e esta entrada.
+- **Decisões** — REQ-178 a REQ-185, D-155 a D-158 e T-88 a T-91, com base no CONTRATO v1.08 e no ROADMAP v0.96.
+- **Verificação** — conferência documental dos seis cenários acordados, incluindo o replay da resposta completa e o GET após uma jogada posterior. `git diff --check` sem erros. Etapa documental.
+- **Ponte com o frontend** — a T-91 prepara a entrega à T-104. URL real, IDs, sementes, ordens, rodadas e dados específicos das campanhas serão registrados nessa preparação.
+- **Horas** — a preencher pelo autor.
+- **Commit sugerido** — `docs/plan ai helpers (feat-20)`.
