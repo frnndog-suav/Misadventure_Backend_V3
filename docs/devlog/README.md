@@ -123,7 +123,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 103 | T-86 | [Campanhas da FEAT-19](103-T-86-campanhas-da-feat-19.md) | concluída |
 | 104 | T-87 | [Coleções estendidas e reprint](104-T-87-colecoes-estendidas-e-reprint.md) | implementado (BE) |
 | 105 | FEAT-33 | [Validação integrada na T-99](105-FEAT-33-validada.md) | concluída |
-| 106 | FEAT-20 | [Planejamento e contraproposta](106-FEAT-20-planejamento.md) | aguardando aceite |
+| 106 | FEAT-20 | [Planejamento e contraproposta](106-FEAT-20-planejamento.md) | acordo sincronizado |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

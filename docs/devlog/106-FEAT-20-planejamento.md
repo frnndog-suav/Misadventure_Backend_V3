@@ -1,7 +1,7 @@
 # 106 — Planejamento e contraproposta da FEAT-20
 
 - **Data** — 2026-11-26
-- **Situação** — revisão concluída, aguardando aceite
+- **Situação** — acordo confirmado e cópias integrais sincronizadas
 - **Contrato** — recebido v1.05, contraproposta v1.06
 - **Roadmap** — recebido v0.93, atualizado para v0.94
 - **Horas** — a preencher pelo autor
@@ -29,6 +29,16 @@ Revisados README §§1.3, 10.1, 11.2, 11.3, 28.1, II.7 e decisões J2, J4, J5, L
 - **Roteiro** — Concluir o avanço pendente pelo POST de sessão e reenviar a intenção original. Esperar o `PartyActionResponse` completo, inclusive o lote de combate. Aplicar uma jogada com chave nova e reenviar a intenção original novamente. Esperar a mesma resposta original no POST e o estado da jogada posterior no GET, com versão, RNG e jogadas preservados durante o reenvio.
 - **Ponte com o frontend** — A proposta v1.07 aguarda aceite para liberar T-100 com MSW. Os critérios do backend entram na spec após o acordo.
 
+## Aceite do frontend — 2026-11-26
+
+- O autor confirmou o acordo da FEAT-20 e a liberação da T-100 com MSW. A sincronização depende das cópias integrais do CONTRATO v1.08 e do ROADMAP v0.96. A spec do backend é o próximo ponto de planejamento após a sincronização.
+- Na entrega integrada para a T-104, fornecer a URL do backend real e, para cada um dos seis cenários da FEAT-20, os IDs dos saves utilizados, as sementes aplicáveis, as condições iniciais e os resultados esperados. No cenário 4, incluir os dados para conferir o corpo completo do reenvio e o estado atual do GET após uma jogada posterior. URL, IDs, sementes e resultados esperados serão preenchidos na preparação das campanhas de validação.
+
 ## Commit sugerido
 
-`docs/refine feat-20 action replay (contract v1.07)`
+`docs/sync feat-20 agreement (contract v1.08)`
+
+## Sincronização do acordo — 2026-11-26
+
+- CONTRATO v1.08 e ROADMAP v0.96 copiados integralmente do frontend e comparados por SHA-256. As duas cópias são idênticas às originais.
+- Próxima etapa no backend: planejar os requisitos e as tarefas da FEAT-20 na SPEC-BACKEND. A T-100 está liberada com MSW no frontend.

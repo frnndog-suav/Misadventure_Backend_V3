@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 1.07 · **Data:** 2026-11-26
+> **Versão do contrato:** 1.08 · **Data:** 2026-11-26
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -3945,7 +3945,7 @@ Para a T-99, o backend entrega campanhas preparadas para mercado, abertura nos d
 - Dado um save legado na dimensão atual, quando consulta o mercado, então a vigência é a coleção própria. Ao avançar para uma dimensão configurada, aplica-se a vigência do destino.
 - Dado um save com extensão ativa, quando avança para uma dimensão que encerra essa extensão e traz outra coleção por reprint, então a extensão encerrada sai da oferta de boosters e dos candidatos ao novo pool, o reprint volta e o conteúdo gerado pertence à coleção própria do destino. Reabrir o save após editar as listas da dimensão atual preserva sua vigência comercial, inclusive ao renovar o pool de singles.
 
-### FEAT-20 — Ajudantes de IA — `proposto (BE)`
+### FEAT-20 — Ajudantes de IA — `acordado`
 
 Base: README §§1.3, 10.1, 11.2, 11.3, 28.1 e II.7, ROADMAP v0.93 e SPEC-FRONTEND v1.10 (REQ-102 a REQ-106). A entrega cobre criação, estado e avanço automático. A exibição das jogadas ao vivo, o recrutamento e combate em grupo, a negociação e as métricas ficam nas FEATs 21 a 24.
 
@@ -3974,7 +3974,7 @@ Base: README §§1.3, 10.1, 11.2, 11.3, 28.1 e II.7, ROADMAP v0.93 e SPEC-FRONTE
 5. Transitar para nova dimensão com IA em primeiro lugar e verificar a nova ordem, a progressão preservada e o avanço até o humano. Cobrir também o save congelado ao concluir a última dimensão lançada.
 6. Consultar, alterar e restaurar as prioridades no laboratório. Verificar recusa de configuração inválida conforme os erros acordados.
 
-#### Contraproposta do backend para aceite
+#### Formatos acordados
 
 Os formatos abaixo completam e prevalecem sobre os pontos em aberto nesta seção.
 
@@ -4139,3 +4139,4 @@ Reenviar a mesma chave e o mesmo corpo validado enquanto o avanço estiver pende
 | 1.05 | 2026-11-26 | FE | FEAT-20 `proposto (FE)`: criação com ajudantes, estado público, avanço automático, persistência e prioridades da IA. |
 | 1.06 | 2026-11-26 | BE | FEAT-20 proposto (BE): opções de criação, estado público, avanço e retomada idempotentes, prioridades e preparação dos cenários. |
 | 1.07 | 2026-11-26 | BE | FEAT-20 proposto (BE): preserva `PartyActionResponse` e o corpo completo no reenvio, inclusive após conclusão pelo POST de sessão. Cenário 4 cobre reenvio após jogada posterior e GET do estado atual. |
+| 1.08 | 2026-11-26 | FE | FEAT-20 `acordado` com os formatos e cenários da v1.07. T-100 liberada com MSW. |
