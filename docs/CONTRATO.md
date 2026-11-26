@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 0.98 · **Data:** 2026-11-26
+> **Versão do contrato:** 1.00 · **Data:** 2026-11-26
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -3759,7 +3759,7 @@ Montaria de teste (v0.90, aceita a oferta do FE): o backend acrescenta à `fixtu
 
 Só nos e2e do backend: abrir booster e comprar single somando o espaço da montaria; arma que bloqueia escudo com o escudo indo ao inventário extra; Ajustar deck com a pasta extra; equipamento com estado no inventário extra; montaria como recompensa (sem montaria; com montaria → volta ao deck ou limbo); `loseMount` com conteúdo; efeitos passivos da montaria nos `effectiveModifiers`; saves v2 a v10. Para a validação integrada (T-80), o backend entrega campanhas preparadas (Estábulo, montaria com conteúdo, inventário cheio, mapa com dois caminhos a 2 zonas), os IDs e os resultados esperados.
 
-### FEAT-19 — Conclusão da dimensão, chefe final, passagem e save congelado — `acordado`
+### FEAT-19 — Conclusão da dimensão, chefe final, passagem e save congelado — `validado`
 
 Regras: README 3.2, 12.1, 12.2, 18.3, 19.1 (item 10), 21.1, 23, 24.5, 28.1 ("Ir para nova dimensão", "Mantém / Reinicia") e Apêndice A ("Pico por fonte"); Apêndice B I3 e V1 (B.21). Base no frontend: SPEC-FRONTEND REQ-90 a REQ-96, D-65.
 
@@ -3879,7 +3879,14 @@ interface DimensionCompletionResult {
 
 **Ao descongelar:** um save `frozen` cuja próxima dimensão foi publicada aparece `idle` em `GET /parties` e `GET /parties/:id`. O `POST …/session` seguinte faz a nova preparação, troca `lastDimensionCompletion.next` para `nextDimension` e devolve `200` na nova dimensão.
 
-**Editor (`CONTENT_INVALID`):** caminhos `completion.zoneTitle`, `completion.requirement`, `completion.requirement.{n}.cardId`, `completion.requirement.{n}.count`, `completion.grandPrize.cards.{n}.cardId`, `completion.grandPrize.gold`, `completion.finalBoss.title` e `completion.finalBoss.enemies.{n}.<campo>` (como na FEAT-13). *(v0.96, BE: como em toda a FEAT-31, cada problema vem como `{ path, message }` com o texto pt-BR pronto; não há código de motivo. Os casos da v0.95 — título de zona inexistente, requisito vazio, carta que não é item de conclusão, carta repetida, carta de prêmio de tipo inválido — ganham mensagens próprias, cujos textos exatos vão na `implementado (BE)`.)*
+**Editor (`CONTENT_INVALID`):** caminhos `completion.zoneTitle`, `completion.requirement`, `completion.requirement.{n}.cardId`, `completion.requirement.{n}.count`, `completion.grandPrize.cards.{n}.cardId`, `completion.grandPrize.gold`, `completion.finalBoss.title` e `completion.finalBoss.enemies.{n}.<campo>` (como na FEAT-13).
+
+Cada problema vem como `{ path, message }` conforme a FEAT-31. Mensagens verificadas na T-86:
+
+| Caminho | Mensagem |
+|---|---|
+| `completion.requirement.0.cardId` | A carta precisa ser um item de conclusão. |
+| `completion.zoneTitle` | O título precisa identificar uma zona da coleção. |
 
 Mensagem: `PARTY_FROZEN` "Este save está congelado até o lançamento da próxima dimensão.".
 
@@ -4031,3 +4038,5 @@ Contra a `fixture`, com o que o backend acrescenta nesta FEAT: `F` = `fixture.sh
 | 0.96 | 2026-11-25 | BE | FEAT-19 `acordado`, sem mudança de forma. Esclarecimentos: (1) `bossPeakGain` fica; o backend tinha o +15 de Chefe como valor fixo e passa a lê-lo dessa chave, também nos combates de evento; o chefe final ganha pelo cálculo normal da vitória, sem contagem dupla; (2) o editor segue `ContentInvalidDetails` da FEAT-31 (`path` + `message` pt-BR), sem códigos de motivo; os textos exatos vão na `implementado (BE)`. README com a B.21 (V1) aplicada no backend. |
 | 0.97 | 2026-11-26 | BE | FEAT-19 `acordado`: frontend aceitou `destination: 'mount'` no recibo de conclusão (T-84). A cópia equipada aparece no recibo, e o excedente segue para o limbo conforme o README §26. |
 | 0.98 | 2026-11-26 | BE | FEAT-19: frontend confirmou o ID `fixture-next.next-dimension` para a Segunda Dimensão. Corrigidas a descrição da fixture e as duas expectativas de ID em “Concluir com próxima”. |
+| 0.99 | 2026-11-26 | BE | FEAT-19 `implementado (BE)` após verificação local da T-86. Registradas as mensagens observadas do editor. Validação integrada da T-95 pendente. |
+| 1.00 | 2026-11-26 | BE | FEAT-19 `validado`: seis cenários do perfil base contra a API real na T-95 (devlog FE 125). Chefe, montaria e editor verificados localmente na T-86 (devlog BE 103). |
