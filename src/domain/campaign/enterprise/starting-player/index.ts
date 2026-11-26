@@ -88,6 +88,7 @@ export function createStartingPlayer({
     inventory: [],
     completionItems: [],
     equipment: emptyEquipment(),
+    mount: null,
     vault: emptyVault(),
     expansions: noExpansions(),
     lastScavenge: null,

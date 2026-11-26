@@ -93,6 +93,8 @@ export class TakePartyActionUseCase {
     const action = parsed.value
     if (party.status !== 'inSession')
       return left(new PartySessionNotActiveError())
+    if (!party.turn.memberId.equals(party.hostMemberId))
+      return left(new ActionNotAllowedError('zoneActionUnavailable'))
     await this.provideMarketCandidates(party)
     const blocked =
       action.type === 'saveRespawnPoint' ? null : party.eventActionBlock(action)

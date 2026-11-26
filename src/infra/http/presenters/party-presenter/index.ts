@@ -358,11 +358,15 @@ function playerToHTTP(
   // Zona e Carta de Dimensão lidas no catálogo (D-81, D-92, D-93).
   const zoneCard = cards.get(player.zoneId)
   const zone = zoneCard?.type === 'zone' ? zoneCard : null
-  const routes = moveRoutes(map, player.zoneId, player.mount !== null)
+  const isHuman = member.kind === 'human'
+  const routes = isHuman
+    ? moveRoutes(map, player.zoneId, player.mount !== null)
+    : []
   const dimensionCard = cards.get(party.dimension.dimensionCardId)
   const dimension = dimensionCard?.type === 'dimension' ? dimensionCard : null
   const catalogCards = [...cards.values()]
   const effects =
+    isHuman &&
     !party.combat &&
     !player.down &&
     !party.triggeredEffectChoice &&
@@ -374,15 +378,18 @@ function playerToHTTP(
         encounter.payments.length === 0))
       ? activatableEffects(player, catalogCards, encounter?.phase)
       : []
-  const targets = scavengeTargets({
-    player,
-    zone,
-    dimension,
-    cards: catalogCards,
-  })
-  const usableAbilities = party.turn.memberId.equals(member.id)
-    ? party.adventureAbilityOptions(cards)
+  const targets = isHuman
+    ? scavengeTargets({
+        player,
+        zone,
+        dimension,
+        cards: catalogCards,
+      })
     : []
+  const usableAbilities =
+    isHuman && party.turn.memberId.equals(member.id)
+      ? party.adventureAbilityOptions(cards)
+      : []
   const quests = party.questState(member, cards, classes)
   return {
     down: player.down ?? false,
@@ -390,6 +397,7 @@ function playerToHTTP(
     lastKnockout: player.lastKnockout ?? null,
     usableAbilities,
     ...quests,
+    questChoices: isHuman ? quests.questChoices : [],
     specializations: (player.specializations ?? [])
       .map(({ playerClass, specializationId, deckLockMet }) => ({
         classId: playerClass,
@@ -416,8 +424,8 @@ function playerToHTTP(
     peak: player.peak,
     vigor: player.vigor,
     modifiers: { ...player.modifiers },
-    hand: [...player.hand],
-    handCopies: handCopiesOf(player),
+    hand: isHuman ? [...player.hand] : [],
+    handCopies: isHuman ? handCopiesOf(player) : [],
     nextTurnActionPointDebt: player.nextTurnActionPointDebt ?? 0,
     lastRandomEvent: player.lastRandomEvent ?? null,
     lastRewardSearch: player.lastRewardSearch ?? null,
@@ -428,22 +436,24 @@ function playerToHTTP(
     respawnZoneId: player.respawnZoneId,
     moveTargets: routes.map((route) => route.zoneId),
     moveRoutes: routes,
-    availableActions: availableActions(
-      party,
-      member.id,
-      equipmentCardIds,
-      zone?.zoneActions ?? [],
-      targets,
-      effects,
-      party.canStartEvent(zone, dimension, cards),
-      encounter,
-      usableAbilities.length > 0,
-      party.describeCombat(cards),
-      zone?.zoneType === 'urban',
-      quests.questChoices,
-      boosterCardIds,
-      party.canCompleteDimension(zone, dimension)
-    ),
+    availableActions: isHuman
+      ? availableActions(
+          party,
+          member.id,
+          equipmentCardIds,
+          zone?.zoneActions ?? [],
+          targets,
+          effects,
+          party.canStartEvent(zone, dimension, cards),
+          encounter,
+          usableAbilities.length > 0,
+          party.describeCombat(cards),
+          zone?.zoneType === 'urban',
+          quests.questChoices,
+          boosterCardIds,
+          party.canCompleteDimension(zone, dimension)
+        )
+      : [],
     build: copiesToHTTP(player.build),
     buildSize: player.build.reduce((sum, { copies }) => sum + copies, 0),
     tcgFolder: copiesToHTTP(player.tcgFolder),
@@ -500,13 +510,14 @@ function playerToHTTP(
     vaultDeckSlots: capacities.deckSlots,
     vaultGoldCapacity: capacities.vaultGold,
     scavengeTargets: targets,
-    market: marketToHTTP(party.describeMarket(member, cards), cards),
+    market: isHuman
+      ? marketToHTTP(party.describeMarket(member, cards), cards)
+      : null,
     expansions: { ...expansions },
     lastMarketVisit: marketVisitToHTTP(player.lastMarketVisit),
-    blacksmith: blacksmithToHTTP(
-      party.describeBlacksmith(member, cards),
-      cards
-    ),
+    blacksmith: isHuman
+      ? blacksmithToHTTP(party.describeBlacksmith(member, cards), cards)
+      : null,
     lastBlacksmithVisit: blacksmithVisitToHTTP(player.lastBlacksmithVisit),
     lastBoosterOpening: player.lastBoosterOpening ?? null,
     lastScavenge:

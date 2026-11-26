@@ -74,6 +74,7 @@ describe('createStartingPlayer', () => {
     const player = createStartingPlayer(input())
 
     expect(player.inventory).toEqual([])
+    expect(player.mount).toBeNull()
     expect(player.equipment).toEqual({
       head: null,
       torso: null,

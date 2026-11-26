@@ -294,7 +294,7 @@ describe('CreatePartyUseCase', () => {
     expect(result.isLeft()).toBe(true)
     if (result.isLeft())
       expect(result.value.details).toEqual({
-        fields: [{ field: 'members', reason: 'belowMinPlayers' }],
+        fields: [{ field: 'aiHelperCount', reason: 'belowMinPlayers' }],
       })
     expect(parties.items).toEqual([])
   })

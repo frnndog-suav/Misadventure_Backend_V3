@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 1.10 · **Data:** 2026-11-26
+> **Versão da spec:** 1.11 · **Data:** 2026-11-26
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -863,7 +863,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 
 ### FEAT-20 — Ajudantes de IA na campanha
 
-- [ ] **T-88 — Criação e projeções (REQ-178 a REQ-180, D-155).** Opções públicas, validação do POST, preparação dos membros, ordem por D20, leitura legada, projeção e autorização HTTP.
+- [x] **T-88 — Criação e projeções (REQ-178 a REQ-180, D-155).** Opções públicas, validação do POST, preparação dos membros, ordem por D20, leitura legada, projeção e autorização HTTP. Testes confirmados pelo autor (devlog 107).
 - [ ] **T-89 — Configuração e política da IA (REQ-181, REQ-182, D-156).** Implementar a permutação no laboratório e no snapshot, os sorteios uniformes e a decisão determinística nas fases suportadas, com término da vez.
 - [ ] **T-90 — Avanço automático e recuperação (REQ-183 a REQ-185, D-157).** Integrar os gatilhos HTTP à execução por vez e à passagem de dimensão. Persistir checkpoints e recibos completos. Cobrir interrupções, concorrência, retomada, replay histórico, virada de rodada e congelamento.
 - [ ] **T-91 — Campanhas e entrega para a T-104 (REQ-178 a REQ-185, D-158).** Preparar os seis cenários abaixo. Registrar a duração observada com cinco ajudantes e confirmar os limites de tempo do cliente e da infraestrutura. Após as verificações do autor, registrar `implementado (BE)` e entregar o roteiro preenchido. Registrar `validado` após o retorno da T-104.
@@ -999,3 +999,4 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 1.08 | 2026-11-26 | T-86 concluída (devlog BE 103) após a validação integrada da T-95 (devlog FE 125). FEAT-19 `validado` no CONTRATO v1.00 e no ROADMAP v0.88. |
 | 1.09 | 2026-11-26 | FEAT-33 conforme CONTRATO v1.02, REQ-173 a REQ-177 e T-87. |
 | 1.10 | 2026-11-26 | Proposta de planejamento da FEAT-20 conforme CONTRATO v1.08: REQ-178 a REQ-185, D-155 a D-158 e T-88 a T-91. Entrega de seis cenários para a T-104. |
+| 1.11 | 2026-11-26 | T-88 concluída após aprovação dos testes pelo autor (devlog 107). Próxima tarefa T-89 (REQ-181, REQ-182). |

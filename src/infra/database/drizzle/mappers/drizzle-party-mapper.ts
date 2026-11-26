@@ -935,7 +935,7 @@ const stateFields = <TConfig extends z.ZodType, TPlayer extends z.ZodType>(
       z.strictObject({
         id,
         characterName: z.string().min(1),
-        kind: z.literal('human'),
+        kind: z.enum(['human', 'aiHelper']),
         player,
       })
     )

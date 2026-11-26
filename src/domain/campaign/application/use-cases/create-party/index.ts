@@ -32,7 +32,7 @@ export type TCreatePartyUseCaseResponse = Either<
 >
 
 /**
- * Criar grupo de 1 já preparado (REQ-16, REQ-17, REQ-23, REQ-31 a REQ-36);
+ * Criar grupo já preparado (REQ-16, REQ-17, REQ-23, REQ-31 a REQ-36);
  * grava ao terminar com sucesso (REQ-25). Só o conteúdo publicado entra
  * (`CardCatalog`, REQ-41).
  */
@@ -64,11 +64,33 @@ export class CreatePartyUseCase {
         : null
     const { dimension, zones, cards } = await this.findFirstDimension()
 
+    const count = body.aiHelperCount
+    const helperClasses =
+      typeof count === 'number' &&
+      Number.isInteger(count) &&
+      count > 0 &&
+      count + 1 <= config.values.maxPlayers
+        ? await Promise.all(
+            (await this.cardCatalog.listClasses())
+              .sort((a, b) =>
+                a.playerClass < b.playerClass
+                  ? -1
+                  : Number(a.playerClass > b.playerClass)
+              )
+              .map(async (definition) => ({
+                classDefinition: definition,
+                attributeCards: await this.findStarterCards(definition),
+              }))
+          )
+        : undefined
+
     const result = Party.create(
       {
         name: body.name,
         characterName: body.characterName,
         playerClass: body.playerClass,
+        aiHelperCount: count,
+        helperClasses,
         classDefinition,
         attributeCards: await this.findStarterCards(classDefinition),
         dimension,

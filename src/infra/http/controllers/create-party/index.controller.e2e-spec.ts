@@ -98,6 +98,7 @@ describe('POST /parties (e2e)', () => {
             zoneId: 'fixture.gray-harbor',
             respawnZoneId: 'fixture.gray-harbor',
             moveTargets: expect.any(Array),
+            moveRoutes: expect.any(Array),
             availableActions: [
               'move',
               'recover',
@@ -116,6 +117,7 @@ describe('POST /parties (e2e)', () => {
             tcgFolder: [],
             tcgFolderCapacity: 30,
             inventory: [],
+            completionItems: [],
             inventoryCapacity: 10,
             equipment: {
               head: null,
@@ -180,6 +182,7 @@ describe('POST /parties (e2e)', () => {
       triggeredEffectChoice: null,
       combat: null,
       lastCombatResult: null,
+      lastDimensionCompletion: null,
       createdAt: expect.stringMatching(ISO_UTC),
       savedAt: expect.stringMatching(ISO_UTC),
     })
@@ -187,6 +190,17 @@ describe('POST /parties (e2e)', () => {
     expect(response.body.createdAt).toBe(response.body.savedAt)
 
     const player = response.body.members[0].player
+    const city = response.body.dimension.startingCityZoneId
+    const directTargets = response.body.dimension.map.crossings
+      .filter(({ zoneIds }: { zoneIds: string[] }) => zoneIds.includes(city))
+      .map(({ zoneIds }: { zoneIds: string[] }) =>
+        zoneIds.find((zoneId) => zoneId !== city)
+      )
+      .sort()
+    expect(player.moveTargets).toEqual(directTargets)
+    expect(player.moveRoutes).toEqual(
+      directTargets.map((zoneId: string) => ({ zoneId, direct: true, via: [] }))
+    )
     expect(player.hand).toHaveLength(7)
     expect(
       player.hand.every((card: string) =>
@@ -371,7 +385,7 @@ describe('POST /parties (e2e)', () => {
 
     expect(response.status).toBe(400)
     expect(response.body).toEqual(
-      invalid([{ field: 'members', reason: 'belowMinPlayers' }])
+      invalid([{ field: 'aiHelperCount', reason: 'belowMinPlayers' }])
     )
   })
 
@@ -404,7 +418,7 @@ describe('POST /parties (e2e)', () => {
     expect(list.body).toEqual([])
   })
 
-  it('REQ-35: os problemas vêm na ordem name, characterName, playerClass, members', async () => {
+  it('REQ-35: os problemas vêm na ordem name, characterName, playerClass, aiHelperCount', async () => {
     await request(app.getHttpServer())
       .patch('/lab/config')
       .send({ minPlayers: 2 })
@@ -420,7 +434,7 @@ describe('POST /parties (e2e)', () => {
         { field: 'name', reason: 'blank' },
         { field: 'characterName', reason: 'blank' },
         { field: 'playerClass', reason: 'unknownClass' },
-        { field: 'members', reason: 'belowMinPlayers' },
+        { field: 'aiHelperCount', reason: 'belowMinPlayers' },
       ])
     )
   })

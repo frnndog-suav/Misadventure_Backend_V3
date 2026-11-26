@@ -25,7 +25,7 @@ import type {
 } from '../../zone-quests'
 
 /** Na FEAT-20 entra o ajudante de IA. */
-export type TPartyMemberKind = 'human'
+export type TPartyMemberKind = 'human' | 'aiHelper'
 
 export type TKnockoutResult = Readonly<{
   id: string

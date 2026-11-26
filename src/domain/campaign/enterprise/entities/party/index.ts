@@ -224,7 +224,11 @@ export type TPartyIssue =
       reason: 'required' | 'notString' | 'blank' | 'tooLong'
     }
   | { field: 'playerClass'; reason: 'required' | 'notString' | 'unknownClass' }
-  | { field: 'members'; reason: 'belowMinPlayers' }
+  | {
+      field: 'aiHelperCount'
+      reason:
+        'notInteger' | 'outOfRange' | 'belowMinPlayers' | 'aboveMaxPlayers'
+    }
 
 /** Por que a criação falhou: dados do pedido (REQ-17, REQ-35) ou conteúdo (REQ-36). */
 export type TCreatePartyFailure =
@@ -515,6 +519,11 @@ export interface TCreatePartyInput {
   classDefinition: TClassDefinition | null
   /** Cartas de atributo do `starterDeck` da classe. */
   attributeCards: readonly TAttributeCard[]
+  aiHelperCount?: unknown
+  helperClasses?: readonly {
+    classDefinition: TClassDefinition
+    attributeCards: readonly TAttributeCard[]
+  }[]
   /** A Carta de Dimensão publicada de menor `releaseOrder` (ou `null`). */
   dimension: TDimensionCard | null
   /** Zonas publicadas da coleção da dimensão. */
@@ -5013,13 +5022,21 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       issues
     )
     const classDefinition = checkPlayerClass(input, issues)
-    const memberCount = 1
-    if (memberCount < input.config.minPlayers) {
-      issues.push({ field: 'members', reason: 'belowMinPlayers' })
+    const helperCount =
+      input.aiHelperCount === undefined ? 0 : input.aiHelperCount
+    if (typeof helperCount !== 'number' || !Number.isInteger(helperCount)) {
+      issues.push({ field: 'aiHelperCount', reason: 'notInteger' })
+    } else if (helperCount < 0) {
+      issues.push({ field: 'aiHelperCount', reason: 'outOfRange' })
+    } else if (helperCount + 1 < input.config.minPlayers) {
+      issues.push({ field: 'aiHelperCount', reason: 'belowMinPlayers' })
+    } else if (helperCount + 1 > input.config.maxPlayers) {
+      issues.push({ field: 'aiHelperCount', reason: 'aboveMaxPlayers' })
     }
 
     if (
       issues.length > 0 ||
+      typeof helperCount !== 'number' ||
       name === null ||
       characterName === null ||
       classDefinition === null
@@ -5068,6 +5085,27 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       ids.next()
     )
     const members = [host]
+    const helperClasses = input.helperClasses?.length
+      ? input.helperClasses
+      : [{ classDefinition, attributeCards: input.attributeCards }]
+    for (let index = 0; index < helperCount; index++) {
+      const starter = helperClasses[rng.nextInt(0, helperClasses.length - 1)]
+      members.push(
+        PartyMember.create(
+          {
+            characterName: `Ajudante ${index + 1}`,
+            kind: 'aiHelper',
+            player: createStartingPlayer({
+              config: input.config,
+              ...starter,
+              startingCityZoneId,
+              rng,
+            }),
+          },
+          ids.next()
+        )
+      )
+    }
     const turnOrder = rollTurnOrder(
       members.map((member) => member.id),
       rng

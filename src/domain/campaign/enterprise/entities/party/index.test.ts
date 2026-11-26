@@ -164,7 +164,7 @@ describe('Party', () => {
         issues: [
           { field: 'name', reason: 'blank' },
           { field: 'characterName', reason: 'tooLong' },
-          { field: 'members', reason: 'belowMinPlayers' },
+          { field: 'aiHelperCount', reason: 'belowMinPlayers' },
         ],
       })
   })
@@ -323,7 +323,7 @@ describe('Party', () => {
           { field: 'name', reason: 'blank' },
           { field: 'characterName', reason: 'notString' },
           { field: 'playerClass', reason: 'unknownClass' },
-          { field: 'members', reason: 'belowMinPlayers' },
+          { field: 'aiHelperCount', reason: 'belowMinPlayers' },
         ],
       })
   })

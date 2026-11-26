@@ -23,6 +23,12 @@ describe('GET /parties (e2e)', () => {
     await app.close()
   })
 
+  it('REQ-178: publica opções de criação com o laboratório desligado', async () => {
+    await request(app.getHttpServer())
+      .get('/parties/creation-options')
+      .expect(200, { minPlayers: 1, maxPlayers: 6 })
+  })
+
   it('REQ-18: sem saves → []', async () => {
     const response = await request(app.getHttpServer()).get('/parties')
 
