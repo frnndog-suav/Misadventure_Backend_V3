@@ -1,4 +1,5 @@
 import { type Either, left, right } from '@/core/error/either'
+import { breaksCommercialCollectionReferences } from '@/domain/catalog/enterprise/commercial-collections'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import { CardInputParser } from '@/domain/catalog/application/repositories/card-input-parser'
 import { ClassInputParser } from '@/domain/catalog/application/repositories/class-input-parser'
@@ -7,6 +8,7 @@ import { ContentIdTakenError } from '@/domain/catalog/application/use-cases/_err
 import { ContentInUseError } from '@/domain/catalog/application/use-cases/_errors/content-in-use-error'
 import { ContentInvalidError } from '@/domain/catalog/application/use-cases/_errors/content-invalid-error'
 import { ContentReferencedError } from '@/domain/catalog/application/use-cases/_errors/content-referenced-error'
+import { commercialCollectionPublicationIssues } from '@/domain/catalog/enterprise/commercial-collections'
 import {
   checkCatalogIntegrity,
   isEventDeckCard,
@@ -142,6 +144,7 @@ export class ImportCollectionUseCase {
       for (const { index, card, status } of parsedCards) {
         if (status !== 'published') continue
         for (const issue of [
+          ...commercialCollectionPublicationIssues(card, editorCards),
           ...rewardDeckPublicationIssues(card, statuses),
           ...questPublicationIssues(card, editorCards),
           ...refinementPublicationIssues(card),
@@ -271,12 +274,23 @@ export class ImportCollectionUseCase {
     )
     const inUse = await this.partiesRepository.findContentInUse()
     if (
+      inUse.collectionIds.has(collectionId) ||
       oldCardIds.some((id) => inUse.cardIds.has(id)) ||
       oldClasses.some(({ classDefinition }) =>
         inUse.playerClasses.has(classDefinition.playerClass)
       )
     ) {
       return new ContentInUseError()
+    }
+
+    if (
+      breaksCommercialCollectionReferences(
+        collectionId,
+        [...outside, ...oldCards],
+        replacement
+      )
+    ) {
+      return new ContentReferencedError('commercialCollection')
     }
 
     const kept = new Set(keptCards.map((card) => card.id))

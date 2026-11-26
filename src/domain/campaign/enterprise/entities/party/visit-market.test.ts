@@ -240,6 +240,24 @@ describe('Party.visitMarket — lote (REQ-140 a REQ-142; D-118)', () => {
     expectUntouched(party, before)
   })
 
+  it('REQ-175: booster fora da vigência reverte a compra e reposição do single', () => {
+    const party = partyOf()
+    const before = partyOf()
+    const cardId = 'other.out-of-market-booster'
+
+    const result = run(party, [
+      { operation: 'buySingle', slotIndex: 0 },
+      { operation: 'buyBooster', cardId, quantity: 1 },
+    ])
+
+    expect(result.isLeft() && result.value).toEqual({
+      reason: 'notMarketBooster',
+      operationIndex: 1,
+      cardId,
+    })
+    expectUntouched(party, before)
+  })
+
   it('REQ-140: a visita pode ser repetida na mesma vez; lastMarketVisit é o da última', () => {
     const party = partyOf()
 

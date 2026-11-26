@@ -1,6 +1,8 @@
 import { type Either, left, right } from '@/core/error/either'
+import { breaksCommercialCollectionReferences } from '@/domain/catalog/enterprise/commercial-collections'
 import { CardInputParser } from '@/domain/catalog/application/repositories/card-input-parser'
 import { ContentStore } from '@/domain/catalog/application/repositories/content-store'
+import { commercialCollectionPublicationIssues } from '@/domain/catalog/enterprise/commercial-collections'
 import {
   cardsOutside,
   loadAllCards,
@@ -151,6 +153,7 @@ export class ReplaceCardUseCase {
       ),
       ...(current.status === 'published'
         ? [
+            ...commercialCollectionPublicationIssues(card, allCards),
             ...rewardDeckPublicationIssues(card, statusById(allCards)),
             ...questPublicationIssues(card, allCards),
             ...refinementPublicationIssues(card),
@@ -168,6 +171,17 @@ export class ReplaceCardUseCase {
         : []),
     ]
     if (issues.length > 0) return left(new ContentInvalidError(issues))
+    if (
+      breaksCommercialCollectionReferences(
+        collectionId,
+        allCards,
+        allCards.map((entry) =>
+          entry.card.id === cardId ? { ...entry, card } : entry
+        )
+      )
+    ) {
+      return left(new ContentReferencedError('commercialCollection'))
+    }
 
     if (
       (!renamed || current.status === 'draft') &&

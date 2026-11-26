@@ -1,4 +1,5 @@
 import { type Either, left, right } from '@/core/error/either'
+import { breaksCommercialCollectionReferences } from '@/domain/catalog/enterprise/commercial-collections'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import { ContentStore } from '@/domain/catalog/application/repositories/content-store'
 import { CollectionNotFoundError } from '@/domain/catalog/application/use-cases/_errors/collection-not-found-error'
@@ -52,6 +53,7 @@ export class DeleteCollectionUseCase {
     const inUse = await this.partiesRepository.findContentInUse()
 
     if (
+      inUse.collectionIds.has(collectionId) ||
       [...cardIds].some((id) => inUse.cardIds.has(id)) ||
       classes.some(
         (definition) =>
@@ -74,6 +76,16 @@ export class DeleteCollectionUseCase {
 
     // REQ-82: carta dela citada por Carta de Dimensão de outra coleção.
     const allCards = await loadAllCards(this.contentStore)
+    if (
+      breaksCommercialCollectionReferences(
+        collectionId,
+        allCards,
+        allCards.filter(({ card }) => card.collectionId !== collectionId)
+      )
+    ) {
+      return left(new ContentReferencedError('commercialCollection'))
+    }
+
     if (isCitedInRewardDeck(cardsOutside(allCards, collectionId), cardIds)) {
       return left(new ContentReferencedError('rewardDeck'))
     }

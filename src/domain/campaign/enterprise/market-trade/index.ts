@@ -255,16 +255,17 @@ export function servicesOf(
 /** Boosters à venda: itens `booster` da coleção vigente, em ordem de id (REQ-141 b). */
 export function marketBoosters(
   cards: TCards,
-  collectionId: string | null
+  scope: readonly string[] | string | null
 ): TItemCard[] {
-  if (collectionId === null) return []
+  const collectionIds = typeof scope === 'string' ? [scope] : (scope ?? [])
   return [...cards.values()]
     .filter(
       (card): card is TItemCard =>
         card.type === 'item' &&
         !card.completionItem &&
         card.itemCategory === 'booster' &&
-        card.boosterCollectionId === collectionId
+        card.boosterCollectionId !== null &&
+        collectionIds.includes(card.boosterCollectionId)
     )
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
@@ -373,6 +374,7 @@ export function describeMarket(input: {
   /** REQ-158: `market.mounts` da zona (vazio = sem Estábulo). */
   zoneMounts?: readonly string[]
   collectionId: string | null
+  commercialCollectionIds?: readonly string[]
   state: TMarketsState
 }): TMarketView {
   const { config, player, cards, zoneId, state } = input
@@ -432,7 +434,10 @@ export function describeMarket(input: {
     zoneId,
     factorPercent,
     stock,
-    boosters: marketBoosters(cards, input.collectionId).map(({ id }) => ({
+    boosters: marketBoosters(
+      cards,
+      input.commercialCollectionIds ?? input.collectionId
+    ).map(({ id }) => ({
       cardId: id,
       price: config.boosterPrice,
     })),
@@ -581,6 +586,7 @@ export function applyMarketOperations(input: {
   /** REQ-158: `market.mounts` da zona (vazio = sem Estábulo). */
   zoneMounts?: readonly string[]
   collectionId: string | null
+  commercialCollectionIds?: readonly string[]
   state: TMarketsState
   candidates: readonly TMarketCandidate[]
   rng: TRng
@@ -597,7 +603,10 @@ export function applyMarketOperations(input: {
   const factorPercent =
     marketIndex >= 0 ? state.markets[marketIndex].factorPercent : 100
   const boosterIds = new Set(
-    marketBoosters(cards, input.collectionId).map(({ id }) => id)
+    marketBoosters(
+      cards,
+      input.commercialCollectionIds ?? input.collectionId
+    ).map(({ id }) => id)
   )
   const results: TMarketOperationResult[] = []
   let goldLost = 0

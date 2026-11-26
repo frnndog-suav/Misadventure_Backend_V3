@@ -1,5 +1,6 @@
 import { type Either, left, right } from '@/core/error/either'
 import { ContentStore } from '@/domain/catalog/application/repositories/content-store'
+import { commercialCollectionPublicationIssues } from '@/domain/catalog/enterprise/commercial-collections'
 import {
   cardsOutside,
   loadAllCards,
@@ -59,6 +60,7 @@ export class PublishCardUseCase {
           ? (await this.contentStore.listCollections()).map(({ id }) => id)
           : []
       ),
+      ...commercialCollectionPublicationIssues(card, allCards),
       ...rewardDeckPublicationIssues(card, statusById(allCards)),
       ...questPublicationIssues(card, allCards),
       ...refinementPublicationIssues(card),

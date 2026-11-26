@@ -1,4 +1,5 @@
 import { type Either, left, right } from '@/core/error/either'
+import { breaksCommercialCollectionReferences } from '@/domain/catalog/enterprise/commercial-collections'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import { ContentStore } from '@/domain/catalog/application/repositories/content-store'
 import { CardNotFoundError } from '@/domain/catalog/application/use-cases/_errors/card-not-found-error'
@@ -55,6 +56,16 @@ export class DeleteCardUseCase {
 
     // REQ-82: citada em `rewardDecks` de alguma Carta de Dimensão.
     const allCards = await loadAllCards(this.contentStore)
+    if (
+      breaksCommercialCollectionReferences(
+        current.card.collectionId,
+        allCards,
+        allCards.filter(({ card }) => card.id !== cardId)
+      )
+    ) {
+      return left(new ContentReferencedError('commercialCollection'))
+    }
+
     if (
       allCards.some(
         ({ card }) =>

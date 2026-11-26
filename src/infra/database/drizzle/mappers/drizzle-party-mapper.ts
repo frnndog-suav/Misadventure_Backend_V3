@@ -818,6 +818,7 @@ const rewardDecksSchema = z.array(
 const dimensionSchema = z.strictObject({
   dimensionCardId: id,
   startingCityZoneId: id,
+  commercialCollectionIds: z.array(id).optional(),
   map: z.strictObject({
     zones: z.array(
       z.strictObject({
@@ -1330,7 +1331,12 @@ export class DrizzlePartyMapper {
   static toDrizzle(party: Party): TPartyRow & { state: TPartyState } {
     const snapshot = party.combatSnapshot()
     const [a, b, c, d] = party.rngState
-    const { dimensionCardId, startingCityZoneId, map } = party.dimension
+    const {
+      dimensionCardId,
+      startingCityZoneId,
+      map,
+      commercialCollectionIds,
+    } = party.dimension
     return {
       id: party.id.toString(),
       name: party.name,
@@ -1460,6 +1466,9 @@ export class DrizzlePartyMapper {
         dimension: {
           dimensionCardId,
           startingCityZoneId,
+          ...(commercialCollectionIds === undefined
+            ? {}
+            : { commercialCollectionIds: [...commercialCollectionIds] }),
           map: {
             zones: map.zones.map((z) => ({ ...z, arrows: [...z.arrows] })),
             crossings: map.crossings.map(({ zoneIds: [first, second] }) => ({

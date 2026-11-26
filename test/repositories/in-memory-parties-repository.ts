@@ -41,17 +41,21 @@ export class InMemoryPartiesRepository implements PartiesRepository {
   }
 
   async findContentInUse(): Promise<{
+    collectionIds: ReadonlySet<string>
     cardIds: ReadonlySet<string>
     playerClasses: ReadonlySet<string>
   }> {
     const cardIds = new Set<string>()
+    const collectionIds = new Set<string>()
     const playerClasses = new Set<string>()
     for (const item of this.items) {
       const inUse = item.contentInUse()
+      for (const id of item.dimension.commercialCollectionIds ?? [])
+        collectionIds.add(id)
       inUse.cardIds.forEach((id) => cardIds.add(id))
       inUse.playerClasses.forEach((id) => playerClasses.add(id))
     }
-    return { cardIds, playerClasses }
+    return { cardIds, playerClasses, collectionIds }
   }
 }
 

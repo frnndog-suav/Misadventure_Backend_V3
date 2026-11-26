@@ -589,10 +589,13 @@ export async function findPartyCards(
     )?.showcase ?? [])
       if (cardId !== null) cardIds.add(cardId)
     for (const { cardId } of actor.player.tcgFolder) cardIds.add(cardId)
-    if (dimension?.type === 'dimension') {
+    const commercialCollectionIds =
+      party.dimension.commercialCollectionIds ??
+      (dimension?.type === 'dimension' ? [dimension.collectionId] : [])
+    if (commercialCollectionIds.length > 0) {
       for (const booster of await findMarketBoosters(
         catalog,
-        dimension.collectionId
+        commercialCollectionIds
       ))
         cards.set(booster.id, booster)
     }

@@ -3,6 +3,7 @@ import { type Either, left, right } from '@/core/error/either'
 import { AggregateRoot } from '@/core/pattern/aggregate-root'
 import type { IdGenerator } from '@/core/ports/id-generator'
 import { type RngState, SeededRng } from '@/core/rng/seeded-rng'
+import { commercialCollectionsOf } from '@/domain/catalog/enterprise/commercial-collections'
 import {
   isClassActive,
   isSpecializationActive,
@@ -311,9 +312,16 @@ export type TLabGrant =
 /** Dimensão do grupo (D-42; CONTRATO `PartyDimension`). */
 export type TPartyDimension = Readonly<{
   dimensionCardId: string
+  commercialCollectionIds?: readonly string[]
   startingCityZoneId: string
   map: TPartyMap
 }>
+
+type TPartyDimensionSuccessor = {
+  dimension: TDimensionCard
+  cards: readonly TCard[]
+  marketCards?: readonly TCard[]
+}
 
 type EquipmentEffectOrigin = {
   type: 'equipment'
@@ -1166,7 +1174,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   applyDimensionCompletion(
     dimension: TDimensionCard,
     cards: ReadonlyMap<string, TCard>,
-    successor: { dimension: TDimensionCard; cards: readonly TCard[] } | null,
+    successor: TPartyDimensionSuccessor | null,
     at: Date,
     ids: IdGenerator | undefined,
     bossPeak: number | null,
@@ -1309,7 +1317,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   }
 
   resumeFrozenDimension(
-    successor: { dimension: TDimensionCard; cards: readonly TCard[] },
+    successor: TPartyDimensionSuccessor,
     at: Date
   ): Either<
     Extract<TCreatePartyFailure, { type: 'dimensionInvalid' }>,
@@ -1339,7 +1347,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   }
 
   private enterNextDimension(
-    next: { dimension: TDimensionCard; cards: readonly TCard[] },
+    next: TPartyDimensionSuccessor,
     prepared: { startingCityZoneId: string; mapWithQuestDecks: TPartyMap },
     rng: SeededRng,
     at: Date
@@ -1348,6 +1356,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const { dimension, cards } = next
     this.props.dimension = {
       dimensionCardId: dimension.id,
+      commercialCollectionIds: commercialCollectionsOf(dimension),
       startingCityZoneId,
       map: mapWithQuestDecks,
     }
@@ -1407,7 +1416,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         mapWithQuestDecks.zones.map(({ zoneId }) => zoneId),
         cards.filter((card): card is TZoneCard => card.type === 'zone')
       ),
-      marketCandidatesOf(cards),
+      marketCandidatesOf(next.marketCards ?? cards),
       this.config,
       rng
     )
@@ -5084,6 +5093,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         rngState: rng.state(),
         dimension: {
           dimensionCardId: dimension.id,
+          commercialCollectionIds: commercialCollectionsOf(dimension),
           startingCityZoneId,
           map: mapWithQuestDecks,
         },
@@ -5878,6 +5888,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       zone: TZoneCard | null
       cards: readonly TCard[]
       collectionId: string | null
+      commercialCollectionIds?: readonly string[]
     },
     at: Date
   ): Either<TVisitMarketRefusal, void> {
@@ -5911,6 +5922,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       zoneStock: zone.market.stock,
       zoneMounts: zone.market.mounts,
       collectionId: catalog.collectionId,
+      commercialCollectionIds:
+        this.dimension.commercialCollectionIds ??
+        catalog.commercialCollectionIds,
       state: { markets: this.markets, pool: this.marketPool },
       candidates: this.marketCandidates,
       rng,
@@ -5959,6 +5973,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       zoneMounts: zone.market.mounts,
       collectionId:
         dimension?.type === 'dimension' ? dimension.collectionId : null,
+      commercialCollectionIds: this.dimension.commercialCollectionIds,
       state: { markets: this.markets, pool: this.marketPool },
     })
   }

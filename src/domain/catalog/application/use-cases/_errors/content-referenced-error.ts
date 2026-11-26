@@ -10,8 +10,11 @@ export type TContentReference =
   | 'blacksmith'
   | 'stable'
   | 'dimensionCompletion'
+  | 'commercialCollection'
 
 const MESSAGES: Record<TContentReference, string> = {
+  commercialCollection:
+    'Esta coleção é referenciada como extensão ou reprint por outra dimensão.',
   quest: 'Esta carta é referenciada por uma missão ou por um deck de missões.',
   specialization: 'Esta carta é referenciada por um efeito de especialização.',
   starterDeck:

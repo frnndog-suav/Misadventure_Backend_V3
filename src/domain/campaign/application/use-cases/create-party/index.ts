@@ -6,6 +6,8 @@ import { SeededRng } from '@/core/rng/seeded-rng'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import { Party } from '@/domain/campaign/enterprise/entities/party'
 import { marketCandidatesOf } from '@/domain/campaign/enterprise/markets'
+import { listMarketCards } from '@/domain/campaign/application/market-catalog'
+import { commercialCollectionsOf } from '@/domain/catalog/enterprise/commercial-collections'
 import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import type {
   TAttributeCard,
@@ -72,7 +74,14 @@ export class CreatePartyUseCase {
         dimension,
         zones,
         dimensionCards: cards,
-        marketCandidates: marketCandidatesOf(cards),
+        marketCandidates: marketCandidatesOf(
+          dimension
+            ? await listMarketCards(
+                this.cardCatalog,
+                commercialCollectionsOf(dimension)
+              )
+            : []
+        ),
         config: config.values,
         rngState: SeededRng.fromSeed(this.seeds.next()).state(),
         now: this.clock.now(),

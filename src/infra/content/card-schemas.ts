@@ -350,6 +350,8 @@ const cardSchemas = {
     name: text,
     flavorText,
     releaseOrder: z.number(),
+    extendedCollectionIds: z.array(z.string()).default([]),
+    reprintCollectionIds: z.array(z.string()).default([]),
     arrivalZoneTitle: text.nullable(),
     completion: z
       .strictObject({

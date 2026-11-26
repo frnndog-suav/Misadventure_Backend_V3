@@ -70,10 +70,12 @@ export class DrizzlePartiesRepository implements PartiesRepository {
 
   /** REQ-39: lê todos os saves; o editor só existe em dev (II.6). */
   async findContentInUse(): Promise<{
+    collectionIds: ReadonlySet<string>
     cardIds: ReadonlySet<string>
     playerClasses: ReadonlySet<string>
   }> {
     const cardIds = new Set<string>()
+    const collectionIds = new Set<string>()
     const playerClasses = new Set<string>()
     const [savedParties, gameConfig] = await Promise.all([
       this.findAll(),
@@ -84,11 +86,13 @@ export class DrizzlePartiesRepository implements PartiesRepository {
     }
     for (const party of savedParties) {
       const inUse = party.contentInUse()
+      for (const id of party.dimension.commercialCollectionIds ?? [])
+        collectionIds.add(id)
       for (const id of inUse.cardIds) cardIds.add(id)
       for (const playerClass of inUse.playerClasses)
         playerClasses.add(playerClass)
     }
-    return { cardIds, playerClasses }
+    return { cardIds, playerClasses, collectionIds }
   }
 
   async delete(party: Party): Promise<void> {

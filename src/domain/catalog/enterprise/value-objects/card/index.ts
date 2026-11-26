@@ -532,6 +532,8 @@ export type TDimensionCard = Readonly<{
   name: string
   flavorText: string | null
   releaseOrder: number
+  extendedCollectionIds: readonly string[]
+  reprintCollectionIds: readonly string[]
   arrivalZoneTitle: string | null
   effects: readonly TZoneEffect[]
   rewardDecks: readonly TRewardDeck[]

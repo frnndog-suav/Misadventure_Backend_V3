@@ -4,6 +4,8 @@ import type {
   TDimensionCard,
 } from '@/domain/catalog/enterprise/value-objects/card'
 import type { Party } from '../../enterprise/entities/party'
+import { listMarketCards } from '../market-catalog'
+import { commercialCollectionsOf } from '@/domain/catalog/enterprise/commercial-collections'
 
 export async function findDimensionSuccessor(
   catalog: CardCatalog,
@@ -22,7 +24,14 @@ export async function findDimensionSuccessor(
         successor = { dimension: card, cards }
     }
   }
-  return successor
+  if (!successor) return null
+  return {
+    ...successor,
+    marketCards: await listMarketCards(
+      catalog,
+      commercialCollectionsOf(successor.dimension)
+    ),
+  }
 }
 
 export async function findFrozenDimensionSuccessor(

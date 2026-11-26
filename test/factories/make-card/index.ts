@@ -237,6 +237,8 @@ export function makeDimensionCard(
     name: 'Reino Enevoado',
     flavorText: null,
     releaseOrder: 1,
+    extendedCollectionIds: [],
+    reprintCollectionIds: [],
     arrivalZoneTitle: 'Porto Cinzento',
     effects: [],
     rewardDecks: [],

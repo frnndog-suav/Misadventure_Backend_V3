@@ -4,7 +4,10 @@ import type { IdGenerator } from '@/core/ports/id-generator'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
 import { marketCandidatesOf } from '@/domain/campaign/enterprise/markets'
-import { findMarketBoosters } from '@/domain/campaign/application/market-catalog'
+import {
+  findMarketBoosters,
+  listMarketCards,
+} from '@/domain/campaign/application/market-catalog'
 import {
   parsePartyAction,
   type TPrepareOperation,
@@ -625,11 +628,11 @@ export class TakePartyActionUseCase {
     const dimension = await this.cardCatalog.findCard(
       party.dimension.dimensionCardId
     )
-    if (dimension?.type !== 'dimension') return
+    const collectionIds =
+      party.dimension.commercialCollectionIds ??
+      (dimension?.type === 'dimension' ? [dimension.collectionId] : [])
     party.provideMarketCandidates(
-      marketCandidatesOf(
-        await this.cardCatalog.listCards(dimension.collectionId)
-      )
+      marketCandidatesOf(await listMarketCards(this.cardCatalog, collectionIds))
     )
   }
 
@@ -866,6 +869,7 @@ export class TakePartyActionUseCase {
     zone: TZoneCard | null
     cards: TCard[]
     collectionId: string | null
+    commercialCollectionIds: readonly string[]
   }> {
     const player = party.members.find(({ id }) =>
       id.equals(party.turn.memberId)
@@ -876,17 +880,27 @@ export class TakePartyActionUseCase {
     ])
     const collectionId =
       dimension?.type === 'dimension' ? dimension.collectionId : null
+    const commercialCollectionIds =
+      party.dimension.commercialCollectionIds ??
+      (collectionId === null ? [] : [collectionId])
     const cards = new Map<string, TCard>()
-    if (collectionId !== null) {
-      for (const card of await this.cardCatalog.listCards(collectionId))
+    if (commercialCollectionIds.length > 0) {
+      for (const card of await listMarketCards(
+        this.cardCatalog,
+        commercialCollectionIds
+      ))
         cards.set(card.id, card)
       for (const card of await findMarketBoosters(
         this.cardCatalog,
-        collectionId
+        commercialCollectionIds
       ))
         cards.set(card.id, card)
     }
     const cardIds = [
+      ...party.marketPool.map(({ cardId }) => cardId),
+      ...party.markets.flatMap(({ showcase }) =>
+        showcase.filter((id): id is string => id !== null)
+      ),
       ...(zone?.type === 'zone' ? (zone.market?.stock ?? []) : []),
       ...(zone?.type === 'zone' ? (zone.market?.mounts ?? []) : []),
       ...(player?.mount ? [player.mount.cardId] : []),
@@ -902,6 +916,7 @@ export class TakePartyActionUseCase {
       zone: zone?.type === 'zone' ? zone : null,
       cards: [...cards.values()],
       collectionId,
+      commercialCollectionIds,
     }
   }
 
