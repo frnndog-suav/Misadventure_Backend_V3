@@ -392,3 +392,31 @@ describe('parsePartyAction', () => {
     })
   })
 })
+
+describe('REQ-187: decisões de combate', () => {
+  it.each([
+    {
+      type: 'confirmCombatRoster',
+      combatId: 'combat',
+      decisionId: 'roster',
+      inviteeMemberIds: [],
+    },
+    {
+      type: 'respondCombatInvite',
+      combatId: 'combat',
+      decisionId: 'invite',
+      accept: false,
+    },
+    {
+      type: 'confirmCombatOrder',
+      combatId: 'combat',
+      decisionId: 'order',
+      memberIds: ['human', 'helper'],
+    },
+  ])('valida $type e rejeita campos extras', (body) => {
+    expect(parsePartyAction(body).value).toEqual(body)
+    expect(parsePartyAction({ ...body, memberId: 'helper' }).isLeft()).toBe(
+      true
+    )
+  })
+})

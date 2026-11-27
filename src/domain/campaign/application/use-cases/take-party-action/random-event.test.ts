@@ -1686,42 +1686,22 @@ describe('TakePartyActionUseCase — chefe final (T-83)', () => {
         publishedCollections: successor ? [next.collectionId] : [],
       })
       const party = game.party()
-      const dimension = game.catalog.cards.find(
-        ({ id }) => id === party.dimension.dimensionCardId
-      )!
-      if (dimension.type !== 'dimension') throw new Error('Dimensão ausente')
-      const cards = new Map(game.catalog.cards.map((card) => [card.id, card]))
-      const ids = sequentialIds()
-      const at = fixedClock('2026-11-20T12:00:00Z').now()
-      expect(
-        party.completeDimension(harbor, dimension, cards, at, ids).isRight()
-      ).toBe(true)
+      await game.accept({ type: 'completeDimension' })
       const decision = party.pendingCombatDecision!
-      expect(
-        party
-          .confirmCombatRoster(
-            'member-1',
-            decision.combatId,
-            decision.id,
-            ['member-2'],
-            cards,
-            at
-          )
-          .isRight()
-      ).toBe(true)
-      const attack = () => ({
-        type: 'combatAttack',
-        combatId: party.combat!.id,
-        turnId: party.combat!.turn.id,
-        targetId: party.combat!.enemies[0].id,
-      })
-      const battle = party.combat!
+      expect(decision.type).toBe('roster')
       await game.accept({
+        type: 'confirmCombatRoster',
+        combatId: decision.combatId,
+        decisionId: decision.id,
+        inviteeMemberIds: ['member-2'],
+      })
+      expect(party.pendingCombatDecision?.type).toBe('turn')
+      const battle = party.combat!
+      const won = await game.accept({
         type: 'escapeCombat',
         combatId: battle.id,
         turnId: battle.turn.id,
       })
-      const won = await game.accept(attack())
       expect(
         won.lastCombatResult?.participants?.map(({ condition }) => condition)
       ).toEqual(['escaped', reflection ? 'knockedOut' : 'standing'])

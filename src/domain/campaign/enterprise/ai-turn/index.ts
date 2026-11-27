@@ -57,7 +57,7 @@ function turnCandidates(
 ): Candidate[] {
   const actor = party.members.find(({ id }) => id.equals(party.turn.memberId))
   if (!actor) return []
-  const { player } = actor
+  const { player } = party.combatActor || actor
   const trigger = party.triggeredEffectChoice
   const effect = trigger?.effects[0]
   if (trigger && effect) {

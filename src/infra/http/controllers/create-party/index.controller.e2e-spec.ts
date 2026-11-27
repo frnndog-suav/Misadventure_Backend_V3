@@ -181,6 +181,7 @@ describe('POST /parties (e2e)', () => {
       randomEventEncounter: null,
       pendingRewards: [],
       triggeredEffectChoice: null,
+      pendingCombatDecision: null,
       combat: null,
       lastCombatResult: null,
       lastDimensionCompletion: null,

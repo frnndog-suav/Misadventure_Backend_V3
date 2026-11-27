@@ -80,6 +80,12 @@ export type TRandomEventAction =
       payment?: TEventPayment
     }
 
+export type TCombatDecisionAction = { combatId: string; decisionId: string } & (
+  | { type: 'confirmCombatRoster'; inviteeMemberIds: string[] }
+  | { type: 'respondCombatInvite'; accept: boolean }
+  | { type: 'confirmCombatOrder'; memberIds: string[] }
+)
+
 export type TCombatAction = { combatId: string; turnId: string } & (
   | { type: 'combatAttack'; targetId: string }
   | { type: 'endCombatTurn' | 'escapeCombat' }
@@ -150,6 +156,7 @@ export type TPartyAction =
   | TQuestAction
   | TResolveTriggeredEffectAction
   | TCombatAction
+  | TCombatDecisionAction
   | TResolveRewardAction
   | { type: 'move'; zoneId: string; viaZoneId?: string }
   | { type: 'endTurn' }
@@ -229,6 +236,12 @@ export function parsePartyAction(
     case 'resolveTriggeredEffect':
       return combatEnabled
         ? parseTriggeredEffectAction(body)
+        : left([{ field: 'type', reason: 'unknownAction' }])
+    case 'confirmCombatRoster':
+    case 'respondCombatInvite':
+    case 'confirmCombatOrder':
+      return combatEnabled
+        ? parseCombatDecisionAction(body.type, body)
         : left([{ field: 'type', reason: 'unknownAction' }])
     case 'escapeCombat':
     case 'combatAttack':
@@ -326,6 +339,50 @@ function parseTriggeredEffectAction(
   return decision === 'pay'
     ? right({ ...command, decision, ...(payment && { payment }) })
     : right({ ...command, decision })
+}
+
+function parseCombatDecisionAction(
+  type: TCombatDecisionAction['type'],
+  body: Record<string, unknown>
+): Either<TActionIssue[], TCombatDecisionAction> {
+  const field = {
+    confirmCombatRoster: 'inviteeMemberIds',
+    respondCombatInvite: 'accept',
+    confirmCombatOrder: 'memberIds',
+  }[type]
+  const issues: TActionIssue[] = []
+  for (const key of ['combatId', 'decisionId']) {
+    if (typeof body[key] !== 'string')
+      issues.push({
+        field: key,
+        reason: body[key] === undefined ? 'required' : 'notString',
+      })
+  }
+  const value = body[field]
+  if (value === undefined) issues.push({ field, reason: 'required' })
+  else if (type === 'respondCombatInvite') {
+    if (typeof value !== 'boolean')
+      issues.push({ field, reason: 'unknownOption' })
+  } else if (!Array.isArray(value)) issues.push({ field, reason: 'notArray' })
+  else
+    value.forEach((id: unknown, index) => {
+      if (typeof id !== 'string')
+        issues.push({ field: `${field}.${index}`, reason: 'notString' })
+    })
+  issues.push(...extraKeys(body, ['type', 'combatId', 'decisionId', field]))
+  if (issues.length) return left(issues)
+  const ids = {
+    combatId: body.combatId as string,
+    decisionId: body.decisionId as string,
+  }
+  switch (type) {
+    case 'confirmCombatRoster':
+      return right({ type, ...ids, inviteeMemberIds: value as string[] })
+    case 'respondCombatInvite':
+      return right({ type, ...ids, accept: value as boolean })
+    case 'confirmCombatOrder':
+      return right({ type, ...ids, memberIds: value as string[] })
+  }
 }
 
 function parseCombatAction(

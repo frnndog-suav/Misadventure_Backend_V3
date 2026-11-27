@@ -222,7 +222,10 @@ describe('REQ-186 — recrutamento de combate', () => {
       expect(party.combatUpdates).toEqual([])
     }
     expect(confirm(['half', 'below']).isRight()).toBe(true)
-    expect(party.pendingCombatDecision).toBeNull()
+    expect(party.pendingCombatDecision).toMatchObject({
+      type: 'turn',
+      memberId: 'human',
+    })
     expect(
       party.combatUpdates.find(({ type }) => type === 'combatRosterConfirmed')
     ).toEqual({

@@ -112,10 +112,87 @@ export class TakePartyActionUseCase {
   ): Promise<TTakePartyActionUseCaseResponse> {
     if (party.status !== 'inSession')
       return left(new PartySessionNotActiveError())
-    if (!party.turn.memberId.equals(party.hostMemberId))
-      return left(new ActionNotAllowedError('zoneActionUnavailable'))
+    const decision = party.pendingCombatDecision
+    const host = party.hostMemberId.toString()
+    if ('decisionId' in action) return this.applyHumanAction(party, action)
+    if (decision?.type === 'turn' && 'turnId' in action) {
+      if (
+        decision.combatId !== action.combatId ||
+        decision.turnId !== action.turnId
+      )
+        return left(new ActionNotAllowedError('combatDecisionExpired'))
+      if (decision.memberId !== host)
+        return left(new ActionNotAllowedError('combatDecisionNotOwned'))
+    } else if (decision?.type === 'reward' && action.type === 'resolveReward') {
+      if (decision.rewardId !== action.rewardId)
+        return left(new ActionNotAllowedError('combatDecisionExpired'))
+      if (decision.memberId !== host)
+        return left(new ActionNotAllowedError('combatDecisionNotOwned'))
+    } else if (
+      party.triggeredEffectChoice?.memberId === host &&
+      action.type === 'resolveTriggeredEffect'
+    ) {
+      return this.applyHumanAction(party, action)
+    } else if (decision) {
+      if ('turnId' in action || action.type === 'resolveReward')
+        return left(new ActionNotAllowedError('combatDecisionExpired'))
+      return left(new ActionNotAllowedError('combatDecisionPending'))
+    } else if (
+      action.type === 'resolveReward' &&
+      party.lastCombatResult?.participants?.some(({ rewardIds }) =>
+        rewardIds.includes(action.rewardId)
+      )
+    ) {
+      return left(new ActionNotAllowedError('combatDecisionExpired'))
+    } else if (!party.turn.memberId.equals(party.hostMemberId)) {
+      const stale = 'turnId' in action || action.type === 'resolveReward'
+      return left(
+        new ActionNotAllowedError(
+          stale ? 'combatDecisionExpired' : 'zoneActionUnavailable'
+        )
+      )
+    }
 
-    return this.applyAction(party, action)
+    return this.applyHumanAction(party, action)
+  }
+
+  private async applyHumanAction(
+    party: Party,
+    action: TPartyAction
+  ): Promise<TTakePartyActionUseCaseResponse> {
+    const result = await this.applyAction(party, action)
+    if (result.isLeft() || !party.turn.memberId.equals(party.hostMemberId))
+      return result
+
+    const updates = [...party.combatUpdates]
+    while (
+      party.combatActor?.kind === 'aiHelper' &&
+      !party.pendingCombatDecision
+    ) {
+      const { cards, dimension } = await this.findEventCatalog(party)
+      const classes = await this.cardCatalog.listClasses()
+      let accepted = false
+      for (const intent of aiTurnIntents(
+        party,
+        cards,
+        dimension,
+        classes,
+        false
+      )) {
+        const applied = await this.applyAction(party, intent, classes)
+        if (applied.isLeft()) {
+          if (applied.value instanceof DimensionInvalidError) return applied
+          continue
+        }
+        updates.push(...party.combatUpdates)
+        accepted = true
+        break
+      }
+      if (!accepted)
+        return left(new ActionNotAllowedError('zoneActionUnavailable'))
+    }
+    party.restoreCombatUpdates(updates)
+    return result
   }
 
   /** Executa uma vez no agregado recebido. A persistência pertence ao chamador. */
@@ -141,7 +218,12 @@ export class TakePartyActionUseCase {
     const maxChoices = 96
     const combatUpdates: TCombatUpdate[] = []
     const classes = await this.cardCatalog.listClasses()
-    for (let choice = 0; choice < maxChoices; choice++) {
+    for (let choice = 0; choice < maxChoices || party.combatActor; choice++) {
+      if (
+        party.pendingCombatDecision ||
+        party.triggeredEffectChoice?.memberId === party.hostMemberId.toString()
+      )
+        return right({ party, combatUpdates })
       const { cards, zone, dimension } = await this.findEventCatalog(party)
       const board = questBoard(
         party.dimension.map.zones.find(({ zoneId }) => zoneId === zone?.id),
@@ -211,13 +293,16 @@ export class TakePartyActionUseCase {
   ): Promise<TTakePartyActionUseCaseResponse> {
     await this.provideMarketCandidates(party)
     const blocked =
-      action.type === 'saveRespawnPoint' ? null : party.eventActionBlock(action)
+      action.type === 'saveRespawnPoint' || 'decisionId' in action
+        ? null
+        : party.eventActionBlock(action)
     if (typeof blocked === 'string')
       return left(new ActionNotAllowedError(blocked))
     party.clearCombatUpdates()
     const turnBeforeAction = party.turn
-    // T-116 connects recruitment decisions to the action and advance flows.
-    const combatEntry = 'solo' as const
+    const combatEntry = party.members.some(({ kind }) => kind === 'aiHelper')
+      ? 'recruit'
+      : 'solo'
     switch (action.type) {
       case 'takeQuest':
       case 'continueQuest':
@@ -272,6 +357,45 @@ export class TakePartyActionUseCase {
           this.clock.now(),
           combatEntry
         )
+        if (result.isLeft())
+          return left(new ActionNotAllowedError(result.value))
+        party.completeKnockout(this.ids)
+        break
+      }
+      case 'confirmCombatRoster':
+      case 'respondCombatInvite':
+      case 'confirmCombatOrder': {
+        const { cards } = await this.findEventCatalog(party, true)
+        const host = party.hostMemberId.toString()
+        const now = this.clock.now()
+        const { combatId, decisionId } = action
+        const result =
+          action.type === 'confirmCombatRoster'
+            ? party.confirmCombatRoster(
+                host,
+                combatId,
+                decisionId,
+                action.inviteeMemberIds,
+                cards,
+                now
+              )
+            : action.type === 'respondCombatInvite'
+              ? party.respondCombatInvite(
+                  host,
+                  combatId,
+                  decisionId,
+                  action.accept,
+                  cards,
+                  now
+                )
+              : party.confirmCombatOrder(
+                  host,
+                  combatId,
+                  decisionId,
+                  action.memberIds,
+                  cards,
+                  now
+                )
         if (result.isLeft())
           return left(new ActionNotAllowedError(result.value))
         party.completeKnockout(this.ids)
@@ -840,15 +964,21 @@ export class TakePartyActionUseCase {
               : []
           ) ?? []
       ),
-      ...(player?.hand ?? []),
-      ...(player?.deck ?? []),
-      ...(player?.discard ?? []),
-      ...(player?.inventory.map(({ cardId }) => cardId) ?? []),
-      ...Object.values(player?.equipment ?? {}).filter(
-        (id): id is string => id !== null
-      ),
-      // A montaria em uso vale como equipamento em uso (REQ-157).
-      ...(player?.mount ? [player.mount.cardId] : []),
+      ...(revealingCombat || party.combatOutcomeCard || quest
+        ? party.members.map(({ player }) => player)
+        : player
+          ? [player]
+          : []
+      ).flatMap((member) => [
+        ...member.hand,
+        ...member.deck,
+        ...member.discard,
+        ...member.inventory.map(({ cardId }) => cardId),
+        ...Object.values(member.equipment).filter(
+          (id): id is string => id !== null
+        ),
+        ...(member.mount ? [member.mount.cardId] : []),
+      ]),
       ...(party.eventEncounter?.payments.flatMap(
         (receipt) => receipt.handCards?.map(({ cardId }) => cardId) ?? []
       ) ?? []),

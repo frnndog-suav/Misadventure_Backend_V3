@@ -33,6 +33,80 @@ function usedRngParty() {
 }
 
 describe('DrizzlePartyMapper', () => {
+  it('REQ-187 / REQ-191: preserva o convite, a vez e o combate em grupo após recarregar', () => {
+    const base = usedRngParty()
+    const human = base.members[0]
+    const helper = PartyMember.create(
+      { characterName: 'Guia', kind: 'aiHelper', player: makePlayerState() },
+      new UniqueEntityID('helper')
+    )
+    const card = makeCombatEventCard()
+    const decision = {
+      type: 'invite' as const,
+      id: 'fight:invite',
+      combatId: 'fight',
+      memberId: human.id.toString(),
+      initiatorMemberId: helper.id.toString(),
+      cardTitle: card.title,
+    }
+    const party = makeParty({
+      status: 'inSession',
+      members: [human, helper],
+      turnOrder: [human.id, helper.id],
+      turn: { round: 2, memberId: helper.id, actionPoints: 0 },
+      automaticTurnPaused: true,
+      combatRecruitment: {
+        phase: 'recruiting',
+        combatId: decision.combatId,
+        card,
+        initiatorMemberId: decision.initiatorMemberId,
+        decision,
+        answers: [],
+      },
+    })
+    function roundTrip(party: Party) {
+      const row = DrizzlePartyMapper.toDrizzle(party)
+      return DrizzlePartyMapper.toDomain({
+        ...row,
+        state: JSON.parse(JSON.stringify(row.state)),
+      })
+    }
+    const invited = roundTrip(party)
+    expect(invited.automaticTurnPaused).toBe(true)
+    expect(invited.rngState).toEqual(party.rngState)
+    expect(
+      PartyPresenter.toHTTP(invited, new Map()).pendingCombatDecision
+    ).toEqual(decision)
+    expect(
+      invited
+        .respondCombatInvite(
+          decision.memberId,
+          decision.combatId,
+          decision.id,
+          true,
+          new Map(),
+          invited.savedAt
+        )
+        .isRight()
+    ).toBe(true)
+    const fighting = roundTrip(invited)
+    expect(fighting.turn).toEqual(party.turn)
+    expect(fighting.combatSnapshot()).toEqual(invited.combatSnapshot())
+    expect(
+      fighting.combat?.participants?.map(({ memberId }) => memberId)
+    ).toEqual(['helper', 'member-1'])
+    expect(
+      fighting.respondCombatInvite(
+        decision.memberId,
+        decision.combatId,
+        decision.id,
+        true,
+        new Map(),
+        fighting.savedAt
+      ).value
+    ).toBe('combatDecisionExpired')
+  })
+
   it('REQ-172: preserva quantidades de conclusão no save e na projeção HTTP', () => {
     const party = usedRngParty()
     const card = makeItemCard({ id: 'fixture.shard', completionItem: true })

@@ -243,6 +243,7 @@ export interface TPartyHttp {
   randomEventEncounter: ReturnType<Party['describeRandomEvent']>
   triggeredEffectChoice: Party['triggeredEffectChoice']
   pendingRewards: readonly TPendingReward[]
+  pendingCombatDecision: Party['pendingCombatDecision']
   combat: Party['combat']
   lastCombatResult: Party['lastCombatResult']
   lastDimensionCompletion: Party['lastDimensionCompletion']
@@ -489,7 +490,7 @@ function playerToHTTP(
       : null,
     purseCapacity: capacities.purse,
     effectiveModifiers:
-      (party.turn.memberId.equals(member.id)
+      (party.combatActor?.id.equals(member.id)
         ? party.combatPlayerModifiers(cards)
         : null) ??
       effectiveModifiers({
@@ -553,7 +554,7 @@ export async function findPartyCards(
     for (const { cardId } of payment.handCards ?? []) cardIds.add(cardId)
   }
   for (const { id, player } of party.members) {
-    if (party.turn.memberId.equals(id)) {
+    if (party.turn.memberId.equals(id) || party.combatActor?.id.equals(id)) {
       for (const cardId of player.hand) cardIds.add(cardId)
     }
     for (const { cardId } of player.inventory) cardIds.add(cardId)
@@ -662,6 +663,7 @@ export class PartyPresenter {
       randomEventEncounter: encounter,
       triggeredEffectChoice: party.triggeredEffectChoice,
       pendingRewards: party.pendingRewards,
+      pendingCombatDecision: party.pendingCombatDecision,
       combat: party.describeCombat(cards),
       lastCombatResult: party.lastCombatResult,
       lastDimensionCompletion: party.lastDimensionCompletion,

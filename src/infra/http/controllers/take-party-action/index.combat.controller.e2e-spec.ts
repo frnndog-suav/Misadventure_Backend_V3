@@ -169,14 +169,20 @@ describe('Combate solo (HTTP e save)', () => {
       'startEvent'
     )
     const { party, hostId } = await helperTurn(id)
+    const solo = DrizzlePartyMapper.toDrizzle(party)
+    const host = solo.state.members.find(({ id }) => id === hostId)!
+    host.player.zoneId = solo.state.dimension.map.zones.find(
+      ({ zoneId }) => zoneId !== host.player.zoneId
+    )!.zoneId
+    const fight = DrizzlePartyMapper.toDomain(solo)
     const result = await ctx.app
       .get(TakePartyActionUseCase)
-      .executeAiTurn(party)
+      .executeAiTurn(fight)
 
     expect(result.isRight()).toBe(true)
-    expect(party.lastCombatResult?.resolution).toBe('victory')
-    expect(party.pendingRewards).toHaveLength(0)
-    expect(party.turn.memberId.toString()).toBe(hostId)
+    expect(fight.lastCombatResult?.resolution).toBe('victory')
+    expect(fight.pendingRewards).toHaveLength(0)
+    expect(fight.turn.memberId.toString()).toBe(hostId)
   })
 
   it('REQ-182/D-156: resolve o combate e a entrega pendente antes de passar a vez', async () => {

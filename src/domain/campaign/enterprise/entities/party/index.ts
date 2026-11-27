@@ -560,6 +560,7 @@ export interface TPartyProps {
   eventEncounter?: TEventEncounter | null
   combat?: TCombatState | null
   combatRecruitment?: CombatRecruitment
+  automaticTurnPaused?: boolean
   lastCombatRecruitmentDecision?: { id: string; combatId: string }
   combatZone?: TEventDeck['zoneType']
   lastCombatResult?: TCombatResult | null
@@ -780,6 +781,14 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       })
   }
 
+  get automaticTurnPaused(): boolean {
+    return this.props.automaticTurnPaused ?? false
+  }
+
+  setAutomaticTurnPaused(paused: boolean): void {
+    this.props.automaticTurnPaused = paused || undefined
+  }
+
   private automaticTurnEvents?: TAutomaticTurnEvent[]
   private automaticCombatIndex = 0
 
@@ -800,6 +809,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 
   get combatUpdates(): readonly TCombatUpdate[] {
     return this.updates
+  }
+
+  restoreCombatUpdates(updates: readonly TCombatUpdate[]): void {
+    this.updates.length = 0
+    this.updates.push(...updates)
   }
 
   clearCombatUpdates(): void {
@@ -824,7 +838,20 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return (
       this.props.combatOutcome?.card ??
       this.props.combat?.card ??
+      this.props.combatRecruitment?.card ??
       (continuation?.type === 'combatEntry' ? continuation.card : undefined)
+    )
+  }
+
+  get combatActor() {
+    const combat = this.props.combat
+    return (
+      combat &&
+      this.props.members.find(
+        ({ id }) =>
+          id.toString() ===
+          (this.triggeredEffectChoice?.memberId ?? combat.turn.actorId)
+      )
     )
   }
 
@@ -833,9 +860,62 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   }
 
   get pendingCombatDecision():
-    CombatRecruitmentDecision | CombatOrderDecision | null {
-    const recruitment = this.props.combatRecruitment
-    return recruitment?.decision ?? null
+    | CombatRecruitmentDecision
+    | CombatOrderDecision
+    | {
+        type: 'turn'
+        id: string
+        combatId: string
+        memberId: string
+        turnId: string
+      }
+    | {
+        type: 'reward'
+        id: string
+        combatId: string
+        memberId: string
+        rewardId: string
+        rotationPosition?: number
+      }
+    | null {
+    const recruitment = this.props.combatRecruitment?.decision
+    if (recruitment) return recruitment
+
+    const reward = this.pendingRewards[0]
+    if (
+      this.props.members.length > 1 &&
+      reward?.source.type === 'combatEvent' &&
+      this.props.members.some(
+        ({ id, kind }) => kind === 'human' && id.toString() === reward.memberId
+      )
+    ) {
+      return {
+        type: 'reward',
+        id: reward.id,
+        combatId: reward.source.combatId,
+        memberId: reward.memberId,
+        rewardId: reward.id,
+        ...(reward.roundRobinPosition && {
+          rotationPosition: reward.roundRobinPosition,
+        }),
+      }
+    }
+
+    const combat = this.props.combat
+    if (
+      combat &&
+      this.props.members.length > 1 &&
+      this.combatActor?.kind === 'human'
+    ) {
+      return {
+        type: 'turn',
+        id: `${combat.id}:decision:${combat.turn.id}`,
+        combatId: combat.id,
+        memberId: this.combatActor.id.toString(),
+        turnId: combat.turn.id,
+      }
+    }
+    return null
   }
 
   combatEffectChoices(cards: ReadonlyMap<string, TCard>) {
@@ -856,6 +936,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const {
       combat,
       combatRecruitment,
+      automaticTurnPaused,
       lastCombatRecruitmentDecision,
       combatZone,
       lastCombatResult,
@@ -867,6 +948,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return {
       combat,
       combatRecruitment,
+      automaticTurnPaused,
       lastCombatRecruitmentDecision,
       combatZone,
       lastCombatResult,
@@ -1249,7 +1331,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   eventActionBlock(
     action: TPartyAction
   ): TEventRefusal | TCombatRefusal | null {
-    if (this.pendingCombatDecision) return 'combatDecisionPending'
+    if (this.props.combatRecruitment?.decision) return 'combatDecisionPending'
     if (this.props.combatRecruitment?.phase === 'confirmed')
       return 'combatInProgress'
     if (action.type === 'resolveTriggeredEffect') return null
@@ -3615,10 +3697,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const pending = this.props.pendingTriggeredEffects
     if (!pending || pending.choice.choiceId !== action.choiceId)
       return left('staleTriggeredEffectChoice')
-    if (this.turn.memberId.toString() !== pending.choice.memberId)
-      return left('choicePending')
     let battle = this.props.combat ?? undefined
     const index = battle ? this.combatActorIndex(battle) : this.actorIndex()
+    if (this.props.members[index].id.toString() !== pending.choice.memberId)
+      return left('choicePending')
     if (battle) battle = this.focusCombat(battle, index)
     const { continuation } = pending
     let player = this.props.members[index].player
@@ -4495,7 +4577,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         this.props.combat?.id,
         this.lastCombatResult?.combatId,
       ].includes(combatId)
-      return left(closed ? 'combatRecruitmentClosed' : 'combatDecisionExpired')
+      return left(
+        closed && type === 'roster'
+          ? 'combatRecruitmentClosed'
+          : 'combatDecisionExpired'
+      )
     }
     const { decision } = recruitment
     if (
@@ -4580,7 +4666,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     cards: ReadonlyMap<string, TCard>
   ) {
     const { combatId, card, initiatorMemberId, finalBoss } = entry
-    const decision = this.pendingCombatDecision
+    const decision = this.props.combatRecruitment?.decision
     if (decision)
       this.props.lastCombatRecruitmentDecision = { id: decision.id, combatId }
     const accepted = new Map(

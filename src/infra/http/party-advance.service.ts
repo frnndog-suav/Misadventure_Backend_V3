@@ -42,6 +42,60 @@ function hasAiTurn(party: Party): boolean {
   )
 }
 
+function awaitsHuman(party: Party): boolean {
+  return Boolean(
+    party.pendingCombatDecision ||
+    party.triggeredEffectChoice?.memberId === party.hostMemberId.toString()
+  )
+}
+
+function automaticTurnContext(party: Party) {
+  return {
+    memberId: party.turn.memberId.toString(),
+    round: party.turn.round,
+    dimensionId: party.dimension.dimensionCardId,
+  }
+}
+
+function closeAutomaticTurn(
+  party: Party,
+  context: ReturnType<typeof automaticTurnContext>,
+  events: TAutomaticTurnEvent[]
+) {
+  events.push({
+    type: 'turnEnded',
+    payload: {
+      reason:
+        party.status === 'frozen'
+          ? 'frozen'
+          : party.dimension.dimensionCardId !== context.dimensionId
+            ? 'dimensionChanged'
+            : 'passed',
+    },
+  })
+}
+
+function publicEvents(
+  party: Party,
+  context: ReturnType<typeof automaticTurnContext>,
+  events: readonly TAutomaticTurnEvent[],
+  combatOffset = 0
+): TPublicDomainEvent[] {
+  return events.map((event, index) => {
+    const position = { ...context, id: `${party.revision}-${index}` }
+    return event.type === 'combatUpdated'
+      ? {
+          ...event,
+          ...position,
+          payload: {
+            ...event.payload,
+            combatUpdateIndex: event.payload.combatUpdateIndex + combatOffset,
+          },
+        }
+      : { ...event, ...position }
+  })
+}
+
 function validKey(
   header: string | undefined,
   required: boolean
@@ -90,6 +144,8 @@ export class PartyAdvanceService {
       partyId,
       async (party, save, receipts) => {
         if (!party) throw new DomainErrorException(new PartyNotFoundError())
+        if (party.status === 'idle')
+          throw new DomainErrorException(new PartySessionNotActiveError())
         const hasHelpers = party.members.some(({ kind }) => kind === 'aiHelper')
         const key = hasHelpers ? validKey(header, true) : undefined
         const parsed = this.actions.parseAction(body)
@@ -117,20 +173,34 @@ export class PartyAdvanceService {
         if ((await receipts.findPending()).length)
           throw new DomainErrorException(new ActionAdvancePendingError())
 
+        const context = automaticTurnContext(party)
+        const events: TAutomaticTurnEvent[] = []
+        if (party.automaticTurnPaused) party.recordAutomaticTurn(events)
         const applied = await this.actions.executeHumanAction(party, action)
+        party.recordAutomaticTurn(undefined)
         if (applied.isLeft()) throw new DomainErrorException(applied.value)
+        if (
+          party.automaticTurnPaused &&
+          (!hasAiTurn(party) ||
+            !isDeepStrictEqual(context, automaticTurnContext(party)))
+        ) {
+          party.setAutomaticTurnPaused(false)
+          closeAutomaticTurn(party, context, events)
+        }
         const combatUpdates = party.combatUpdates
         await save(party)
-        const response = hasAiTurn(party)
-          ? null
-          : await this.present(party, combatUpdates, [])
+        const domainEvents = publicEvents(party, context, events)
+        const response =
+          hasAiTurn(party) && !awaitsHuman(party)
+            ? null
+            : await this.present(party, combatUpdates, domainEvents)
         if (hasHelpers && key)
           await receipts.save({
             route: 'action',
             key,
             action,
             combatUpdates,
-            domainEvents: [],
+            domainEvents,
             response,
           })
         return { response, key }
@@ -156,7 +226,7 @@ export class PartyAdvanceService {
         if (previous && previous.response)
           return restoreReceipt(previous.response)
         const [pending] = await receipts.findPending()
-        if (!pending || party.status === 'idle') {
+        if (party.status !== 'inSession' || (!pending && !awaitsHuman(party))) {
           const opened = await this.sessions.open(party)
           if (opened.isLeft()) throw new DomainErrorException(opened.value)
           if (opened.value) await save(party)
@@ -164,7 +234,7 @@ export class PartyAdvanceService {
         if (previous) return null
         const { combatUpdates = [], domainEvents = [] } = pending ?? {}
         const result =
-          pending || hasAiTurn(party)
+          pending || (hasAiTurn(party) && !awaitsHuman(party))
             ? null
             : await this.present(party, combatUpdates, domainEvents)
         if (key || !result)
@@ -202,14 +272,14 @@ export class PartyAdvanceService {
 
           const combatUpdates = [...receipt.combatUpdates]
           const domainEvents = [...receipt.domainEvents]
-          if (hasAiTurn(party)) {
-            const { memberId, round, actionPoints } = party.turn
-            const dimensionId = party.dimension.dimensionCardId
+          if (hasAiTurn(party) && !awaitsHuman(party)) {
+            const context = automaticTurnContext(party)
+            const { memberId, actionPoints } = party.turn
             const zoneId = party.members.find(({ id }) => id.equals(memberId))!
               .player.zoneId
-            const events: TAutomaticTurnEvent[] = [
-              { type: 'turnStarted', payload: { zoneId, actionPoints } },
-            ]
+            const events: TAutomaticTurnEvent[] = party.automaticTurnPaused
+              ? []
+              : [{ type: 'turnStarted', payload: { zoneId, actionPoints } }]
             party.recordAutomaticTurn(events)
             let result
             try {
@@ -218,35 +288,22 @@ export class PartyAdvanceService {
               party.recordAutomaticTurn(undefined)
             }
             if (result.isLeft()) throw new DomainErrorException(result.value)
-            events.push({
-              type: 'turnEnded',
-              payload: {
-                reason:
-                  party.status === 'frozen'
-                    ? 'frozen'
-                    : party.dimension.dimensionCardId !== dimensionId
-                      ? 'dimensionChanged'
-                      : 'passed',
-              },
-            })
+            const paused =
+              awaitsHuman(party) &&
+              isDeepStrictEqual(context, automaticTurnContext(party))
+            party.setAutomaticTurnPaused(paused)
+            if (!paused) closeAutomaticTurn(party, context, events)
             await save(party)
-            for (const [index, event] of events.entries()) {
-              if (event.type === 'combatUpdated')
-                event.payload.combatUpdateIndex += combatUpdates.length
-              domainEvents.push({
-                ...event,
-                id: `${party.revision}-${index}`,
-                memberId: memberId.toString(),
-                dimensionId,
-                round,
-              })
-            }
+            domainEvents.push(
+              ...publicEvents(party, context, events, combatUpdates.length)
+            )
             combatUpdates.push(...result.value.combatUpdates)
           }
 
-          const response = hasAiTurn(party)
-            ? null
-            : await this.present(party, combatUpdates, domainEvents)
+          const response =
+            hasAiTurn(party) && !awaitsHuman(party)
+              ? null
+              : await this.present(party, combatUpdates, domainEvents)
           for (const pending of await receipts.findPending())
             await receipts.save({
               ...pending,

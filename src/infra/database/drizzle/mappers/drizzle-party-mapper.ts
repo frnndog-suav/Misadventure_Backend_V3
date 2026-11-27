@@ -622,7 +622,83 @@ const combatCard = cardFileSchemas.combatEvent.omit({ status: true }).extend({
     z.strictObject({ text: z.literal('') }),
   ]),
 })
+const combatParticipant = z.strictObject({
+  memberId: id,
+  condition: z.enum(['standing', 'knockedOut', 'escaped']),
+  knockedOut: z.boolean(),
+  revived: z.boolean(),
+  peakDelta: z.number().int(),
+  vigorDelta: z.number().int(),
+})
+const decisionIds = { id, combatId: id, memberId: id }
+const recruitmentEntry = {
+  combatId: id,
+  card: combatCard,
+  initiatorMemberId: id,
+  finalBoss: z.literal(true).optional(),
+}
+const combatRecruitment = z.discriminatedUnion('phase', [
+  z.strictObject({
+    ...recruitmentEntry,
+    phase: z.literal('recruiting'),
+    decision: z.discriminatedUnion('type', [
+      z.strictObject({
+        ...decisionIds,
+        type: z.literal('roster'),
+        candidateMemberIds: z.array(id),
+      }),
+      z.strictObject({
+        ...decisionIds,
+        type: z.literal('invite'),
+        initiatorMemberId: id,
+        cardTitle: z.string(),
+      }),
+    ]),
+    answers: z.array(z.strictObject({ memberId: id, accept: z.boolean() })),
+  }),
+  z.strictObject({
+    ...recruitmentEntry,
+    phase: z.literal('confirmed'),
+    participantMemberIds: z.array(id),
+    decision: z
+      .strictObject({
+        ...decisionIds,
+        type: z.literal('order'),
+        defaultMemberIds: z.array(id),
+        alternativeMemberOrders: z.array(z.array(id)),
+      })
+      .optional(),
+  }),
+])
+const consumedCombatRecruitment = z.strictObject({ id, combatId: id })
+
 const combat = z.strictObject({
+  group: z
+    .strictObject({
+      priority: z.array(id),
+      participants: z.array(combatParticipant),
+      lastAttacker: z.record(id, id),
+      reactionMemberId: id.optional(),
+      areaReactions: z
+        .array(
+          z.strictObject({
+            memberId: id,
+            notices: z.array(
+              z.discriminatedUnion('type', [
+                z.strictObject({
+                  type: z.literal('enemyAttack'),
+                  behavior: z.enum(ENEMY_BEHAVIORS),
+                }),
+                z.strictObject({ type: z.literal('elementDamage'), element }),
+                z.strictObject({ type: z.literal('enemyDefeated'), id }),
+                z.strictObject({ type: z.literal('elementalAdvantage') }),
+              ])
+            ),
+          })
+        )
+        .optional(),
+    })
+    .optional(),
   finalBoss: z.boolean().optional(),
   id,
   card: combatCard,
@@ -681,6 +757,16 @@ const combatOutcome = z.strictObject({
     .optional(),
 })
 const combatResult = z.strictObject({
+  participants: z
+    .array(
+      combatParticipant.extend({
+        goldGranted: count,
+        rewardIds: z.array(id),
+        respawned: z.boolean(),
+        skipsNextTurn: z.boolean(),
+      })
+    )
+    .optional(),
   finalBoss: z.boolean().optional(),
   combatId: id,
   cardId: id,
@@ -1134,6 +1220,9 @@ const v9Fields = {
     .array(z.strictObject({ cardId: id, departed: count }))
     .optional(),
   combat: combat.nullable().optional(),
+  combatRecruitment: combatRecruitment.optional(),
+  automaticTurnPaused: z.literal(true).optional(),
+  lastCombatRecruitmentDecision: consumedCombatRecruitment.optional(),
   combatZone: zoneType.optional(),
   lastCombatResult: combatResult.nullable().optional(),
   combatOutcome: combatOutcome.nullable().optional(),
@@ -1306,6 +1395,11 @@ export class DrizzlePartyMapper {
               markets: state.markets,
               marketPool: state.marketPool,
               combat: state.combat as TPartyProps['combat'],
+              combatRecruitment:
+                state.combatRecruitment as TPartyProps['combatRecruitment'],
+              automaticTurnPaused: state.automaticTurnPaused,
+              lastCombatRecruitmentDecision:
+                state.lastCombatRecruitmentDecision,
               questRewardDelivery:
                 state.questRewardDelivery as TPartyProps['questRewardDelivery'],
               boosterQueue: state.boosterQueue,
@@ -1539,10 +1633,21 @@ export class DrizzlePartyMapper {
           marketPool: party.marketPool.map((entry) => ({ ...entry })),
         }),
         ...(snapshot.combat && { combat: combat.parse(snapshot.combat) }),
+        ...(snapshot.automaticTurnPaused && {
+          automaticTurnPaused: true as const,
+        }),
+        ...(snapshot.combatRecruitment && {
+          combatRecruitment: combatRecruitment.parse(
+            snapshot.combatRecruitment
+          ),
+        }),
+        ...(snapshot.lastCombatRecruitmentDecision && {
+          lastCombatRecruitmentDecision: snapshot.lastCombatRecruitmentDecision,
+        }),
         ...(party.questAttempt && { questAttempt: { ...party.questAttempt } }),
         ...(snapshot.combatZone && { combatZone: snapshot.combatZone }),
         ...(snapshot.lastCombatResult && {
-          lastCombatResult: snapshot.lastCombatResult,
+          lastCombatResult: combatResult.parse(snapshot.lastCombatResult),
         }),
         ...(snapshot.combatOutcome && {
           combatOutcome: combatOutcome.parse(snapshot.combatOutcome),

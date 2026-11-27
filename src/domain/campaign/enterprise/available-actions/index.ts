@@ -44,6 +44,22 @@ export function availableActions(
     return choice.memberId === memberId.toString()
       ? ['resolveTriggeredEffect']
       : []
+  const decision = party.pendingCombatDecision
+  if (decision) {
+    if (decision.memberId !== memberId.toString()) return []
+    switch (decision.type) {
+      case 'roster':
+        return ['confirmCombatRoster']
+      case 'invite':
+        return ['respondCombatInvite']
+      case 'order':
+        return ['confirmCombatOrder']
+      case 'reward':
+        return ['resolveReward']
+      case 'turn':
+        return party.combatActions(combat)
+    }
+  }
   if (party.pendingRewards.length)
     return party.pendingRewards.some(
       (reward) => reward.memberId === memberId.toString()
