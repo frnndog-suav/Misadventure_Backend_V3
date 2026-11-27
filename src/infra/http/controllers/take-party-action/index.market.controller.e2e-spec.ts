@@ -1,5 +1,9 @@
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
+import { TakePartyActionUseCase } from '@/domain/campaign/application/use-cases/take-party-action'
+import { maxHealthOf } from '@/domain/campaign/enterprise/entities/party-member'
+import { DrizzlePartyMapper } from '@/infra/database/drizzle/mappers/drizzle-party-mapper'
 import { createContentApp } from '../../../../../test/content-app'
 import { postParty, resetCampaign } from '../../../../../test/parties-e2e'
 
@@ -128,6 +132,52 @@ describe('Ir ao Mercado (e2e)', () => {
     (await request(server()).get(`/parties/${id}`)).body
 
   const player = (party: TParty) => party.members[0].player
+
+  it('REQ-182/D-156: usa o último PA para vender um tesouro quando ouro é a primeira prioridade', async () => {
+    const started = await startedParty()
+    await give(started, C)
+    const before = player(await get(started.id))
+    expect(before.market?.sellOffers).toContainEqual(
+      expect.objectContaining({ cardId: C, source: 'inventory', price: 25 })
+    )
+    const saved = await ctx.app.get(PartiesRepository).findById(started.id)
+    if (!saved) throw new Error('Save ausente')
+    const row = DrizzlePartyMapper.toDrizzle(saved)
+    const [actor] = row.state.members
+    const hostId = '5bb2dba3-60d2-4576-b1fb-3356ac3541f0'
+    row.state.members = [
+      {
+        ...actor,
+        kind: 'aiHelper',
+        player: {
+          ...actor.player,
+          health: maxHealthOf(actor.player),
+          vigor: actor.player.peak,
+        },
+      },
+      { ...actor, id: hostId, kind: 'human' },
+    ]
+    row.state.hostMemberId = hostId
+    row.state.turnOrder = [actor.id, hostId]
+    row.state.turn.actionPoints = 1
+    row.state.config.aiPlayerPriorities = [
+      'gold',
+      'avoidKnockout',
+      'dimensionCompletion',
+      'quests',
+      'peak',
+    ]
+    const campaign = DrizzlePartyMapper.toDomain(row)
+
+    const result = await ctx.app
+      .get(TakePartyActionUseCase)
+      .executeAiTurn(campaign)
+
+    expect(result.isRight()).toBe(true)
+    expect(campaign.turn.memberId.toString()).toBe(hostId)
+    expect(campaign.members[0].player.gold).toBe(25)
+    expect(campaign.members[0].player.inventory).toEqual([])
+  })
 
   it('REQ-140: na criação, market com preços no fator 115, lastMarketVisit null e visitMarket depois de useVault', async () => {
     const created = (await postParty(ctx.app)) as unknown as TParty

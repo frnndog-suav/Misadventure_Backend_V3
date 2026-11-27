@@ -1,7 +1,7 @@
 # 108 — T-89 — Configuração e política da IA
 
 - **Data** — 2026-11-26
-- **Situação** — em andamento
+- **Situação** — concluída
 - **Spec** — v1.11, REQ-181, REQ-182, D-156
 - **Contrato** — v1.08, FEAT-20 acordada
 - **Horas** — a preencher pelo autor
@@ -147,3 +147,70 @@ cd /d/Github/Misadventure_Backend_V3 && npm run test:e2e -- src/infra/http/contr
 - O autor confirmou que os 12 testes E2E passaram.
 - O E2E de combate oferece um efeito ofensivo com dois alvos. O ajudante deve atingir com o efeito o inimigo que reflete ataque básico, ganhar o combate sem perder saúde e passar a vez.
 - Espera-se uma falha na saúde final. Hoje o ajudante usa ataques básicos nos dois inimigos e termina com 9 de saúde.
+
+- O autor confirmou a falha esperada. O ajudante venceu com 9 de saúde.
+- A política agora avalia dano de efeito com pagamento automático de consumo ou vigor. Ao estimar que o efeito derrota o alvo, pontua a reflexão que o ataque básico causaria. A resolução de dano continua no domínio.
+- Esperados 13 E2E passando no filtro REQ-182. O novo cenário deve terminar com 10 de saúde. Habilidades de combate seguem pendentes.
+
+## Habilidade de combate
+
+- O autor confirmou os 13 E2E do REQ-182.
+- O E2E de combate acrescenta um ajudante cuja montaria tem uma habilidade legal de cura. A expectativa é terminar com 12 de saúde após a cura de 3 e a reflexão de 1. Espera-se falha com 9 de saúde antes de incluir habilidades na política.
+
+- O autor confirmou a falha esperada com 9 de saúde.
+- A política avalia habilidades imediatas de cura em si mesmo, gratuitas ou com custo automático de vigor. Usa as opções legais e a definição obtida pelo domínio para equipamento ou montaria. O resolvedor atual controla a frequência de uso e aplica a cura.
+- Esperados 14 E2E passando no filtro REQ-182. O caso da montaria deve terminar com 12 de saúde. Habilidades ofensivas e outros efeitos de habilidade continuam sem avaliação específica.
+
+- Na execução seguinte, 13 testes passaram e o cenário de montaria terminou com 15 de saúde. O domínio renova o limite de uso quando o combatente inicia outra vez de combate. A fixture permite duas curas de 3 e sofre 1 de reflexão. A expectativa foi corrigida de 12 para 15.
+- Medição com cinco ajudantes nessa execução, em ms por sequência: 4,3, 3,1, 3,6, 2,6 e 2,7.
+
+## Habilidade ofensiva
+
+- O autor confirmou a passagem dos 14 E2E do REQ-182.
+- O cenário de montaria agora exercita também uma habilidade de dano que pode atingir o inimigo com reflexão. Espera-se que o caso de cura passe e o de dano falhe na saúde final, com 9 observados e 10 esperados.
+
+- O autor confirmou um teste passando e a falha esperada da habilidade de dano com 9 de saúde.
+- A política avalia habilidades imediatas de dano de efeito contra um oponente, gratuitas ou com pagamento automático de vigor. Habilidades e efeitos compartilham a pontuação por alvo. A resolução real continua no domínio.
+- Esperados 15 testes E2E passando no filtro REQ-182.
+
+## Ouro no mercado
+
+- O autor confirmou a passagem dos 15 E2E do REQ-182.
+- O E2E de mercado agora verifica que, com ouro em primeiro lugar e um PA, o ajudante vende um tesouro por 25 de ouro e passa a vez. Hoje a política não oferece ações de mercado, portanto espera-se uma falha no ouro final.
+
+- O autor confirmou a falha esperada. O ajudante passou a vez com zero ouro.
+- A política reaproveita as ofertas de venda do domínio para negociar um lote de tesouro por visita. A pontuação considera o ganho que cabe na bolsa e a ação usa a resolução normal de mercado.
+- Typecheck e `git diff --check` passaram. Esperados 16 testes passando no filtro REQ-182, com 25 de ouro e o tesouro vendido no cenário de mercado.
+
+## Deslocamento para conclusão da dimensão
+
+- O autor confirmou os 16 E2E do REQ-182.
+- O cenário de deslocamento agora distingue um ajudante que já possui o item de conclusão de outro que ainda precisa obtê-lo. Com um PA, espera-se que apenas o primeiro se mova ao Porto Cinzento, preservando o item para a próxima vez.
+- Antes da implementação, o caso sem item deve passar e o caso com item deve falhar na comparação de zona.
+
+- O autor confirmou a passagem do caso sem item e a falha esperada do caso com item.
+- O executor carrega as zonas do mapa quando a dimensão tem conclusão. A política consulta a validação normal de conclusão para a zona do objetivo e reaproveita a busca limitada de rotas quando a travessia aproxima o ajudante.
+- Esperados 18 testes passando no filtro REQ-182. Os novos cenários conferem a zona final e a preservação do item.
+
+## Conserto no ferreiro
+
+- O autor confirmou os 18 E2E do REQ-182.
+- O E2E de ferreiro acrescenta dois casos de arma equipada e quebrada com um PA. Com ouro suficiente, o ajudante deve reparar, pagar o custo e passar a vez. Com zero ouro, deve continuar com a arma quebrada e passar a vez.
+- Espera-se que o caso com zero ouro passe e o caso com 50 falhe na verificação da arma quebrada, pois a política ainda não gera a intenção de conserto.
+
+- O autor confirmou a passagem do caso sem ouro e a falha esperada com 50 de ouro.
+- A política usa os serviços descritos pelo domínio para oferecer o conserto de equipamento em uso quando o ajudante pode pagar. A escolha pondera segurança, Pico e custo em ouro. O caso de uso existente executa o reparo, consome os PA restantes e aplica a marca de reparo.
+- Typecheck e `git diff --check` passaram. Esperados 20 testes passando no filtro REQ-182 dos seis arquivos.
+
+## Regressão da T-89
+
+- O autor confirmou a passagem dos 20 E2E do REQ-182. Já havia confirmado os oito E2E filtrados do REQ-181 e os dois testes unitários de oferta de recursos.
+- Próxima verificação: executar sem filtro os arquivos E2E afetados e a suíte de criação com ajudantes da T-88. Isso verifica também ações humanas, leituras legadas e a autorização na vez do ajudante. Espera-se que todos os testes passem.
+- O avanço automático pelos gatilhos HTTP, os checkpoints e a retomada idempotente estão planejados na T-90. A política da T-89 é heurística e oferece um subconjunto de operações em cada fase coberta, como venda de tesouros e conserto de equipamento em uso.
+
+## Conclusão
+
+- O autor confirmou que a regressão sem filtro dos sete arquivos E2E passou sem erros. O log dessa execução não informou a contagem por suíte.
+- Próxima etapa na SPEC-BACKEND v1.11: T-90, REQ-183 a REQ-185 e D-157. Retomar pelo executor interno `TakePartyActionUseCase.executeAiTurn`. Os gatilhos HTTP, o lote ordenado de atualizações de combate, a persistência por vez, os recibos e a retomada são da próxima etapa.
+- A marcação da T-89 na spec aguarda autorização do autor.
+- **Commit sugerido** — `feat/add ai helper turn policy (t-89)`.

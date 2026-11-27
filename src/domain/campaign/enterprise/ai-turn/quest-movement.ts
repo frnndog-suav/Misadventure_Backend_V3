@@ -20,6 +20,15 @@ export function movesTowardQuests(
     const stage = card?.type === 'zoneQuest' && card.stages[quest.stageIndex]
     return stage && quest.status !== 'inProgress' ? [stage.location] : []
   })
+  return movesTowardLocations(map, player, cards, locations)
+}
+
+export function movesTowardLocations(
+  map: TPartyMap,
+  player: TPlayerState,
+  cards: ReadonlyMap<string, TCard>,
+  locations: readonly TQuestLocation[]
+): Extract<TPartyAction, { type: 'move' }>[] {
   if (!locations.length) return []
 
   function matches(zoneId: string, location: TQuestLocation) {

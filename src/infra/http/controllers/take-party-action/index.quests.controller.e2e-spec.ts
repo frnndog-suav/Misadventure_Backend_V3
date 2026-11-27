@@ -1,10 +1,19 @@
 import { eq } from 'drizzle-orm'
 import request from 'supertest'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import { SeededRng } from '@/core/rng/seeded-rng'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import { TakePartyActionUseCase } from '@/domain/campaign/application/use-cases/take-party-action'
 import { maxHealthOf } from '@/domain/campaign/enterprise/entities/party-member'
+import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
 import { DRIZZLE, type Database } from '@/infra/database/database.tokens'
 import { DrizzlePartyMapper } from '@/infra/database/drizzle/mappers/drizzle-party-mapper'
 import { parties } from '@/infra/database/drizzle/schema'
@@ -244,7 +253,9 @@ describe('Missões e progressão de classes solo (HTTP e save, T-60)', () => {
     origin.questBoard = []
 
     const party = DrizzlePartyMapper.toDomain(row)
-    const result = await ctx.app.get(TakePartyActionUseCase).executeAiTurn(party)
+    const result = await ctx.app
+      .get(TakePartyActionUseCase)
+      .executeAiTurn(party)
 
     expect(result.isRight()).toBe(true)
     expect(party.turn.memberId.toString()).toBe(hostId)
@@ -253,6 +264,65 @@ describe('Missões e progressão de classes solo (HTTP e save, T-60)', () => {
       { questCardId: B },
     ])
   })
+
+  it.each([
+    { quantity: 1, expectedZone: harbor },
+    { quantity: 0, expectedZone: mine },
+  ])(
+    'REQ-182/D-156: com $quantity item de conclusão, termina a vez em $expectedZone',
+    async ({ quantity, expectedZone }) => {
+      const id = await setup('quadro')
+      const { row, helper, hostId } = await helperTurn(id, 1)
+      helper.player.health = maxHealthOf(helper.player)
+      helper.player.vigor = helper.player.peak
+      helper.player.completionItems = quantity
+        ? [{ cardId: 'fixture.shard', quantity }]
+        : []
+      expect(helper.player.zoneId).toBe(mine)
+      const origin = row.state.dimension.map.zones.find(
+        ({ zoneId }) => zoneId === mine
+      )
+      if (!origin) throw new Error('Zona de origem ausente')
+      origin.questBoard = []
+      const campaign = DrizzlePartyMapper.toDomain(row)
+
+      const catalog = ctx.app.get(CardCatalog)
+      const findCard = catalog.findCard.bind(catalog)
+      const dimension = await findCard(campaign.dimension.dimensionCardId)
+      const goal = await findCard(harbor)
+      if (dimension?.type !== 'dimension' || goal?.type !== 'zone')
+        throw new Error('Catálogo do cenário incompleto')
+      const withCompletion = {
+        ...dimension,
+        completion: {
+          zoneTitle: goal.title,
+          requirement: [{ cardId: 'fixture.shard', count: 1 }],
+          grandPrize: { cards: [], gold: 10 },
+          finalBoss: null,
+        },
+      }
+      const lookup = vi
+        .spyOn(catalog, 'findCard')
+        .mockImplementation((cardId) =>
+          cardId === dimension.id
+            ? Promise.resolve(withCompletion)
+            : findCard(cardId)
+        )
+      try {
+        const result = await ctx.app
+          .get(TakePartyActionUseCase)
+          .executeAiTurn(campaign)
+        expect(result.isRight()).toBe(true)
+        expect(campaign.turn.memberId.toString()).toBe(hostId)
+        expect(campaign.members[0].player.zoneId).toBe(expectedZone)
+        expect(campaign.members[0].player.completionItems).toEqual(
+          helper.player.completionItems
+        )
+      } finally {
+        lookup.mockRestore()
+      }
+    }
+  )
 
   it('REQ-131/REQ-132: aceita do quadro, recusa a zona errada e entrega com recompensa pendente', async () => {
     const id = await setup('quadro')

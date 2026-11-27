@@ -120,7 +120,6 @@ export class TakePartyActionUseCase {
     const classes = await this.cardCatalog.listClasses()
     for (let choice = 0; choice < maxChoices; choice++) {
       const { cards, zone, dimension } = await this.findEventCatalog(party)
-      const canComplete = party.canCompleteDimension(zone, dimension)
       const board = questBoard(
         party.dimension.map.zones.find(({ zoneId }) => zoneId === zone?.id),
         party.config.questBoardSize
@@ -128,7 +127,7 @@ export class TakePartyActionUseCase {
       const player = party.members.find(({ id }) => id.equals(memberId))?.player
       const optionCardIds = new Set([
         ...board.filter((id): id is string => id !== null),
-        ...(player?.openZoneQuests?.length
+        ...(player?.openZoneQuests?.length || dimension?.completion
           ? party.dimension.map.zones.map(({ zoneId }) => zoneId)
           : []),
         ...[
@@ -151,7 +150,7 @@ export class TakePartyActionUseCase {
       for (const action of aiTurnIntents(
         party,
         cards,
-        canComplete,
+        dimension,
         classes,
         canStartEvent
       )) {

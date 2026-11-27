@@ -18,6 +18,7 @@ import { DRIZZLE, type Database } from '@/infra/database/database.tokens'
 import { DrizzlePartyMapper } from '@/infra/database/drizzle/mappers/drizzle-party-mapper'
 import { parties } from '@/infra/database/drizzle/schema'
 import { createContentApp } from '../../../../../test/content-app'
+import { makeMountCard } from '../../../../../test/factories/make-card'
 import {
   postParty,
   resetCampaign,
@@ -273,6 +274,94 @@ describe('Combate solo (HTTP e save)', () => {
       lookup.mockRestore()
     }
   })
+
+  it.each([
+    { kind: 'cura', expectedHealth: 15 },
+    { kind: 'dano', expectedHealth: 10 },
+  ] as const)(
+    'REQ-182/D-156: usa a habilidade de $kind da montaria em combate',
+    async ({ kind, expectedHealth }) => {
+      const id = await setup()
+      const started = await act(id, { type: 'startEvent' }).expect(200)
+      await act(id, {
+        type: 'revealEvent',
+        encounterId: started.body.randomEventEncounter.id,
+      }).expect(200)
+      const { party, hostId } = await helperTurn(id, true)
+      const mount = makeMountCard({
+        id: 'fixture.combat-ability-mount',
+        abilities: [
+          {
+            id: 'combat-ability',
+            name: kind === 'cura' ? 'Cura' : 'Investida',
+            text: kind === 'cura' ? 'Recupere 3 de vida.' : 'Cause 1 de dano.',
+            form: 'targeted',
+            element: null,
+            cost: [],
+            power: null,
+            effects: [
+              {
+                text:
+                  kind === 'cura' ? 'Recupere 3 de vida.' : 'Cause 1 de dano.',
+                trigger: null,
+                cost: [],
+                activation:
+                  kind === 'cura'
+                    ? [{ kind: 'heal', amount: 3 }]
+                    : [{ kind: 'effectDamage', amount: 1 }],
+                duration: { kind: 'immediate' },
+                mark: null,
+              },
+            ],
+            cooldown: 0,
+            timing: 'combat',
+            classRestriction: [],
+            usesPerTurn: 1,
+            target: kind === 'cura' ? 'self' : 'opponent',
+            duration: null,
+            channel: null,
+          },
+        ],
+      })
+      const row = DrizzlePartyMapper.toDrizzle(party)
+      row.state.members[0].player.inventory = []
+      row.state.members[0].player.mount = {
+        cardId: mount.id,
+        inventory: [],
+        tcgFolder: [],
+      }
+      const active = DrizzlePartyMapper.toDomain(row)
+      expect(
+        active.describeCombat(new Map([[mount.id, mount]]))?.abilities
+      ).toContainEqual(
+        expect.objectContaining({
+          abilityId: 'combat-ability',
+          mountAbility: true,
+          targetIds:
+            kind === 'cura' ? [] : [expect.any(String), expect.any(String)],
+        })
+      )
+
+      const catalog = ctx.app.get(CardCatalog)
+      const findCard = catalog.findCard.bind(catalog)
+      const lookup = vi
+        .spyOn(catalog, 'findCard')
+        .mockImplementation((cardId) =>
+          cardId === mount.id ? Promise.resolve(mount) : findCard(cardId)
+        )
+      try {
+        const result = await ctx.app
+          .get(TakePartyActionUseCase)
+          .executeAiTurn(active)
+        expect(result.isRight()).toBe(true)
+        expect(active.lastCombatResult?.resolution).toBe('victory')
+        expect(active.turn.memberId.toString()).toBe(hostId)
+        expect(active.members[0].player.health).toBe(expectedHealth)
+      } finally {
+        lookup.mockRestore()
+      }
+    }
+  )
 
   it('REQ-123/REQ-127/REQ-129: preserva a escolha legada sem PA e persiste o respawn no POST', async () => {
     const id = await setup()

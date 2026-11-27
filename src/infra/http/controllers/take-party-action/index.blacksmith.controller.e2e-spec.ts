@@ -1,5 +1,9 @@
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
+import { TakePartyActionUseCase } from '@/domain/campaign/application/use-cases/take-party-action'
+import { maxHealthOf } from '@/domain/campaign/enterprise/entities/party-member'
+import { DrizzlePartyMapper } from '@/infra/database/drizzle/mappers/drizzle-party-mapper'
 import { createContentApp } from '../../../../../test/content-app'
 import { postParty, resetCampaign } from '../../../../../test/parties-e2e'
 
@@ -134,6 +138,61 @@ describe('Ir ao Ferreiro (e2e)', () => {
     (await request(server()).get(`/parties/${id}`)).body
 
   const player = (party: TParty) => party.members[0].player
+
+  it.each([
+    { gold: 50, repaired: true },
+    { gold: 0, repaired: false },
+  ])(
+    'REQ-182/D-156: avalia conserto da arma quebrada com $gold de ouro',
+    async ({ gold, repaired }) => {
+      const started = await startedParty()
+      await give(started, W)
+      await act(started.id, {
+        type: 'prepare',
+        operation: 'equip',
+        cardId: W,
+      }).expect(200)
+      const saved = await ctx.app.get(PartiesRepository).findById(started.id)
+      if (!saved) throw new Error('Save ausente')
+      const row = DrizzlePartyMapper.toDrizzle(saved)
+      const [actor] = row.state.members
+      const hostId = 'd730fd1e-9748-48aa-ae08-5ca6fea126db'
+      row.state.members = [
+        {
+          ...actor,
+          kind: 'aiHelper',
+          player: {
+            ...actor.player,
+            gold,
+            health: maxHealthOf(actor.player),
+            vigor: actor.player.peak,
+            equipmentStates: { weapon: { ...DEFAULT_STATE, broken: true } },
+          },
+        },
+        { ...actor, id: hostId, kind: 'human' },
+      ]
+      row.state.hostMemberId = hostId
+      row.state.turnOrder = [actor.id, hostId]
+      row.state.turn.actionPoints = 1
+      const campaign = DrizzlePartyMapper.toDomain(row)
+      expect(campaign.members[0].player.brokenEquipment).toContain('weapon')
+
+      const result = await ctx.app
+        .get(TakePartyActionUseCase)
+        .executeAiTurn(campaign)
+
+      expect(result.isRight()).toBe(true)
+      expect(campaign.turn.memberId.toString()).toBe(hostId)
+      const helper = campaign.members[0].player
+      expect(helper.brokenEquipment?.includes('weapon') ?? false).toBe(
+        !repaired
+      )
+      if (repaired) {
+        expect(helper.gold).toBe(gold - campaign.config.repairBaseGold)
+        expect(helper.equipmentStates?.weapon?.repairMarks).toBe(1)
+      }
+    }
+  )
 
   /** Espada no slot 0, 3 minérios no slot 1, projeto no slot 2 e 100 de ouro. */
   async function stocked(): Promise<TParty> {
