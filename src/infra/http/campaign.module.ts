@@ -24,6 +24,7 @@ import { GetPartyController } from './controllers/get-party/index.controller'
 import { ListPartiesController } from './controllers/list-parties/index.controller'
 import { StartSessionController } from './controllers/start-session/index.controller'
 import { TakePartyActionController } from './controllers/take-party-action/index.controller'
+import { PartyAdvanceService } from './party-advance.service'
 
 // Rotas /parties (FEAT-05). Os adaptadores das portas do core vivem aqui
 // enquanto a campanha é o único consumidor (D-34).
@@ -38,6 +39,7 @@ import { TakePartyActionController } from './controllers/take-party-action/index
     TakePartyActionController,
   ],
   providers: [
+    PartyAdvanceService,
     { provide: Clock, useClass: SystemClock },
     { provide: IdGenerator, useClass: UuidIdGenerator },
     { provide: SeedGenerator, useClass: CryptoSeedGenerator },

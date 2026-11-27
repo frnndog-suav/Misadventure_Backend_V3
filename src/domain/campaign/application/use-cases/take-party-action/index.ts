@@ -3,6 +3,7 @@ import type { Clock } from '@/core/ports/clock'
 import type { IdGenerator } from '@/core/ports/id-generator'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
+import type { TCombatUpdate } from '@/domain/campaign/enterprise/combat'
 import { aiTurnIntents } from '@/domain/campaign/enterprise/ai-turn'
 import { marketCandidatesOf } from '@/domain/campaign/enterprise/markets'
 import {
@@ -40,12 +41,15 @@ export interface TTakePartyActionUseCaseRequest {
   body: unknown
 }
 
-export type TTakePartyActionUseCaseResponse = Either<
+type TPartyActionError =
   | PartyNotFoundError
   | ActionInvalidError
   | PartySessionNotActiveError
   | ActionNotAllowedError
-  | DimensionInvalidError,
+  | DimensionInvalidError
+
+export type TTakePartyActionUseCaseResponse = Either<
+  TPartyActionError,
   { party: Party }
 >
 
@@ -82,31 +86,49 @@ export class TakePartyActionUseCase {
       return left(new PartyNotFoundError())
     }
 
-    // A porta é ligada no Nest com o save v7, quando os status podem ser persistidos.
+    const parsed = this.parseAction(body)
+    if (parsed.isLeft()) return left(parsed.value)
+
+    const result = await this.executeHumanAction(party, parsed.value)
+    if (result.isRight()) await save(party)
+    return result
+  }
+
+  parseAction(body: unknown): Either<ActionInvalidError, TPartyAction> {
     const parsed = parsePartyAction(
       body,
       this.ids !== undefined,
       this.eventActionsEnabled,
       this.combatEnabled
     )
-    if (parsed.isLeft()) {
-      return left(new ActionInvalidError(parsed.value))
-    }
+    return parsed.isLeft()
+      ? left(new ActionInvalidError(parsed.value))
+      : right(parsed.value)
+  }
 
-    const action = parsed.value
+  async executeHumanAction(
+    party: Party,
+    action: TPartyAction
+  ): Promise<TTakePartyActionUseCaseResponse> {
     if (party.status !== 'inSession')
       return left(new PartySessionNotActiveError())
     if (!party.turn.memberId.equals(party.hostMemberId))
       return left(new ActionNotAllowedError('zoneActionUnavailable'))
 
-    const result = await this.applyAction(party, action)
-    if (result.isRight()) await save(party)
-    return result
+    return this.applyAction(party, action)
   }
 
   /** Executa uma vez no agregado recebido. A persistência pertence ao chamador. */
-  async executeAiTurn(party: Party): Promise<TTakePartyActionUseCaseResponse> {
+  async executeAiTurn(
+    party: Party
+  ): Promise<
+    Either<
+      TPartyActionError,
+      { party: Party; combatUpdates: readonly TCombatUpdate[] }
+    >
+  > {
     const { memberId, round } = party.turn
+    const dimensionId = party.dimension.dimensionCardId
     if (party.status !== 'inSession')
       return left(new PartySessionNotActiveError())
     if (
@@ -117,6 +139,7 @@ export class TakePartyActionUseCase {
       return left(new ActionNotAllowedError('zoneActionUnavailable'))
 
     const maxChoices = 96
+    const combatUpdates: TCombatUpdate[] = []
     const classes = await this.cardCatalog.listClasses()
     for (let choice = 0; choice < maxChoices; choice++) {
       const { cards, zone, dimension } = await this.findEventCatalog(party)
@@ -156,21 +179,29 @@ export class TakePartyActionUseCase {
       )) {
         const result = await this.applyAction(party, action, classes)
         if (result.isRight()) {
+          combatUpdates.push(...party.combatUpdates)
           applied = true
           break
         }
-        if (result.value instanceof DimensionInvalidError) return result
+        if (result.value instanceof DimensionInvalidError)
+          return left(result.value)
       }
       if (!applied)
         return left(new ActionNotAllowedError('zoneActionUnavailable'))
       if (
         party.status !== 'inSession' ||
+        party.dimension.dimensionCardId !== dimensionId ||
         party.turn.round !== round ||
         !party.turn.memberId.equals(memberId)
       )
-        return right({ party })
+        return right({ party, combatUpdates })
     }
-    return this.applyAction(party, { type: 'endTurn' })
+    const result = await this.applyAction(party, { type: 'endTurn' })
+    if (result.isLeft()) return left(result.value)
+    return right({
+      party,
+      combatUpdates: [...combatUpdates, ...party.combatUpdates],
+    })
   }
 
   private async applyAction(

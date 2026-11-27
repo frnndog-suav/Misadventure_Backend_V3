@@ -1,13 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
 import { GameConfigRepository } from '@/domain/lab/application/repositories/game-config-repository'
 import { type Database, DRIZZLE } from '../../database.tokens'
 import { DrizzlePartyMapper } from '../mappers/drizzle-party-mapper'
-import { parties } from '../schema'
+import { parties, partyActionReceipts } from '../schema'
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+export const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+type TReceipt = typeof partyActionReceipts.$inferSelect
+interface TLockedReceipts {
+  find(key: string): Promise<TReceipt | undefined>
+  findPending(): Promise<TReceipt | undefined>
+  save(receipt: Omit<TReceipt, 'partyId'>): Promise<void>
+}
 
 /** Um save = uma linha; cada gravação é um único comando, logo atômica (D-31, REQ-22). */
 @Injectable()
@@ -42,7 +50,8 @@ export class DrizzlePartiesRepository implements PartiesRepository {
     id: string,
     run: (
       party: Party | null,
-      save: (party: Party) => Promise<void>
+      save: (party: Party) => Promise<void>,
+      receipts: TLockedReceipts
     ) => Promise<T>
   ): Promise<T> {
     return this.db.transaction(async (tx) => {
@@ -53,11 +62,37 @@ export class DrizzlePartiesRepository implements PartiesRepository {
             .where(eq(parties.id, id))
             .for('update')
         : []
+      const forParty = eq(partyActionReceipts.partyId, id)
       return run(
         row ? DrizzlePartyMapper.toDomain(row) : null,
         async (party) => {
           const { id: partyId, ...values } = DrizzlePartyMapper.toDrizzle(party)
           await tx.update(parties).set(values).where(eq(parties.id, partyId))
+        },
+        {
+          find: async (key) => {
+            const [receipt] = await tx
+              .select()
+              .from(partyActionReceipts)
+              .where(and(forParty, eq(partyActionReceipts.key, key)))
+            return receipt
+          },
+          findPending: async () => {
+            const [receipt] = await tx
+              .select()
+              .from(partyActionReceipts)
+              .where(and(forParty, isNull(partyActionReceipts.response)))
+            return receipt
+          },
+          save: async ({ key, action, combatUpdates, response }) => {
+            await tx
+              .insert(partyActionReceipts)
+              .values({ partyId: id, key, action, combatUpdates, response })
+              .onConflictDoUpdate({
+                target: [partyActionReceipts.partyId, partyActionReceipts.key],
+                set: { combatUpdates, response },
+              })
+          },
         }
       )
     })

@@ -169,6 +169,7 @@ export type TPartyActionType = TPartyAction['type']
 
 /** Motivos de CONTRATO FEAT-07, FEAT-09 e FEAT-18 (`ActionInvalidDetails`). `zoneNotInMap` vem de `Party.move`. */
 export type TActionIssue =
+  | { field: 'Idempotency-Key'; reason: 'invalidIdempotencyKey' }
   | { field: null; reason: 'invalidBody' }
   | { field: 'type'; reason: 'required' | 'notString' | 'unknownAction' }
   | { field: 'zoneId'; reason: 'required' | 'notString' | 'zoneNotInMap' }

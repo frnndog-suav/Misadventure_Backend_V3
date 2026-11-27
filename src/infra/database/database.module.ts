@@ -27,9 +27,15 @@ import { DrizzlePartiesRepository } from './drizzle/repositories/drizzle-parties
       useFactory: (pool: Pool): Database => drizzle(pool),
     },
     { provide: GameConfigRepository, useClass: DrizzleGameConfigRepository },
-    { provide: PartiesRepository, useClass: DrizzlePartiesRepository },
+    DrizzlePartiesRepository,
+    { provide: PartiesRepository, useExisting: DrizzlePartiesRepository },
   ],
-  exports: [DRIZZLE, GameConfigRepository, PartiesRepository],
+  exports: [
+    DRIZZLE,
+    GameConfigRepository,
+    PartiesRepository,
+    DrizzlePartiesRepository,
+  ],
 })
 export class DatabaseModule implements OnApplicationShutdown {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}

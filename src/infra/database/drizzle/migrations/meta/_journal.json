@@ -22,6 +22,13 @@
       "when": 1794921509764,
       "tag": "0002_parties_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795738503458,
+      "tag": "0003_party_action_receipts",
+      "breakpoints": true
     }
   ]
 }
