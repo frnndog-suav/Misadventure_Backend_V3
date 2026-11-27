@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 1.15 · **Data:** 2026-11-27
+> **Versão da spec:** 1.16 · **Data:** 2026-11-27
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -489,6 +489,17 @@ Base: CONTRATO v1.02 e README §§24.3, 24.4 e 27.
 - **REQ-176 — Pool e compra de singles.** Dada a vigência gravada, quando criar o pool ou renová-lo após esgotamento global por compra ou decaimento, então aplicar elegibilidade, exclusões, tamanho, estoque e escassez da FEAT-16 sobre as coleções vigentes, com IDs únicos e sem cota por coleção. Ao comprar pelo slot, entregar o ID original ao destino contratado.
 - **REQ-177 — Abertura de boosters.** Dado um booster reimpresso ou fora da oferta em posse do jogador e espaço suficiente, quando abrir em `prepare` do inventário ou em `useVault` do cofre, então usar a coleção de `boosterCollectionId` e registrar em `lastBoosterOpening` os IDs originais e os destinos das FEAT-16 e FEAT-18. As raridades originais conferem com o catálogo. Venda e uso seguem as regras existentes.
 
+### FEAT-22 — Recrutar ajudantes e combate em grupo
+
+Base: CONTRATO v1.19, seção FEAT-22 `acordado`, README §§3.2, 11.3, 19.1, 19.5, 20.2, 21.1 e II.7. Aplicar ao Momento 2, com um humano por save e relógios desligados, nos encontros de evento, missão e chefe final.
+
+- **REQ-186 — Elenco e convite (cenários 1 e 2).** Dado um encontro, quando abrir o recrutamento, então considerar os outros membros aptos, de pé e na mesma zona, inclusive com zero PA. Revalidar a seleção humana, recusar duplicatas e cobrar o custo do iniciador uma vez. A IA iniciadora convida todos os elegíveis na ordem da campanha. A IA convidada aceita com pelo menos metade dos PV máximos, sem RNG. O humano convidado decide explicitamente. Publicar a confirmação do elenco antes do início. Com apenas o iniciador confirmado, aplicar integralmente o fluxo solo, inclusive em saves legados.
+- **REQ-187 — Decisão pública e autoridade (cenário 2).** Dada uma escolha de elenco, convite, ordem, turno ou recompensa, quando projetar ações, GET ou sessão, então expor a decisão corrente e suas opções para o responsável conforme o contrato. Só o humano autenticado responsável pode responder, inclusive na vez de exploração da IA. Aplicar a precedência HTTP do contrato, com validação do corpo, estado da chave e do avanço, consumo ou fechamento, IDs, responsável e regras da intenção. Recusas preservam estado, revisão e RNG. Uma ativação aceita mantém o ID da decisão no mesmo turno e atualiza as opções.
+- **REQ-188 — Ciclos e condições individuais (cenários 3 e 4).** Dado um elenco em grupo, quando iniciar um ciclo, então ordenar pela Celeridade recalculada, preservar a prioridade inimiga em empate e aplicar aos jogadores a prioridade escolhida antes do primeiro ciclo ou a ordem padrão da campanha. Oferecer a alternativa com humano primeiro quando ela alterar o empate inicial, preservando a ordem relativa das IAs. Resolver alvos, nocaute, ressurreição, turno pulado, ataque livre por fuga falha e fuga individual conforme o README. No limite do laboratório, converter os membros de pé em fugidos com a perda configurada de Pico, sem custo de Vigor, inclusive em Sem fuga. Aplicar a tabela de resultado coletivo às condições finais. Na derrota, só os nocauteados sofrem revés.
+- **REQ-189 — Vitória, missão e saque (cenário 5).** Dada uma vitória, quando fixar o resultado, então registrar o progresso da missão uma vez para o dono, mesmo caído ou fugido, e aplicar aos membros de pé o Pico da carta ou padrão acrescido do bônus por inimigo Chefe derrotado e o Vigor explícito. Dar ouro e cartas ao iniciador de pé. Caso contrário, dividir o ouro para baixo entre sobreviventes, perder o resto e fixar o rodízio de cartas pela Celeridade efetiva e prioridade gravada. Resolver cada entrega antes da próxima compra, inclusive com descarte humano pendente. Na vitória em grupo por Reflexão sem sobreviventes, registrar a vitória e o progresso aplicável, aplicar o nocaute normal e encerrar sem recompensas de combate. No elenco solo, preservar a recompensa histórica nesse caso. Derrota e fuga coletiva mantêm a missão aberta.
+- **REQ-190 — Respawn e chefe final (cenários 3 e 6).** Dado o resultado coletivo, quando terminar a última entrega do combate, então aplicar os respawns e a perda da próxima vez conforme a FEAT-14, depois retomar a exploração ou concluir a dimensão. Na vitória contra o chefe final, inclusive por Reflexão sem sobreviventes, concluir uma vez e conceder separadamente Pico de conclusão e prêmio máximo a todos. Preparar a dimensão sucessora ou congelar, mantendo escolhas de prêmio máximo conforme a FEAT-19. Sem vitória, preservar os itens de conclusão e manter a dimensão aberta. Projetar as condições e os efeitos por participante conforme o contrato.
+- **REQ-191 — Pausas, eventos e recibos (cenários 2 e 7).** Dada uma vez em andamento, quando atingir uma decisão humana, então persistir a decisão, a continuação, o RNG, a revisão e o recibo em uma transação e retornar o lote já resolvido. GET e abertura de sessão projetam a pausa gravada. A resposta usa nova chave e consome a decisão serializadamente, retomando a mesma vez até nova pausa ou conclusão. Em interrupções, recuperar conforme as FEATs 20 e 21. Reenviar o corpo original devolve o recibo completo original mesmo após outra pausa. Preservar IDs, ordenação de eventos, posições em `combatUpdates` e dono da vez automática. Emitir as transições de elenco, convite, nocaute, ressurreição e entrega conforme o contrato, com um único resultado coletivo.
+
 ## Decisões
 
 - **D-111 — Persistência da FEAT-15.** Salvar quadro, deck de origem, missões e etapas, vínculo de tentativa, concessões e entrega pendente pelas portas existentes. Usar IDs e RNG pelas portas, com transições atômicas e ordem estável. Recusas preservam save, decks e RNG. GET e reabertura não reaplicam progresso e preservam a retomada do nocaute da FEAT-14.
@@ -881,6 +892,14 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 5. Sucessora e congelamento | Sucessora `a52a309c-0f1d-49c4-a07d-b3c1d2693299`, última `a41a24d0-8231-4e6c-a29a-83ce286438d5` | 3 na criação, 0 na transição. Novo D20 10, 4, 9, 13 | Partir de saves perto da conclusão. Com sucessora, verificar nova ordem com IA em primeiro, cidade inicial e respawn, progressão individual e avanço até o humano. Na última dimensão o save congela e o avanço termina; sem sucessora, reabrir retorna `409 PARTY_FROZEN`. |
 | 6. Prioridades | Antes `043ee90d-aaa1-4ab0-9089-6d5663934652`, depois `5562f4e5-3a75-4a5d-8b37-73a3c5779ba2` | 42 em ambas | Entregar ordem inicial e permutação alternativa. GET publica valores e padrões; PATCH válido altera a configuração, lista inválida retorna `400 LAB_CONFIG_INVALID` com `invalidPriorities` e reset restaura o padrão. A campanha anterior mantém o snapshot original e a nova usa a permutação aplicada. Restaurar a configuração anterior ao fim. |
 
+### FEAT-22 — Recrutar ajudantes e combate em grupo
+
+- [ ] **T-113 — Recrutamento e elenco (REQ-186).** Implementar elegibilidade, política de convites, confirmação antes do primeiro ciclo e entrada solo compatível. Cobrir os casos de elenco dos cenários 1 e 2.
+- [ ] **T-114 — Ciclos de combate em grupo (REQ-188).** Implementar elenco ativo, iniciativa, alvos, nocaute, ressurreição, fuga e limite de ciclos. Cobrir os cenários 3 e 4.
+- [ ] **T-115 — Recompensas e desfecho (REQ-189, REQ-190).** Implementar efeitos individuais, missão, rodízio, respawn e conclusão da dimensão. Cobrir os cenários 5 e 6.
+- [ ] **T-116 — Decisões HTTP, retomada e projeções (REQ-187, REQ-191).** Integrar as pausas ao avanço e aos recibos existentes, verificar a precedência HTTP e os eventos, e cobrir os cenários 2 e 7 em E2E. Reexecutar os cenários afetados das etapas anteriores pela API.
+- [ ] **T-117 — Campanhas e entrega para a T-112 (REQ-186 a REQ-191).** Verificar os sete cenários e suas variações no backend, preparar saves independentes para percursos incompatíveis e entregar revisão da API, URL, IDs dos saves, catálogo, sementes, estados iniciais e resultados esperados por participante. Registrar `implementado (BE)` após os testes e `validado` após o retorno da T-112.
+
 ## 8. Histórico
 
 | Versão | Data | Mudança |
@@ -1004,3 +1023,4 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 1.13 | 2026-11-26 | T-90 concluída após confirmação do E2E pelo autor, conforme devlog 109. T-91 é a próxima etapa da FEAT-20. |
 | 1.14 | 2026-11-27 | T-91 concluída, seis cenários preparados e limites de tempo confirmados. Roteiro da T-104 entregue, aguardando validação integrada. |
 | 1.15 | 2026-11-27 | FEAT-20 encerrada após os seis cenários da T-104 e a confirmação de `GET /health`. |
+| 1.16 | 2026-11-27 | Planejamento da FEAT-22 conforme CONTRATO v1.19, com REQ-186 a REQ-191 e T-113 a T-117. Próxima etapa T-113. |

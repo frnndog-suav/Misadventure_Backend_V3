@@ -135,6 +135,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 115 | FEAT-22 | [Revisão e contraproposta de contrato](115-FEAT-22-contraproposta.md) | concluída |
 | 116 | FEAT-22 | [Elenco solo e precedência HTTP](116-FEAT-22-ajustes-contrato.md) | concluída |
 | 117 | FEAT-22 | [Acordo de contrato](117-FEAT-22-acordo-contrato.md) | concluída |
+| 118 | FEAT-22 | [Planejamento do backend](118-FEAT-22-planejamento.md) | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
