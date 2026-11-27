@@ -31,6 +31,7 @@ import {
 
 export type TCombatRefusal =
   | 'combatInProgress'
+  | 'combatDecisionPending'
   | 'choicePending'
   | 'staleCombat'
   | 'staleCombatTurn'
@@ -280,6 +281,23 @@ type CombatAbilityUsage = {
 }
 
 export type TCombatUpdate = { combatId: string } & (
+  | {
+      type: 'combatInviteOpened'
+      initiatorMemberId: string
+      inviteeMemberId: string
+    }
+  | {
+      type: 'combatInviteAnswered'
+      initiatorMemberId: string
+      inviteeMemberId: string
+      accept: boolean
+    }
+  | {
+      type: 'combatRosterConfirmed'
+      initiatorMemberId: string
+      participantMemberIds: string[]
+      declinedMemberIds: string[]
+    }
   | {
       type: 'combatStarted'
       cardId: string

@@ -398,6 +398,47 @@ type TriggerContinuation =
       finalBoss?: true
     }
 
+type CombatRecruitmentEntry = {
+  combatId: string
+  card: TCombatEventCard
+  initiatorMemberId: string
+  finalBoss?: true
+}
+
+type CombatRecruitmentDecision = {
+  id: string
+  combatId: string
+  memberId: string
+} & (
+  | { type: 'roster'; candidateMemberIds: string[] }
+  | { type: 'invite'; initiatorMemberId: string; cardTitle: string }
+)
+
+type CombatRecruitment = CombatRecruitmentEntry &
+  (
+    | {
+        phase: 'recruiting'
+        decision: CombatRecruitmentDecision
+        answers: CombatInviteAnswer[]
+      }
+    | { phase: 'confirmed'; participantMemberIds: string[] }
+  )
+
+type CombatInviteAnswer = { memberId: string; accept: boolean }
+
+type CombatRecruitmentPause<T extends CombatRecruitmentDecision['type']> =
+  Extract<CombatRecruitment, { phase: 'recruiting' }> & {
+    decision: Extract<CombatRecruitmentDecision, { type: T }>
+  }
+
+type CombatRecruitmentRefusal =
+  | 'combatCandidateIneligible'
+  | 'combatDecisionExpired'
+  | 'combatDecisionNotOwned'
+  | 'combatRecruitmentClosed'
+
+type CombatEntryMode = 'recruit' | 'solo'
+
 type PendingTriggeredEffects = {
   effects: PendingTriggeredEffect[]
   choice: TriggeredEffectChoice
@@ -491,6 +532,8 @@ export interface TPartyProps {
   upgradedCombatDecks?: readonly TEventDeck['zoneType'][]
   eventEncounter?: TEventEncounter | null
   combat?: TCombatState | null
+  combatRecruitment?: CombatRecruitment
+  lastCombatRecruitmentDecision?: { id: string; combatId: string }
   combatZone?: TEventDeck['zoneType']
   lastCombatResult?: TCombatResult | null
   combatOutcome?: CombatOutcome | null
@@ -762,6 +805,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return this.describeCombat(this.eventCatalog)
   }
 
+  get pendingCombatDecision(): CombatRecruitmentDecision | null {
+    const recruitment = this.props.combatRecruitment
+    return recruitment?.phase === 'recruiting' ? recruitment.decision : null
+  }
+
   combatEffectChoices(cards: ReadonlyMap<string, TCard>) {
     const combat = this.props.combat
     if (!combat) return []
@@ -779,6 +827,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   combatSnapshot() {
     const {
       combat,
+      combatRecruitment,
+      lastCombatRecruitmentDecision,
       combatZone,
       lastCombatResult,
       combatOutcome,
@@ -788,6 +838,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     } = this.props
     return {
       combat,
+      combatRecruitment,
+      lastCombatRecruitmentDecision,
       combatZone,
       lastCombatResult,
       combatOutcome,
@@ -1131,6 +1183,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   eventActionBlock(
     action: TPartyAction
   ): TEventRefusal | TCombatRefusal | null {
+    if (this.pendingCombatDecision) return 'combatDecisionPending'
+    if (this.props.combatRecruitment?.phase === 'confirmed')
+      return 'combatInProgress'
     if (action.type === 'resolveTriggeredEffect') return null
     if ('combatId' in action) return null
     if (this.triggeredEffectChoice) return 'choicePending'
@@ -1190,7 +1245,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     dimension: TDimensionCard | null,
     cards: ReadonlyMap<string, TCard>,
     now: Date,
-    ids: IdGenerator
+    ids: IdGenerator,
+    combatEntry: CombatEntryMode = 'recruit'
   ): Either<NonNullable<ReturnType<Party['completionRefusal']>>, void> {
     const refusal = this.completionRefusal(zone, dimension)
     if (refusal) return left(refusal)
@@ -1213,6 +1269,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         dimension,
         cards,
         this.rngState,
+        combatEntry,
         true
       )
     }
@@ -1607,7 +1664,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     dimension: TDimensionCard | null = null,
     combatEnabled = true,
     classes: readonly TClassDefinition[] = [],
-    drawGenericQuest = false
+    drawGenericQuest = false,
+    combatEntry: CombatEntryMode = 'recruit'
   ): Either<TQuestRefusal, undefined> {
     if (action.type === 'takeTrialQuest' || action.type === 'trainWithMentor') {
       if (drawGenericQuest) {
@@ -1750,7 +1808,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
               zone,
               dimension,
               cards,
-              this.props.rngState
+              this.props.rngState,
+              combatEntry
             )
           }
         } else if (action.type === 'finishQuest') {
@@ -3380,7 +3439,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   resolveTriggeredEffect(
     action: TResolveTriggeredEffectAction,
     cards: ReadonlyMap<string, TCard>,
-    at: Date
+    at: Date,
+    combatEntry: CombatEntryMode = 'recruit'
   ): Either<TTriggeredEffectRefusal, void> {
     const pending = this.props.pendingTriggeredEffects
     if (!pending || pending.choice.choiceId !== action.choiceId)
@@ -3466,13 +3526,14 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     this.replaceActor(index, changed.player)
     if (!this.triggeredEffectChoice) {
       if (continuation?.type === 'combatEntry') {
-        this.startCombat(
+        this.beginCombatEntry(
           continuation.id,
           continuation.card,
           index,
           changed.player,
           cards,
           changed.rngState,
+          combatEntry,
           continuation.finalBoss
         )
       } else if (battle) {
@@ -3729,7 +3790,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     cards: ReadonlyMap<string, TCard>,
     at: Date,
     ids: IdGenerator | undefined,
-    combatEnabled = true
+    combatEnabled = true,
+    combatEntry: CombatEntryMode = 'recruit'
   ): Either<TEventRefusal, void> {
     const index = this.actorIndex()
     const actor = this.props.members[index]
@@ -3857,7 +3919,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           zone,
           dimension,
           cards,
-          rng.state()
+          rng.state(),
+          combatEntry
         )
         return right(undefined)
       }
@@ -4066,6 +4129,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     dimension: TDimensionCard | null,
     cards: ReadonlyMap<string, TCard>,
     rngState: RngState,
+    combatEntry: CombatEntryMode,
     finalBoss?: true
   ) {
     const started = this.resolveAbilityTriggers(
@@ -4096,16 +4160,293 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.props.rngState = started.rngState
       this.replaceActor(index, started.player)
     } else {
-      this.startCombat(
+      this.beginCombatEntry(
         id,
         card,
         index,
         started.player,
         cards,
         started.rngState,
+        combatEntry,
         finalBoss
       )
     }
+  }
+
+  private combatCandidates(initiator: PartyMember): PartyMember[] {
+    return this.props.turnOrder.flatMap((id) => {
+      if (id.equals(initiator.id)) return []
+      const member = this.props.members.find((entry) => entry.id.equals(id))
+      return member &&
+        member.player.zoneId === initiator.player.zoneId &&
+        !member.player.down &&
+        member.player.health > 0
+        ? [member]
+        : []
+    })
+  }
+
+  private beginCombatEntry(
+    combatId: string,
+    card: TCombatEventCard,
+    index: number,
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>,
+    rngState: RngState,
+    mode: CombatEntryMode,
+    finalBoss?: true
+  ) {
+    if (mode === 'solo') {
+      this.startCombat(
+        combatId,
+        card,
+        index,
+        player,
+        cards,
+        rngState,
+        finalBoss
+      )
+      return
+    }
+    this.replaceActor(index, player)
+    this.props.rngState = rngState
+    const initiator = this.props.members[index]
+    const initiatorMemberId = initiator.id.toString()
+    const entry = {
+      combatId,
+      card,
+      initiatorMemberId,
+      ...(finalBoss && { finalBoss }),
+    }
+    const candidates = this.combatCandidates(initiator)
+    if (!candidates.length) {
+      this.finishCombatRecruitment(entry, [], cards)
+      return
+    }
+    if (initiator.kind === 'human') {
+      this.props.combatRecruitment = {
+        ...entry,
+        phase: 'recruiting',
+        decision: {
+          type: 'roster',
+          id: `${combatId}:roster`,
+          combatId,
+          memberId: initiatorMemberId,
+          candidateMemberIds: candidates.map(({ id }) => id.toString()),
+        },
+        answers: [],
+      }
+      return
+    }
+    const answers: CombatInviteAnswer[] = []
+    const human = candidates.find(({ kind }) => kind === 'human')
+    for (const candidate of candidates) {
+      const inviteeMemberId = candidate.id.toString()
+      this.openCombatInvite(entry, inviteeMemberId)
+      if (candidate.kind === 'aiHelper')
+        answers.push(this.resolveAiCombatInvite(entry, candidate))
+    }
+    if (!human) {
+      this.finishCombatRecruitment(entry, answers, cards)
+      return
+    }
+    this.props.combatRecruitment = {
+      ...entry,
+      phase: 'recruiting',
+      decision: {
+        type: 'invite',
+        id: `${combatId}:invite`,
+        combatId,
+        memberId: human.id.toString(),
+        initiatorMemberId,
+        cardTitle: card.title,
+      },
+      answers,
+    }
+  }
+
+  private openCombatInvite(
+    { combatId, initiatorMemberId }: CombatRecruitmentEntry,
+    inviteeMemberId: string
+  ) {
+    this.recordCombatUpdates({
+      type: 'combatInviteOpened',
+      combatId,
+      initiatorMemberId,
+      inviteeMemberId,
+    })
+  }
+
+  private resolveAiCombatInvite(
+    entry: CombatRecruitmentEntry,
+    candidate: PartyMember
+  ) {
+    return this.answerCombatInvite(
+      entry,
+      candidate.id.toString(),
+      candidate.player.health * 2 >= candidate.maxHealth
+    )
+  }
+
+  private answerCombatInvite(
+    { combatId, initiatorMemberId }: CombatRecruitmentEntry,
+    inviteeMemberId: string,
+    accept: boolean
+  ): CombatInviteAnswer {
+    this.recordCombatUpdates({
+      type: 'combatInviteAnswered',
+      combatId,
+      initiatorMemberId,
+      inviteeMemberId,
+      accept,
+    })
+    return { memberId: inviteeMemberId, accept }
+  }
+
+  private validateCombatRecruitment<
+    T extends CombatRecruitmentDecision['type'],
+  >(
+    type: T,
+    memberId: string,
+    combatId: string,
+    decisionId: string
+  ): Either<CombatRecruitmentRefusal, CombatRecruitmentPause<T>> {
+    const consumed = this.props.lastCombatRecruitmentDecision
+    if (consumed?.combatId === combatId && consumed.id === decisionId)
+      return left('combatDecisionExpired')
+    const recruitment = this.props.combatRecruitment
+    if (recruitment?.phase !== 'recruiting') {
+      const closed = [
+        recruitment?.combatId,
+        this.props.combat?.id,
+        this.lastCombatResult?.combatId,
+      ].includes(combatId)
+      return left(closed ? 'combatRecruitmentClosed' : 'combatDecisionExpired')
+    }
+    const { decision } = recruitment
+    if (
+      decision.combatId !== combatId ||
+      decision.id !== decisionId ||
+      decision.type !== type
+    )
+      return left('combatDecisionExpired')
+    if (decision.memberId !== memberId) return left('combatDecisionNotOwned')
+    return right(recruitment as CombatRecruitmentPause<T>)
+  }
+
+  confirmCombatRoster(
+    memberId: string,
+    combatId: string,
+    decisionId: string,
+    inviteeMemberIds: readonly string[],
+    cards: ReadonlyMap<string, TCard>,
+    at: Date
+  ): Either<CombatRecruitmentRefusal, void> {
+    const validated = this.validateCombatRecruitment(
+      'roster',
+      memberId,
+      combatId,
+      decisionId
+    )
+    if (validated.isLeft()) return left(validated.value)
+    const recruitment = validated.value
+    const decision = recruitment.decision
+    const candidates = this.combatCandidates(
+      this.props.members[this.actorIndex()]
+    )
+    const selected = new Set(inviteeMemberIds)
+    const invited = candidates.filter(
+      ({ id }) =>
+        selected.has(id.toString()) &&
+        decision.candidateMemberIds.includes(id.toString())
+    )
+    if (
+      selected.size !== inviteeMemberIds.length ||
+      invited.length !== selected.size
+    )
+      return left('combatCandidateIneligible')
+    const answers = invited.map((candidate) => {
+      this.openCombatInvite(recruitment, candidate.id.toString())
+      return this.resolveAiCombatInvite(recruitment, candidate)
+    })
+    this.finishCombatRecruitment(recruitment, answers, cards)
+    this.props.savedAt = at
+    return right(undefined)
+  }
+
+  respondCombatInvite(
+    memberId: string,
+    combatId: string,
+    decisionId: string,
+    accept: boolean,
+    cards: ReadonlyMap<string, TCard>,
+    at: Date
+  ): Either<CombatRecruitmentRefusal, void> {
+    const validated = this.validateCombatRecruitment(
+      'invite',
+      memberId,
+      combatId,
+      decisionId
+    )
+    if (validated.isLeft()) return left(validated.value)
+    const recruitment = validated.value
+    const answer = this.answerCombatInvite(recruitment, memberId, accept)
+    this.finishCombatRecruitment(
+      recruitment,
+      [...recruitment.answers, answer],
+      cards
+    )
+    this.props.savedAt = at
+    return right(undefined)
+  }
+
+  private finishCombatRecruitment(
+    entry: CombatRecruitmentEntry,
+    answers: readonly CombatInviteAnswer[],
+    cards: ReadonlyMap<string, TCard>
+  ) {
+    const { combatId, card, initiatorMemberId, finalBoss } = entry
+    const decision = this.pendingCombatDecision
+    if (decision)
+      this.props.lastCombatRecruitmentDecision = { id: decision.id, combatId }
+    const accepted = new Map(
+      answers.map(({ memberId, accept }) => [memberId, accept])
+    )
+    const ordered = this.props.turnOrder.map((id) => id.toString())
+    const participantMemberIds = [
+      initiatorMemberId,
+      ...ordered.filter((id) => accepted.get(id) === true),
+    ]
+    this.recordCombatUpdates({
+      type: 'combatRosterConfirmed',
+      combatId,
+      initiatorMemberId,
+      participantMemberIds,
+      declinedMemberIds: ordered.filter((id) => accepted.get(id) === false),
+    })
+    if (participantMemberIds.length > 1) {
+      this.props.combatRecruitment = {
+        phase: 'confirmed',
+        combatId,
+        card,
+        initiatorMemberId,
+        ...(finalBoss && { finalBoss }),
+        participantMemberIds,
+      }
+      return
+    }
+    this.props.combatRecruitment = undefined
+    const index = this.actorIndex()
+    this.eventCatalog = cards
+    this.startCombat(
+      combatId,
+      card,
+      index,
+      this.props.members[index].player,
+      cards,
+      this.props.rngState,
+      finalBoss
+    )
   }
 
   private startCombat(

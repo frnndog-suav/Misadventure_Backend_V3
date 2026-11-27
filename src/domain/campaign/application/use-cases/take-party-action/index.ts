@@ -216,6 +216,8 @@ export class TakePartyActionUseCase {
       return left(new ActionNotAllowedError(blocked))
     party.clearCombatUpdates()
     const turnBeforeAction = party.turn
+    // T-116 connects recruitment decisions to the action and advance flows.
+    const combatEntry = 'solo' as const
     switch (action.type) {
       case 'takeQuest':
       case 'continueQuest':
@@ -254,7 +256,8 @@ export class TakePartyActionUseCase {
           dimension,
           this.combatEnabled,
           aiClasses ?? (await this.cardCatalog.listClasses()),
-          aiClasses !== undefined
+          aiClasses !== undefined,
+          combatEntry
         )
         if (result.isLeft())
           return left(new ActionNotAllowedError(result.value))
@@ -266,7 +269,8 @@ export class TakePartyActionUseCase {
         const result = party.resolveTriggeredEffect(
           action,
           cards,
-          this.clock.now()
+          this.clock.now(),
+          combatEntry
         )
         if (result.isLeft())
           return left(new ActionNotAllowedError(result.value))
@@ -337,7 +341,8 @@ export class TakePartyActionUseCase {
           cards,
           this.clock.now(),
           this.ids,
-          this.combatEnabled
+          this.combatEnabled,
+          combatEntry
         )
         if (result.isLeft()) {
           const refusal = result.value
@@ -677,7 +682,8 @@ export class TakePartyActionUseCase {
           dimension,
           cards,
           this.clock.now(),
-          this.ids
+          this.ids,
+          combatEntry
         )
         if (completed.isLeft())
           return left(new ActionNotAllowedError(completed.value))
