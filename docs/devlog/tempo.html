@@ -20,6 +20,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Misadventures — Tempo de desenvolvimento (backend)</title>
     <script>
+      // Atualize a data e os critérios ao revisar o progresso dos marcos.
+      const REVISAO_MARCOS = '2026-11-26'
+      const MARCOS = [
+        {
+          titulo: '1. Campanha solo',
+          criterios: [
+            [true, 'Criar, salvar e retomar uma partida solo', '../ROADMAP.md'],
+            [true, 'Explorar, jogar turnos, resolver encontros e progredir em missões', '../ROADMAP.md'],
+            [true, 'Validar conclusão da dimensão e chefe final com conteúdo de teste', '103-T-86-campanhas-da-feat-19.md'],
+            [false, 'Preparar uma dimensão jogável e concluir uma campanha a partir de um save novo'],
+          ],
+        },
+        {
+          titulo: '2. Um humano com companheiros de IA',
+          criterios: [
+            [true, 'Criar o grupo com ajudantes e projetar a ordem de turnos (T-88)', '../SPEC-BACKEND.md'],
+            [true, 'Executar as decisões e ações dos ajudantes (T-89)', '../SPEC-BACKEND.md'],
+            [true, 'Avançar automaticamente e recuperar uma partida interrompida (T-90)', '109-T-90-avanco-automatico-e-recuperacao.md'],
+            [false, 'Verificar campanhas e tempo de resposta na API (T-91), incluindo uma jogada com três ajudantes', '../SPEC-BACKEND.md'],
+          ],
+        },
+        {
+          titulo: '3. Multiplayer online',
+          criterios: [
+            [false, 'Autenticar jogadores (FEAT-25)', '../ROADMAP.md'],
+            [false, 'Iniciar uma sessão com vários humanos e sincronizar em tempo real (FEAT-26)', '../ROADMAP.md'],
+            [false, 'Aplicar prazos de turno e tratar jogadores ausentes (FEAT-27)', '../ROADMAP.md'],
+            [false, 'Tratar desconexão com IA assumindo o personagem (FEAT-28)', '../ROADMAP.md'],
+          ],
+        },
+      ]
+
       // === EDITE AQUI: uma linha por sessão de trabalho ===
       const SESSOES = [
         { data: '2026-11-13', horas: 1, etapa: 'FEAT-00', nota: 'Fundação: agentes, skills, guardas, spec. Estimado: 1 commit às 20:48, sem janela — corrija.' },
@@ -100,6 +132,14 @@
       .card b { display: block; font-size: 24px; color: var(--accent); }
       .card span { font-size: 12px; color: var(--muted); }
       h2 { font-size: 15px; margin: 28px 0 8px; }
+      .marcos { display: grid; gap: 12px; margin-bottom: 28px; }
+      .marco { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 18px; }
+      .marco header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+      .marco h3 { margin: 0; font-size: 16px; }
+      .marco strong { color: var(--accent); font-size: 20px; }
+      .marco progress { width: 100%; height: 14px; accent-color: var(--accent); }
+      .marco ul { margin: 8px 0 0; padding-left: 20px; }
+      .marco a { color: var(--accent); }
       table { border-collapse: collapse; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
       th, td { text-align: left; padding: 8px 12px; border-top: 1px solid var(--line); vertical-align: top; }
       thead th { border-top: none; background: #efece4; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
@@ -111,6 +151,13 @@
   <body>
     <h1>Misadventures — Tempo de desenvolvimento</h1>
     <p class="sub">Backend · fonte: array <code>SESSOES</code> dentro deste arquivo · edite e recarregue</p>
+    <section aria-labelledby="tituloMarcos">
+      <h2 id="tituloMarcos">Progresso até os marcos jogáveis</h2>
+      <p class="nota">Revisão de <time id="revisaoMarcos"></time>. Cada barra mostra a proporção de critérios concluídos, com peso igual. A contagem exclui o trabalho do frontend e independe das horas registradas.</p>
+      <p>O fluxo solo foi validado com conteúdo de teste. Falta uma campanha curta que possa ser vencida a partir de um save novo. O avanço da IA já foi testado e aguarda a preparação das campanhas. O modo online ainda está no roadmap.</p>
+      <div class="marcos" id="marcos"></div>
+    </section>
+    <h2>Tempo registrado</h2>
     <div class="cards" id="cards"></div>
     <h2>Horas por etapa</h2>
     <table><thead><tr><th>Etapa</th><th class="num">Horas</th></tr></thead><tbody id="porEtapa"></tbody></table>
@@ -126,6 +173,24 @@
         const [a, m, d] = iso.split('-')
         return d + '/' + m + '/' + a
       }
+      const revisaoMarcos = document.getElementById('revisaoMarcos')
+      revisaoMarcos.dateTime = REVISAO_MARCOS
+      revisaoMarcos.textContent = fmtData(REVISAO_MARCOS)
+      document.getElementById('marcos').innerHTML = MARCOS.map(({ titulo, criterios }, indice) => {
+        const feitos = criterios.filter(([feito]) => feito).length
+        const percentual = Math.round(100 * feitos / criterios.length)
+        const tituloId = 'marco-' + indice
+        const itens = criterios.map(([feito, descricao, fonte]) => {
+          const referencia = fonte ? ' <a href="' + fonte + '">Registro</a>' : ''
+          return '<li><b>' + (feito ? 'Feito' : 'Pendente') + '</b> · ' + descricao + referencia + '</li>'
+        })
+        return '<article class="marco"><header><h3 id="' + tituloId + '">' + titulo + '</h3>' +
+          '<strong>' + percentual + '%</strong></header>' +
+          '<progress aria-labelledby="' + tituloId + '" value="' + feitos + '" max="' + criterios.length + '"></progress>' +
+          '<div class="nota">' + feitos + ' de ' + criterios.length + ' critérios concluídos</div>' +
+          '<ul>' + itens.join('') + '</ul></article>'
+      }).join('')
+
       const ordenadas = [...SESSOES].sort((a, b) => a.data.localeCompare(b.data))
       const comHoras = ordenadas.filter((s) => s.horas !== null)
       const total = comHoras.reduce((t, s) => t + s.horas, 0)

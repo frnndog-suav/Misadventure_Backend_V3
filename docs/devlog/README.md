@@ -19,7 +19,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 |---|---|---|---|
 | 000 | FEAT-00 | Fundação: agentes, skills, guardas, spec | concluída |
 | 001 | T-01 | Ferramentas e esqueleto NestJS | concluída |
-| 002 | tempo | Registro de tempo (tempo.html) | concluída |
+| 002 | tempo | [Registro de tempo e progresso dos marcos jogáveis](tempo.html) | concluída |
 | 003 | T-02 | Docker Compose, env e base do Drizzle | concluída |
 | 004 | T-03 | `GET /health`, filtro de erros e CORS | concluída |
 | 005 | T-04 | Domínio `GameConfig` (laboratório) | concluída |
@@ -126,7 +126,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 106 | FEAT-20 | [Planejamento e contraproposta](106-FEAT-20-planejamento.md) | acordo sincronizado |
 | 107 | T-88 | [Criação com ajudantes](107-T-88-criacao-com-ajudantes.md) | concluída |
 | 108 | T-89 | [Configuração e política da IA](108-T-89-configuracao-e-politica-da-ia.md) | concluída |
-| 109 | T-90 | [Avanço automático e recuperação](109-T-90-avanco-automatico-e-recuperacao.md) | em andamento |
+| 109 | T-90 | [Avanço automático e recuperação](109-T-90-avanco-automatico-e-recuperacao.md) | concluído |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

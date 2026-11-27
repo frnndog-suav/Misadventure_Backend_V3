@@ -1,7 +1,7 @@
 # 109 — T-90 — Avanço automático e recuperação
 
 - **Data** — 2026-11-26
-- **Situação** — implementação pronta para testes do autor
+- **Situação** — concluída, E2E confirmado pelo autor
 - **Spec** — v1.12, REQ-183 a REQ-185, D-157
 - **Contrato** — v1.08, FEAT-20 acordada
 - **Horas** — a preencher pelo autor
@@ -44,3 +44,9 @@ cd /d/Github/Misadventure_Backend_V3 && npm run test:e2e -- src/infra/http/contr
 - Cinco regressões montavam saves v2 a v6 a partir da configuração atual. A fábrica compartilhada `test/factories/remove-post-v6-config.ts` agora também remove `aiPlayerPriorities` dessas fixtures. Isso preserva a validação estrita do mapper e exercita a leitura histórica com os padrões.
 - No cenário de checkpoint de combate, a carta de Lobos Uivantes tinha somente texto nos desfechos. A fixture do E2E agora declara as duas listas de passos vazias para tornar o encontro executável. O teste continua verificando a ordem do lote, a retomada e o replay após uma jogada posterior.
 - Typecheck, ESLint dos arquivos ajustados e `git diff --check` passaram. Repetir o comando E2E acima e aguardar 202 testes passando.
+
+## Encerramento
+
+- O autor confirmou a reexecução do E2E sem erros. A implementação está no commit `3794f1d` e os ajustes das fixtures no commit `4cdd999`.
+- A aplicação da migração foi exercitada no schema isolado do E2E. A preparação do ambiente para a validação integrada faz parte da próxima etapa.
+- A próxima tarefa é a T-91 conforme SPEC-BACKEND v1.13. Preparar os seis cenários da FEAT-20 para a T-104, medir a duração com cinco ajudantes e conferir os limites de tempo do cliente e da infraestrutura.
