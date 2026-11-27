@@ -128,6 +128,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 108 | T-89 | [Configuração e política da IA](108-T-89-configuracao-e-politica-da-ia.md) | concluída |
 | 109 | T-90 | [Avanço automático e recuperação](109-T-90-avanco-automatico-e-recuperacao.md) | concluído |
 | 110 | T-91 | [Campanhas e entrega para a T-104](110-T-91-campanhas-e-entrega.md) | concluída |
+| 111 | FEAT-21 | [Contraproposta de contrato](111-FEAT-21-contraproposta.md) | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
