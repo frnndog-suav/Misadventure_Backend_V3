@@ -85,6 +85,8 @@ Use o mapa para selecionar as consultas da tarefa e mantenha o conteúdo técnic
 
 ## Retomada e chamada de tarefas
 
+- A pausa obrigatória antes do multiplayer online vale para os dois repositórios. Conclua e valide o escopo de um humano com ajudantes de IA conforme o ROADMAP §3, entregue a versão jogável ao autor e interrompa o desenvolvimento. Aguarde o autor testar e autorizar explicitamente o início do Momento 3. Até essa autorização, mantenha bloqueadas as tarefas e qualquer código preparatório da FEAT-25 a FEAT-28. A confirmação do teste, por si só, não autoriza a retomada.
+
 - Use um chat por etapa, incluindo implementação, testes e ajustes da mesma tarefa. Abra outro chat para uma etapa independente.
 - Quando o autor indicar que está começando o dia de trabalho, quando uma etapa for concluída ou quando ele pedir o ponto atual, confirme a próxima tarefa no roadmap, na spec ou no devlog e aguarde autorização para iniciá-la. Inclua um prompt curto e copiável somente se a retomada for a única ação prioritária do autor naquele momento.
 - Use os IDs e o ponto de retomada confirmados. Identifique o prompt com **COLE NO CHAT DO BACKEND**. Omita decisões que não se aplicam e deixe campos a preencher quando a informação ainda não estiver definida.

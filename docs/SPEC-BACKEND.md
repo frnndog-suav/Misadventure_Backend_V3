@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 1.16 · **Data:** 2026-11-27
+> **Versão da spec:** 1.17 · **Data:** 2026-11-27
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -697,6 +697,8 @@ Base: CONTRATO v1.19, seção FEAT-22 `acordado`, README §§3.2, 11.3, 19.1, 19
 
 ## 4. Tarefas
 
+A entrega do Momento 2 termina com a pausa obrigatória do ROADMAP §3. O autor testa a versão com um humano e ajudantes de IA antes de autorizar explicitamente o Momento 3. A FEAT-25 a FEAT-28 e seus trabalhos preparatórios ficam bloqueados até essa autorização.
+
 ### FEAT-01 — Esqueleto técnico
 
 Contrato necessário: CONTRATO v0.4, seção FEAT-01 (`acordado`) — `GET /health`, `NOT_FOUND`, `INTERNAL_ERROR`. Nada falta no contrato.
@@ -1024,3 +1026,4 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 1.14 | 2026-11-27 | T-91 concluída, seis cenários preparados e limites de tempo confirmados. Roteiro da T-104 entregue, aguardando validação integrada. |
 | 1.15 | 2026-11-27 | FEAT-20 encerrada após os seis cenários da T-104 e a confirmação de `GET /health`. |
 | 1.16 | 2026-11-27 | Planejamento da FEAT-22 conforme CONTRATO v1.19, com REQ-186 a REQ-191 e T-113 a T-117. Próxima etapa T-113. |
+| 1.17 | 2026-11-27 | Pausa obrigatória antes do Momento 3 conforme ROADMAP v1.07. |
