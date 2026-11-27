@@ -248,7 +248,12 @@ describe('FEAT-20: avanço e recuperação (T-90)', () => {
         return { ...card, zoneActions: ['startEvent'] }
       if (card?.id !== wolves || card.type !== 'combatEvent') return card
       const [enemy] = card.enemies
-      return { ...card, enemies: [{ ...enemy, count: 1, health: 1 }] }
+      return {
+        ...card,
+        enemies: [{ ...enemy, count: 1, health: 1 }],
+        goodOutcome: { ...card.goodOutcome, steps: [] },
+        badOutcome: { ...card.badOutcome, steps: [] },
+      }
     })
 
     const executor = app.get(TakePartyActionUseCase)

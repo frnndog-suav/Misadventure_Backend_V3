@@ -21,4 +21,5 @@ export function removePostV6Config(config: Record<string, unknown>): void {
   }))
     delete config[key]
   delete config.enemyAbilityPriorities
+  delete config.aiPlayerPriorities
 }

@@ -37,3 +37,10 @@ cd /d/Github/Misadventure_Backend_V3 && npm run test:e2e -- src/infra/http/contr
 
 - Esperado: 11 cenários da nova suíte e as regressões passam. No replay histórico, a resposta mantém o lote original e o save mantém a jogada posterior. Ao tentar reabrir a última dimensão concluída, a API devolve `409 PARTY_FROZEN`.
 - A aplicação da migração no ambiente do backend ainda não foi verificada. A confirmação dos testes encerra a T-90. A T-91 fica para uma etapa autorizada após esse retorno.
+
+## Ajustes após a primeira execução
+
+- O autor executou 202 testes E2E. Passaram 196 e falharam seis. Os testes chegaram à execução das asserções no schema isolado com a migração nova.
+- Cinco regressões montavam saves v2 a v6 a partir da configuração atual. A fábrica compartilhada `test/factories/remove-post-v6-config.ts` agora também remove `aiPlayerPriorities` dessas fixtures. Isso preserva a validação estrita do mapper e exercita a leitura histórica com os padrões.
+- No cenário de checkpoint de combate, a carta de Lobos Uivantes tinha somente texto nos desfechos. A fixture do E2E agora declara as duas listas de passos vazias para tornar o encontro executável. O teste continua verificando a ordem do lote, a retomada e o replay após uma jogada posterior.
+- Typecheck, ESLint dos arquivos ajustados e `git diff --check` passaram. Repetir o comando E2E acima e aguardar 202 testes passando.
