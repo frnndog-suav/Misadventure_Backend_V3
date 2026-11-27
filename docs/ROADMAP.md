@@ -1,6 +1,6 @@
 # Misadventures — Roadmap de desenvolvimento
 
-> **Versão:** 1.03 · **Data:** 2026-11-27
+> **Versão:** 1.04 · **Data:** 2026-11-27
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend; o autor copia o arquivo inteiro quando ele muda. Base: README Parte III (III.2 e III.4). As regras estão em [`README.md`](README.md); o que trafega entre os lados, em [`CONTRATO.md`](CONTRATO.md).
 
@@ -217,3 +217,4 @@ Situação por lado: `a fazer` · `em andamento` · `aguardando outro lado` · `
 | 1.01 | 2026-11-27 | FEAT-21 `validado` nos dois lados após os seis cenários da T-108 (CONTRATO v1.15, devlog FE 145). |
 | 1.02 | 2026-11-27 | FEAT-22 aprovada no FE. SPEC-FRONTEND v1.12 e CONTRATO v1.16 `proposto (FE)`, aguardando revisão do backend. |
 | 1.03 | 2026-11-27 | FEAT-22 proposto (BE) no CONTRATO v1.17, aguardando revisão do FE. T-109 aguarda acordo. |
+| 1.04 | 2026-11-27 | FEAT-22 revisada no CONTRATO v1.18 após aceite da regra de Reflexão pelo FE. Elenco solo e precedência HTTP aguardam confirmação final do FE. T-109 com MSW começa após o acordo. |
