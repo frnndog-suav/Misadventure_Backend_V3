@@ -1,9 +1,9 @@
 # 110 — T-91 — Campanhas e entrega para a T-104
 
 - **Data** — 2026-11-26
-- **Situação** — campanhas preparadas, confirmação do prazo do cliente pendente
-- **Spec** — v1.13, REQ-178 a REQ-185, D-158
-- **Contrato** — v1.08, FEAT-20 acordada
+- **Situação** — T-91 concluída, validação integrada da T-104 pendente
+- **Spec** — v1.14, REQ-178 a REQ-185, D-158
+- **Contrato** — v1.09, FEAT-20 implementada no backend
 - **Horas** — a preencher pelo autor
 
 ## Ambiente e evidências
@@ -35,11 +35,10 @@
 ## Duração com cinco ajudantes
 
 - Medir o tempo HTTP até receber a resposta completa de uma ação que execute cinco vezes automáticas, confirmando a sequência persistida. Registrar URL, ação, save, semente e duração observada. Conferir também o fluxo de sessão quando o humano vier depois dos cinco ajudantes.
-- Comparar as medições com o prazo efetivo do cliente e com os limites do caminho HTTP usado na T-104. O Compose local publica a porta do backend diretamente e o bootstrap não configura prazo explícito para a execução da ação. O prazo do cliente e eventuais intermediários do ambiente de validação seguem a confirmar.
-- O contrato permanece `acordado` até confirmar que a medição cabe nos limites efetivos da T-104.
+- O frontend confirmou que `requestJson` em `src/api/http.ts` usa `fetch` sem prazo explícito para a sessão e a ação. A T-104 usa acesso direto a `http://127.0.0.1:3391`, com `VITE_USE_MOCKS=false`, sem proxy. Os máximos observados de 435 ms e 488 ms ficam dentro desse percurso sem prazo explícito de resposta.
 - Em 2026-11-27, o autor mediu no backend local `http://localhost:3391`, incluindo a leitura completa dos corpos HTTP. No save `41a7b14b-bd7d-45b7-9f9c-f22015ff5e1a`, o humano `459343e7-7cc0-4840-82c7-8e2983b230d2` ficou em sexto na ordem. A sessão levou **435 ms** e devolveu a vez humana na rodada 1, com 3 PA. O `endTurn` levou **488 ms**, devolveu 80 entradas em `combatUpdates` e, no GET posterior, o mesmo humano estava na rodada 2, com 3 PA. A criação levou 40 ms e o GET posterior 9 ms. O GET de opções, com laboratório ligado, respondeu 1–6.
-- Evidências HTTP dessa execução em `C:/Users/meu-o/AppData/Local/Temp/misadventures-t91-AMUgrr`. A coleta usou 60 s como limite próprio. O prazo do cliente e os limites do caminho HTTP planejado para a T-104 seguem pendentes. O save medido foi criado pelo fluxo normal com semente aleatória.
-- A API de preparação escuta diretamente em loopback. No Node local v26.13.1, o servidor HTTP padrão reporta `timeout: 0` para inatividade do socket, `requestTimeout: 300000` para receber a requisição, `headersTimeout: 60000` para os cabeçalhos e `keepAliveTimeout: 5000` para a conexão ociosa após a resposta. Esses valores não impõem prazo de resposta ao processamento de `endTurn`. Falta confirmar o prazo do cliente e se a T-104 usará acesso direto ou um intermediário.
+- Evidências HTTP dessa execução em `C:/Users/meu-o/AppData/Local/Temp/misadventures-t91-AMUgrr`. A coleta usou 60 s como limite próprio. O save medido foi criado pelo fluxo normal com semente aleatória.
+- A API de preparação escuta diretamente em loopback. No Node local v26.13.1, o servidor HTTP padrão reporta `timeout: 0` para inatividade do socket, `requestTimeout: 300000` para receber a requisição, `headersTimeout: 60000` para os cabeçalhos e `keepAliveTimeout: 5000` para a conexão ociosa após a resposta. Esses valores não impõem prazo de resposta ao processamento de `endTurn`.
 - O controle determinístico `6fc49f5c-8b83-41e2-bc12-08494e527b30` (semente 42) mediu 221 ms na sessão e 485 ms no `endTurn` com cinco vezes automáticas e 70 atualizações de combate. Ao fim do conjunto de verificações, `GET /lab/config` devolveu exatamente o JSON guardado antes do primeiro cenário. Evidências das execuções com semente 42 em `C:/Users/meu-o/AppData/Local/Temp/misadventures-t91-seed42-FGcqxs`.
 
 ## Cenário 6 — Prioridades
