@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 1.14 · **Data:** 2026-11-27
+> **Versão da spec:** 1.15 · **Data:** 2026-11-27
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -866,7 +866,7 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 - [x] **T-88 — Criação e projeções (REQ-178 a REQ-180, D-155).** Opções públicas, validação do POST, preparação dos membros, ordem por D20, leitura legada, projeção e autorização HTTP. Testes confirmados pelo autor (devlog 107).
 - [x] **T-89 — Configuração e política da IA (REQ-181, REQ-182, D-156).** Permutação no laboratório e no snapshot, sorteios uniformes e execução determinística da vez. O autor confirmou a regressão dos sete arquivos E2E e os dois testes unitários de oferta de recursos (devlog 108).
 - [x] **T-90 — Avanço automático e recuperação (REQ-183 a REQ-185, D-157).** Integrar os gatilhos HTTP à execução por vez e à passagem de dimensão. Persistir checkpoints e recibos completos. Cobrir interrupções, concorrência, retomada, replay histórico, virada de rodada e congelamento.
-- [x] **T-91 — Campanhas e entrega para a T-104 (REQ-178 a REQ-185, D-158).** Seis cenários preparados e verificados no backend. Duração com cinco ajudantes e percurso do cliente confirmados no devlog 110. CONTRATO v1.09 `implementado (BE)`. Registrar `validado` após o retorno da T-104.
+- [x] **T-91 — Campanhas e entrega para a T-104 (REQ-178 a REQ-185, D-158).** Seis cenários preparados e verificados no backend. Duração com cinco ajudantes e percurso do cliente confirmados no devlog 110. CONTRATO v1.09 `implementado (BE)`. T-104 aprovada contra a API real (devlog FE 136). FEAT-20 com situação `validado` no CONTRATO v1.10.
 
 #### Roteiro de entrega da T-91 para a T-104
 
@@ -1003,3 +1003,4 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 1.12 | 2026-11-26 | T-89 concluída conforme devlog 108. T-90 iniciada pelos testes de avanço e recuperação (REQ-183 a REQ-185, D-157). |
 | 1.13 | 2026-11-26 | T-90 concluída após confirmação do E2E pelo autor, conforme devlog 109. T-91 é a próxima etapa da FEAT-20. |
 | 1.14 | 2026-11-27 | T-91 concluída, seis cenários preparados e limites de tempo confirmados. Roteiro da T-104 entregue, aguardando validação integrada. |
+| 1.15 | 2026-11-27 | FEAT-20 encerrada após os seis cenários da T-104 e a confirmação de `GET /health`. |

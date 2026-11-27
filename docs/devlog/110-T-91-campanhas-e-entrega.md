@@ -1,7 +1,7 @@
 # 110 — T-91 — Campanhas e entrega para a T-104
 
 - **Data** — 2026-11-26
-- **Situação** — T-91 concluída, validação integrada da T-104 pendente
+- **Situação** — T-91 concluída, T-104 aprovada e FEAT-20 validada
 - **Spec** — v1.14, REQ-178 a REQ-185, D-158
 - **Contrato** — v1.09, FEAT-20 implementada no backend
 - **Horas** — a preencher pelo autor
@@ -89,4 +89,9 @@
 - O autor confirmou os seis cenários funcionais com a API de preparação, conforme devlog frontend 136. A instância em 3391 respondeu HTTP 200 com `contractVersion: "1.04"` em `GET /health`.
 - `src/infra/http/contract-version.ts` passou a anunciar 1.09. O E2E de REQ-01 em `src/infra/http/controllers/health/index.controller.e2e-spec.ts` passou a verificar o valor explícito da entrega.
 - O build passou. O E2E padrão foi bloqueado na inicialização pelo cache do módulo nativo do SWC no Windows. Uma verificação HTTP com Supertest e o controlador compilado retornou 200 com `{"status":"ok","contractVersion":"1.09"}`.
-- Após o reinício pelo autor, `GET http://127.0.0.1:3391/health` retornou HTTP 200 com `{"status":"ok","contractVersion":"1.09"}`. O backend aguarda o registro da resolução da divergência no frontend para fechar a FEAT-20.
+- Após o reinício pelo autor, `GET http://127.0.0.1:3391/health` retornou HTTP 200 com `{"status":"ok","contractVersion":"1.09"}`. O frontend confirmou a mesma resposta com MSW desligado e registrou a evidência no devlog FE 136.
+
+## Encerramento da FEAT-20
+
+- Os seis cenários da T-104 e a conferência de `/health` passaram contra a API real. CONTRATO v1.10, ROADMAP v0.98 e SPEC-BACKEND v1.15 registram o encerramento. A revisão documental do contrato registra a validação da entrega v1.09.
+- `git diff --check` e conferência das versões e situações. A API de preparação e o PostgreSQL podem ser parados. A FEAT-21 é o próximo item do roadmap e aguarda autorização.
