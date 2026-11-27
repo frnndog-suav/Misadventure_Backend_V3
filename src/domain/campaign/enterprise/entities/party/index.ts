@@ -50,11 +50,16 @@ import {
 import { moveRoutes } from '../../connected-zones'
 import {
   combatAttackTargets,
+  combatActiveStatuses,
   combatAbilityUsage,
   usageMatchesSlot,
   combatIsTerminal,
   combatTurnStarted,
   createCombat,
+  cycleOrder,
+  nextCombatTurn,
+  enemyWithModifiers,
+  type CombatGroupParticipant,
   enemyDefeatNotices,
   registerCombatAbility,
   resolvePlayerAbility,
@@ -168,6 +173,7 @@ import {
 import type { TPartyTurn } from '../../party-turn'
 import {
   combatStatusesAfterEnd,
+  combatStatusesAfterTurn,
   statusAfterTurn,
   statusesAfterAbility,
   type TPlayerStatus,
@@ -414,6 +420,15 @@ type CombatRecruitmentDecision = {
   | { type: 'invite'; initiatorMemberId: string; cardTitle: string }
 )
 
+type CombatOrderDecision = {
+  type: 'order'
+  id: string
+  combatId: string
+  memberId: string
+  defaultMemberIds: string[]
+  alternativeMemberOrders: string[][]
+}
+
 type CombatRecruitment = CombatRecruitmentEntry &
   (
     | {
@@ -421,7 +436,11 @@ type CombatRecruitment = CombatRecruitmentEntry &
         decision: CombatRecruitmentDecision
         answers: CombatInviteAnswer[]
       }
-    | { phase: 'confirmed'; participantMemberIds: string[] }
+    | {
+        phase: 'confirmed'
+        participantMemberIds: string[]
+        decision?: CombatOrderDecision
+      }
   )
 
 type CombatInviteAnswer = { memberId: string; accept: boolean }
@@ -436,6 +455,7 @@ type CombatRecruitmentRefusal =
   | 'combatDecisionExpired'
   | 'combatDecisionNotOwned'
   | 'combatRecruitmentClosed'
+  | 'combatOrderInvalid'
 
 type CombatEntryMode = 'recruit' | 'solo'
 
@@ -471,6 +491,12 @@ export type TCombatResult = {
   cause: 'enemiesDefeated' | 'playerDown' | 'escapeSucceeded' | 'cycleLimit'
   playerDown: boolean
   peakDelta: number
+  participants?: readonly (CombatGroupParticipant & {
+    goldGranted: number
+    rewardIds: string[]
+    respawned: boolean
+    skipsNextTurn: boolean
+  })[]
 }
 
 type OutcomeCursor = { nextStep: number; nextCopy?: number }
@@ -805,17 +831,18 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return this.describeCombat(this.eventCatalog)
   }
 
-  get pendingCombatDecision(): CombatRecruitmentDecision | null {
+  get pendingCombatDecision():
+    CombatRecruitmentDecision | CombatOrderDecision | null {
     const recruitment = this.props.combatRecruitment
-    return recruitment?.phase === 'recruiting' ? recruitment.decision : null
+    return recruitment?.decision ?? null
   }
 
   combatEffectChoices(cards: ReadonlyMap<string, TCard>) {
     const combat = this.props.combat
     if (!combat) return []
     return this.combatEffectOptions(
-      combat,
-      this.props.members[this.actorIndex()].player,
+      this.focusCombat(combat, this.combatActorIndex(combat)),
+      this.props.members[this.combatActorIndex(combat)].player,
       cards
     )
   }
@@ -850,9 +877,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   }
 
   describeCombat(cards: ReadonlyMap<string, TCard>) {
-    const state = this.props.combat
-    if (!state) return null
-    const player = this.props.members[this.actorIndex()].player
+    const battle = this.props.combat
+    if (!battle) return null
+    const index = this.combatActorIndex(battle)
+    const state = this.focusCombat(battle, index)
+    const player = this.props.members[index].player
     return {
       id: state.id,
       card: state.card,
@@ -860,7 +889,20 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       ...(this.questAttempt?.encounterId === state.id && {
         cardId: state.card.id,
       }),
-      memberId: state.memberId,
+      memberId: battle.memberId,
+      ...(state.group && {
+        participants: state.group.participants.map(
+          ({ memberId, condition }) => {
+            const member = this.props.members[this.combatMemberIndex(memberId)]
+            return {
+              memberId,
+              condition,
+              health: member.player.health,
+              maxHealth: member.maxHealth,
+            }
+          }
+        ),
+      }),
       cycle: state.cycle,
       maxCycles: state.maxCycles,
       order: state.order,
@@ -986,8 +1028,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const state = this.props.combat
     if (!state) return null
     return this.combatPlayer(
-      this.props.members[this.actorIndex()].player,
-      cards
+      this.props.members[this.combatActorIndex(state)].player,
+      cards,
+      undefined,
+      false,
+      this.focusCombat(state, this.combatActorIndex(state))
     ).modifiers
   }
 
@@ -1011,10 +1056,14 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       const card = this.abilityCard(player, equipmentSlot, cards)
       if (!card) return []
       return card.abilities.flatMap((ability) => {
+        const allies =
+          state && ability.id !== undefined && ability.target === 'ally'
+            ? this.combatAllyTargets(state, ability.effects)
+            : []
         if (
           ability.id === undefined ||
           ability.form === 'passive' ||
-          ability.target === 'ally' ||
+          (ability.target === 'ally' && allies.length === 0) ||
           !equippedAbility(
             player,
             cards,
@@ -1054,7 +1103,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             targetIds:
               ability.target === 'opponent' || ability.target === 'allOpponents'
                 ? enemies
-                : [],
+                : ability.target === 'ally'
+                  ? allies
+                  : [],
           },
         ]
       })
@@ -1147,16 +1198,30 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             kind === 'swapCombatOrder' ||
             kind === 'elementVulnerability'
         )
+        const revives = effect.activation.some(
+          ({ kind }) => kind === 'reviveAlly'
+        )
+        const swaps = effect.activation.some(
+          ({ kind }) => kind === 'swapCombatOrder'
+        )
+        const allies =
+          revives || swaps ? this.combatAllyTargets(state, [effect]) : []
+        if (revives && allies.length === 0) return []
         return [
           {
             ...payment,
             effect,
             text: effect.text,
-            targetIds: targetsEnemy
-              ? state.enemies
-                  .filter(({ health }) => health > 0)
-                  .map(({ id }) => id)
-              : [],
+            targetIds: revives
+              ? allies
+              : targetsEnemy
+                ? [
+                    ...state.enemies
+                      .filter(({ health }) => health > 0)
+                      .map(({ id }) => id),
+                    ...allies,
+                  ]
+                : [],
             effectId: JSON.stringify([
               state.turn.id,
               equipmentSlot,
@@ -2224,11 +2289,16 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   combatActions(state = this.combat): TCombatAction['type'][] {
     if (
       !state ||
-      state.turn.actorId !== state.memberId ||
-      combatIsTerminal(
-        state,
-        this.props.members[this.actorIndex()].player.health
-      )
+      (state.participants
+        ? !state.participants.some(
+            ({ memberId, condition }) =>
+              memberId === state.turn.actorId && condition === 'standing'
+          )
+        : state.turn.actorId !== state.memberId ||
+          combatIsTerminal(
+            state,
+            this.props.members[this.actorIndex()].player.health
+          ))
     )
       return []
     const actions: TCombatAction['type'][] = []
@@ -2436,11 +2506,14 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     cards: ReadonlyMap<string, TCard>,
     at: Date
   ): Either<TCombatRefusal, void> {
-    const state = this.props.combat
-    if (!state || state.id !== action.combatId) return left('staleCombat')
-    if (state.turn.id !== action.turnId) return left('staleCombatTurn')
+    const battle = this.props.combat
+    if (!battle || battle.id !== action.combatId) return left('staleCombat')
+    if (battle.turn.id !== action.turnId) return left('staleCombatTurn')
     if (this.triggeredEffectChoice) return left('choicePending')
-    const index = this.actorIndex()
+    const index = this.combatActorIndex(battle)
+    const state = this.focusCombat(battle, index)
+    if (battle.group && state.turn.actorId !== state.memberId)
+      return left('wrongCombatPhase')
     const player = this.props.members[index].player
     if (player.health === 0) return left('playerDown')
     if (
@@ -2476,16 +2549,16 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       )
       const battle = reaction.battle ?? state
       this.props.rngState = reaction.rngState
+      this.props.savedAt = at
       this.eventCatalog = cards
       const pending = this.props.pendingTriggeredEffects
       if (pending) {
         pending.continuation = { type: 'combatEscape' }
-        this.props.combat = battle
+        this.props.combat = this.storeCombatFocus(battle, index)
         this.replaceActor(index, reaction.player)
       } else {
         this.resolveCombatEscape(battle, index, reaction.player, cards)
       }
-      this.props.savedAt = at
       return right(undefined)
     }
     if (!this.combatActions().includes(action.type))
@@ -2498,8 +2571,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     )
       return left('combatTargetUnavailable')
 
-    this.finishCombatTurn(state, index, player, cards, targetId)
     this.props.savedAt = at
+    this.finishCombatTurn(state, index, player, cards, targetId)
     return right(undefined)
   }
 
@@ -2510,7 +2583,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     cards: ReadonlyMap<string, TCard>,
     targetId?: string,
     resume = false,
-    failedEscape = false
+    failedEscape = false,
+    advanceEnemies = true
   ) {
     const resolved = resolveCombatTurn(
       state,
@@ -2519,24 +2593,60 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       SeededRng.fromState(this.rngState),
       targetId,
       resume,
-      failedEscape
+      failedEscape,
+      state.group && {
+        fighters: () =>
+          this.standingCombatMembers(state).map(
+            ({ memberId, index, player }) => ({
+              memberId,
+              fighter: this.combatPlayer(
+                player,
+                cards,
+                undefined,
+                false,
+                this.focusCombat(state, index)
+              ),
+            })
+          ),
+        commit: (memberId, fighter) => {
+          const index = this.combatMemberIndex(memberId)
+          this.replaceActor(index, {
+            ...(fighter.snapshot ?? this.props.members[index].player),
+            health: fighter.health,
+            statuses: fighter.statuses ?? [],
+            brokenEquipment: fighter.brokenEquipment,
+          })
+        },
+      }
     )
     const pending = this.props.pendingTriggeredEffects
     if (pending) pending.continuation = { type: 'combatTurn' }
     this.props.rngState = resolved.rngState
     this.eventCatalog = cards
-    this.settleCombat(
-      index,
-      resolved.state,
-      {
-        ...(resolved.snapshot ?? player),
-        health: resolved.health,
-        statuses: resolved.statuses,
-        brokenEquipment: resolved.brokenEquipment,
-      },
-      cards,
-      { playerDownBeforeLastEnemy: resolved.playerDownBeforeLastEnemy }
-    )
+    const changed = {
+      ...(resolved.snapshot ?? player),
+      health: resolved.health,
+      statuses: resolved.statuses,
+      brokenEquipment: resolved.brokenEquipment,
+    }
+    if (state.group) {
+      const battle = this.recordGroupAttacker(
+        resolved.state,
+        targetId ? [targetId] : []
+      )
+      this.settleGroupStep(
+        index,
+        battle,
+        changed,
+        cards,
+        resolved.turnCompleted
+      )
+      if (advanceEnemies) this.advanceGroupEnemies(cards)
+      return
+    }
+    this.settleCombat(index, resolved.state, changed, cards, {
+      playerDownBeforeLastEnemy: resolved.playerDownBeforeLastEnemy,
+    })
   }
 
   private settleCombat(
@@ -2546,6 +2656,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     cards: ReadonlyMap<string, TCard>,
     { escaped = false, playerDownBeforeLastEnemy = false } = {}
   ) {
+    if (state.group) {
+      this.settleGroupStep(index, state, player, cards, escaped, escaped)
+      this.advanceGroupEnemies(cards)
+      return
+    }
     const won =
       !playerDownBeforeLastEnemy &&
       state.enemies.every(({ health }) => health === 0)
@@ -2731,11 +2846,16 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         : ability.target === 'allOpponents'
           ? living
           : []
+    const allyTarget =
+      ability.target === 'ally' &&
+      action.targetId !== undefined &&
+      this.combatAllyTargets(state, ability.effects).includes(action.targetId)
     if (
-      ability.target === 'ally' ||
-      (ability.target === 'opponent'
-        ? targets.length === 0
-        : action.targetId !== undefined)
+      ability.target === 'ally'
+        ? !allyTarget
+        : ability.target === 'opponent'
+          ? targets.length === 0
+          : action.targetId !== undefined
     )
       return left('combatTargetUnavailable')
     const paid = payAbility(
@@ -2791,7 +2911,34 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       changed = active.player
       rng = SeededRng.fromState(active.rngState)
       const effects = active.effects
-      if (ability.target === 'self') {
+      if (allyTarget) {
+        const memberId = action.targetId!
+        const allyIndex = this.combatMemberIndex(memberId)
+        const ally = this.props.members[allyIndex].player
+        this.replaceActor(
+          allyIndex,
+          effects.reduce(
+            (current, effect, effectIndex) =>
+              applyAbilityEffect(
+                current,
+                abilityEffectDuration(ability, effect),
+                card.id,
+                [
+                  state.turn.id,
+                  slot,
+                  ability.id,
+                  usage?.uses ?? 0,
+                  effectIndex,
+                ].join(':'),
+                capacitiesOf(this.config, current.expansions).purse,
+                effectIndex,
+                this.limboSink
+              ),
+            ally
+          )
+        )
+        combat = this.applyCombatAllyEffects(combat, memberId, effects)
+      } else if (ability.target === 'self') {
         changed = effects.reduce(
           (current, effect, effectIndex) =>
             applyAbilityEffect(
@@ -2862,7 +3009,15 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     combat = reactions.battle ?? combat
     this.eventCatalog = cards
     this.props.rngState = reactions.rngState
-    this.settleCombat(index, combat, changed, cards)
+    this.settleCombat(
+      index,
+      this.recordGroupAttacker(
+        combat,
+        targets.map(({ id }) => id)
+      ),
+      changed,
+      cards
+    )
     this.props.savedAt = at
     return right(undefined)
   }
@@ -2904,7 +3059,12 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     const target = state.enemies.find(
       ({ id, health }) => id === action.targetId && health > 0
     )
-    if (option.targetIds.length ? !target : action.targetId !== undefined)
+    if (
+      option.targetIds.length
+        ? action.targetId === undefined ||
+          !option.targetIds.includes(action.targetId)
+        : action.targetId !== undefined
+    )
       return left('combatTargetUnavailable')
     const { origin, effect } = option
     const paid = payAbility(
@@ -2955,7 +3115,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
             this.limboSink
           ),
         }
-    const combat = this.applyCombatTurnEffects(resolved.state, [effect])
+    const battle =
+      action.targetId && !target
+        ? this.applyCombatAllyEffects(resolved.state, action.targetId, [effect])
+        : resolved.state
+    const combat = this.applyCombatTurnEffects(battle, [effect])
     const reactions = this.resolveCombatReactions(
       'player' in resolved
         ? resolved.player
@@ -2965,7 +3129,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       combat,
       enemyDefeatNotices(state, resolved.state)
     )
-    const finalCombat = reactions.battle ?? combat
+    const finalCombat = this.recordGroupAttacker(
+      reactions.battle ?? combat,
+      target ? [target.id] : []
+    )
     this.props.rngState = reactions.rngState
     this.settleCombat(index, finalCombat, reactions.player, cards)
     this.props.savedAt = at
@@ -3447,8 +3614,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       return left('staleTriggeredEffectChoice')
     if (this.turn.memberId.toString() !== pending.choice.memberId)
       return left('choicePending')
-    const index = this.actorIndex()
     let battle = this.props.combat ?? undefined
+    const index = battle ? this.combatActorIndex(battle) : this.actorIndex()
+    if (battle) battle = this.focusCombat(battle, index)
     const { continuation } = pending
     let player = this.props.members[index].player
     let rngState = this.rngState
@@ -3521,7 +3689,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     }
     this.props.rngState = changed.rngState
     battle = changed.battle
-    if (battle) this.props.combat = battle
+    if (battle) this.props.combat = this.storeCombatFocus(battle, index)
     this.eventCatalog = cards
     this.replaceActor(index, changed.player)
     if (!this.triggeredEffectChoice) {
@@ -3537,7 +3705,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           continuation.finalBoss
         )
       } else if (battle) {
-        if (continuation?.type === 'combatTurn') {
+        if (battle.group?.areaReactions) {
+          this.settleGroupStep(index, battle, changed.player, cards, false)
+          this.advanceGroupEnemies(cards)
+        } else if (continuation?.type === 'combatTurn') {
           this.finishCombatTurn(
             battle,
             index,
@@ -4369,8 +4540,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.openCombatInvite(recruitment, candidate.id.toString())
       return this.resolveAiCombatInvite(recruitment, candidate)
     })
-    this.finishCombatRecruitment(recruitment, answers, cards)
     this.props.savedAt = at
+    this.finishCombatRecruitment(recruitment, answers, cards)
     return right(undefined)
   }
 
@@ -4391,12 +4562,12 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     if (validated.isLeft()) return left(validated.value)
     const recruitment = validated.value
     const answer = this.answerCombatInvite(recruitment, memberId, accept)
+    this.props.savedAt = at
     this.finishCombatRecruitment(
       recruitment,
       [...recruitment.answers, answer],
       cards
     )
-    this.props.savedAt = at
     return right(undefined)
   }
 
@@ -4433,6 +4604,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         ...(finalBoss && { finalBoss }),
         participantMemberIds,
       }
+      this.prepareGroupCombat(cards)
       return
     }
     this.props.combatRecruitment = undefined
@@ -4447,6 +4619,627 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.props.rngState,
       finalBoss
     )
+  }
+
+  private recordGroupAttacker(state: TCombatState, targets: readonly string[]) {
+    if (!state.group || !targets.length) return state
+    return {
+      ...state,
+      group: {
+        ...state.group,
+        lastAttacker: {
+          ...state.group.lastAttacker,
+          ...Object.fromEntries(targets.map((id) => [id, state.memberId])),
+        },
+      },
+    }
+  }
+
+  private combatAllyTargets(state: TCombatState, effects: readonly TEffect[]) {
+    const activation = effects.flatMap((effect) => effect.activation)
+    const condition = activation.some(({ kind }) => kind === 'reviveAlly')
+      ? 'knockedOut'
+      : 'standing'
+    const swaps = activation.some(({ kind }) => kind === 'swapCombatOrder')
+    return (
+      state.group?.participants
+        .filter(
+          ({ condition: status, memberId }) =>
+            status === condition &&
+            memberId !== state.memberId &&
+            (!swaps || state.order.includes(memberId))
+        )
+        .map(({ memberId }) => memberId) ?? []
+    )
+  }
+
+  private applyCombatAllyEffects(
+    state: TCombatState,
+    memberId: string,
+    effects: readonly TEffect[]
+  ) {
+    const activation = effects.flatMap((effect) => effect.activation)
+    const effect = activation.find(({ kind }) => kind === 'reviveAlly')
+    const group = state.group
+    if (!group) return state
+    if (effect?.kind !== 'reviveAlly') {
+      if (!activation.some(({ kind }) => kind === 'swapCombatOrder'))
+        return state
+      const order = state.order.map((id) =>
+        id === state.memberId ? memberId : id === memberId ? state.memberId : id
+      )
+      return { ...state, order }
+    }
+    const index = this.combatMemberIndex(memberId)
+    const member = this.props.members[index]
+    this.replaceActor(index, {
+      ...member.player,
+      down: false,
+      health: Math.max(
+        1,
+        Math.floor((member.maxHealth * effect.healthPercent) / 100)
+      ),
+    })
+    this.recordCombatUpdates({
+      type: 'combatParticipantRevived',
+      combatId: state.id,
+      memberId,
+    })
+    return {
+      ...state,
+      group: {
+        ...group,
+        participants: group.participants.map((entry) =>
+          entry.memberId === memberId
+            ? { ...entry, condition: 'standing' as const, revived: true }
+            : entry
+        ),
+      },
+    }
+  }
+
+  private combatMemberIndex(memberId: string) {
+    return this.props.members.findIndex(({ id }) => id.toString() === memberId)
+  }
+
+  private combatActorIndex(state: TCombatState) {
+    if (!state.group) return this.actorIndex()
+    const index = this.combatMemberIndex(
+      state.group.reactionMemberId ?? state.turn.actorId
+    )
+    return index >= 0 ? index : this.combatMemberIndex(state.memberId)
+  }
+
+  private focusCombat(state: TCombatState, index: number) {
+    return state.group
+      ? { ...state, memberId: this.props.members[index].id.toString() }
+      : state
+  }
+
+  private storeCombatFocus(state: TCombatState, index: number) {
+    if (!state.group) return state
+    return {
+      ...state,
+      memberId: this.props.combat?.memberId ?? this.turn.memberId.toString(),
+      group: {
+        ...state.group,
+        reactionMemberId: this.triggeredEffectChoice
+          ? this.props.members[index].id.toString()
+          : undefined,
+      },
+    }
+  }
+
+  private groupPriority(participantIds: readonly string[]) {
+    return this.turnOrder
+      .map((id) => id.toString())
+      .filter((id) => participantIds.includes(id))
+  }
+
+  prepareGroupCombat(cards: ReadonlyMap<string, TCard>) {
+    const entry = this.props.combatRecruitment
+    if (entry?.phase !== 'confirmed' || entry.decision) return
+    const priority = this.groupPriority(entry.participantMemberIds)
+    const humanId = priority.find(
+      (id) => this.props.members[this.combatMemberIndex(id)].kind === 'human'
+    )
+    if (humanId) {
+      const alternative = [humanId, ...priority.filter((id) => id !== humanId)]
+      const state = this.createGroupCombat(entry, priority, cards)
+      const initiative = this.groupInitiative(state, cards)
+      const celerity = initiative.find(({ id }) => id === humanId)!.celerity
+      const changesTie = initiative.some(
+        ({ id, side, celerity: speed }) =>
+          side === 'player' &&
+          speed === celerity &&
+          priority.indexOf(id) < priority.indexOf(humanId)
+      )
+      if (changesTie) {
+        this.props.combatRecruitment = {
+          ...entry,
+          decision: {
+            type: 'order',
+            id: entry.combatId + ':order',
+            combatId: entry.combatId,
+            memberId: humanId,
+            defaultMemberIds: priority,
+            alternativeMemberOrders: [alternative],
+          },
+        }
+        return
+      }
+    }
+    this.startGroupCombat(entry, priority, cards)
+  }
+
+  confirmCombatOrder(
+    memberId: string,
+    combatId: string,
+    decisionId: string,
+    memberIds: readonly string[],
+    cards: ReadonlyMap<string, TCard>,
+    at: Date
+  ): Either<CombatRecruitmentRefusal, void> {
+    const entry = this.props.combatRecruitment
+    if (entry?.phase !== 'confirmed') return left('combatDecisionExpired')
+    const decision = entry.decision
+    if (
+      !decision ||
+      decision.id !== decisionId ||
+      decision.combatId !== combatId
+    )
+      return left('combatDecisionExpired')
+    if (decision.memberId !== memberId) return left('combatDecisionNotOwned')
+    const priority = [
+      decision.defaultMemberIds,
+      ...decision.alternativeMemberOrders,
+    ].find(
+      (order) =>
+        order.length === memberIds.length &&
+        order.every((id, index) => id === memberIds[index])
+    )
+    if (!priority) return left('combatOrderInvalid')
+    this.props.savedAt = at
+    this.startGroupCombat(entry, priority, cards)
+    return right(undefined)
+  }
+
+  private createGroupCombat(
+    entry: Extract<CombatRecruitment, { phase: 'confirmed' }>,
+    priority: readonly string[],
+    cards: ReadonlyMap<string, TCard>
+  ): TCombatState {
+    const player =
+      this.props.members[this.combatMemberIndex(entry.initiatorMemberId)].player
+    return {
+      ...createCombat(
+        entry.combatId,
+        entry.card,
+        entry.initiatorMemberId,
+        this.combatPlayer(player, cards),
+        this.config
+      ),
+      ...(entry.finalBoss && { finalBoss: true }),
+      group: {
+        priority,
+        participants: entry.participantMemberIds.map((memberId) => ({
+          memberId,
+          condition: 'standing',
+          knockedOut: false,
+          revived: false,
+          peakDelta: 0,
+          vigorDelta: 0,
+        })),
+        lastAttacker: {},
+      },
+    }
+  }
+
+  private groupInitiative(
+    state: TCombatState,
+    cards: ReadonlyMap<string, TCard>
+  ) {
+    const { priority, participants } = state.group!
+    return [
+      ...priority.map((id) => {
+        const index = this.combatMemberIndex(id)
+        const player = this.props.members[index].player
+        return {
+          id,
+          side: 'player' as const,
+          health:
+            participants.find(({ memberId }) => memberId === id)?.condition ===
+            'standing'
+              ? player.health
+              : 0,
+          celerity: this.combatPlayer(
+            player,
+            cards,
+            undefined,
+            false,
+            this.focusCombat(state, index)
+          ).modifiers.celerity,
+        }
+      }),
+      ...state.enemies.map((enemy) => ({
+        id: enemy.id,
+        side: 'enemy' as const,
+        health: enemy.health,
+        celerity: enemy.effectiveModifiers.celerity,
+      })),
+    ]
+  }
+
+  private startGroupCombat(
+    entry: Extract<CombatRecruitment, { phase: 'confirmed' }>,
+    priority: readonly string[],
+    cards: ReadonlyMap<string, TCard>
+  ) {
+    const state = this.createGroupCombat(entry, priority, cards)
+    const order = cycleOrder(this.groupInitiative(state, cards))
+    const active = {
+      ...state,
+      order,
+      turn: { ...state.turn, actorId: order[0] },
+    }
+    this.props.combatRecruitment = undefined
+    this.props.combat = active
+    this.eventCatalog = cards
+    this.recordCombatUpdates(
+      {
+        type: 'combatStarted',
+        combatId: active.id,
+        cardId: active.card.id,
+        cardTitle: active.card.title,
+        participants: [
+          ...entry.participantMemberIds.map((id) => ({
+            type: 'player' as const,
+            id,
+            name: this.props.members[this.combatMemberIndex(id)].characterName,
+          })),
+          ...active.enemies.map(({ id, blockIndex, copyIndex }) => ({
+            type: 'enemy' as const,
+            id,
+            name: active.card.enemies[blockIndex].name,
+            blockIndex,
+            copyIndex,
+          })),
+        ],
+      },
+      combatTurnStarted(active)
+    )
+    this.advanceGroupEnemies(cards)
+  }
+
+  private standingCombatMembers(state: TCombatState) {
+    return this.groupPriority(state.group!.priority).flatMap((memberId) => {
+      if (
+        !state.group!.participants.some(
+          (entry) =>
+            entry.memberId === memberId && entry.condition === 'standing'
+        )
+      )
+        return []
+      const index = this.combatMemberIndex(memberId)
+      return [{ memberId, index, player: this.props.members[index].player }]
+    })
+  }
+
+  private resolveGroupAreaReaction(
+    state: TCombatState,
+    cards: ReadonlyMap<string, TCard>
+  ) {
+    const [reaction, ...rest] = state.group!.areaReactions!
+    if (!reaction) {
+      const active = {
+        ...state,
+        group: { ...state.group!, areaReactions: undefined },
+      }
+      this.props.combat = active
+      this.finishGroupIfTerminal(active, cards)
+      return
+    }
+    const index = this.combatMemberIndex(reaction.memberId)
+    const player = this.props.members[index].player
+    const focused = this.focusCombat(
+      { ...state, group: { ...state.group!, areaReactions: rest } },
+      index
+    )
+    const changed = this.resolveCombatReactions(
+      player,
+      cards,
+      this.rngState,
+      focused,
+      reaction.notices
+    )
+    this.props.rngState = changed.rngState
+    this.settleGroupStep(
+      index,
+      changed.battle ?? focused,
+      changed.player,
+      cards,
+      false
+    )
+  }
+
+  private advanceGroupEnemies(cards: ReadonlyMap<string, TCard>) {
+    while (!this.triggeredEffectChoice) {
+      const state = this.props.combat
+      if (!state?.group) return
+      if (state.group.areaReactions) {
+        this.resolveGroupAreaReaction(state, cards)
+        continue
+      }
+      const enemy = state.enemies.find(({ id }) => id === state.turn.actorId)
+      if (!enemy) return
+      const behavior = state.card.enemies[enemy.blockIndex].behavior
+      const candidates = this.standingCombatMembers(state).map((entry) => ({
+        ...entry,
+        defense: this.combatPlayer(
+          entry.player,
+          cards,
+          undefined,
+          false,
+          this.focusCombat(state, entry.index)
+        ).modifiers.defense,
+      }))
+      const preferred =
+        behavior === 'defensive'
+          ? candidates.find(
+              ({ memberId }) => memberId === state.group!.lastAttacker[enemy.id]
+            )
+          : undefined
+      const target =
+        preferred ??
+        candidates.sort((a, b) =>
+          behavior === 'hunter'
+            ? a.player.health - b.player.health
+            : a.defense - b.defense
+        )[0]
+      if (!target) return
+      this.finishCombatTurn(
+        this.focusCombat(state, target.index),
+        target.index,
+        target.player,
+        cards,
+        undefined,
+        false,
+        false,
+        false
+      )
+    }
+  }
+
+  private settleGroupStep(
+    index: number,
+    state: TCombatState,
+    player: TPlayerState,
+    cards: ReadonlyMap<string, TCard>,
+    turnCompleted: boolean,
+    escaped = false
+  ) {
+    state = this.storeCombatFocus(state, index)
+    const memberId = this.props.members[index].id.toString()
+    this.replaceActor(index, player)
+    if (escaped) state = this.markGroupEscape(state, memberId)
+    const participants = state.group!.participants.map(
+      (entry): CombatGroupParticipant => {
+        if (entry.condition !== 'standing') return entry
+        const memberIndex = this.combatMemberIndex(entry.memberId)
+        const current = this.props.members[memberIndex].player
+        if (current.health > 0) return entry
+        this.replaceActor(memberIndex, { ...current, down: true })
+        this.recordCombatUpdates({
+          type: 'combatParticipantKnockedOut',
+          combatId: state.id,
+          memberId: entry.memberId,
+        })
+        return { ...entry, condition: 'knockedOut', knockedOut: true }
+      }
+    )
+    state = { ...state, group: { ...state.group!, participants } }
+    if (player.health === 0)
+      turnCompleted ||=
+        memberId === state.turn.actorId || state.turn.attacksRemaining === 0
+    this.props.combat = state
+    if (this.triggeredEffectChoice || state.group?.areaReactions) return
+    if (this.finishGroupIfTerminal(state, cards)) return
+    if (!turnCompleted) return
+    const next = this.advanceGroupTurn(state, cards)
+    this.props.combat = next
+    if (!this.finishGroupIfTerminal(next, cards))
+      this.recordCombatUpdates(combatTurnStarted(next))
+  }
+
+  private tickGroupCombat(state: TCombatState, cycle: boolean) {
+    const actorId = state.turn.actorId
+    for (const { memberId, condition } of state.group!.participants) {
+      if (condition === 'escaped' || (!cycle && memberId !== actorId)) continue
+      const index = this.combatMemberIndex(memberId)
+      const player = this.props.members[index].player
+      this.replaceActor(index, {
+        ...player,
+        statuses: combatStatusesAfterTurn(player.statuses, !cycle, cycle),
+      })
+    }
+    return {
+      ...state,
+      enemies: state.enemies.map((enemy) =>
+        cycle || enemy.id === actorId
+          ? enemyWithModifiers(
+              state,
+              {
+                ...enemy,
+                statuses: combatStatusesAfterTurn(
+                  enemy.statuses,
+                  !cycle,
+                  cycle
+                ),
+              },
+              this.config
+            )
+          : enemy
+      ),
+    }
+  }
+
+  private advanceGroupTurn(
+    state: TCombatState,
+    cards: ReadonlyMap<string, TCard>
+  ) {
+    const ticked = this.tickGroupCombat(state, false)
+    const next = nextCombatTurn(ticked, this.groupInitiative(ticked, cards))
+    if (next.cycle === state.cycle) return next
+    const cycle = this.tickGroupCombat(ticked, true)
+    const expiring = { ...cycle, cycle: next.cycle }
+    for (const { memberId, condition } of state.group!.participants) {
+      if (condition === 'escaped') continue
+      const index = this.combatMemberIndex(memberId)
+      const player = this.props.members[index].player
+      this.replaceActor(index, {
+        ...player,
+        statuses: combatActiveStatuses(expiring, memberId, player.statuses),
+      })
+    }
+    const refreshed = {
+      ...cycle,
+      enemies: cycle.enemies.map((enemy) =>
+        enemyWithModifiers(
+          expiring,
+          {
+            ...enemy,
+            statuses: combatActiveStatuses(expiring, enemy.id, enemy.statuses),
+          },
+          this.config
+        )
+      ),
+    }
+    return nextCombatTurn(refreshed, this.groupInitiative(refreshed, cards))
+  }
+
+  private markGroupEscape(state: TCombatState, memberId: string) {
+    const index = this.combatMemberIndex(memberId)
+    const player = this.props.members[index].player
+    const peak = Math.max(0, player.peak - this.config.combatEscapePeakLoss)
+    const vigor = Math.min(peak, player.vigor)
+    this.replaceActor(index, {
+      ...player,
+      peak,
+      vigor,
+      health: Math.min(player.health, maxHealthOf({ ...player, peak })),
+    })
+    const group = state.group!
+    return {
+      ...state,
+      group: {
+        ...group,
+        participants: group.participants.map((entry) =>
+          entry.memberId === memberId
+            ? {
+                ...entry,
+                condition: 'escaped' as const,
+                peakDelta: peak - player.peak,
+                vigorDelta: entry.vigorDelta + vigor - player.vigor,
+              }
+            : entry
+        ),
+      },
+    }
+  }
+
+  private finishGroupIfTerminal(
+    state: TCombatState,
+    cards: ReadonlyMap<string, TCard>
+  ) {
+    const won = state.enemies.every(({ health }) => health === 0)
+    const limited = state.cycle > state.maxCycles
+    if (!won && limited) {
+      for (const { memberId, condition } of state.group!.participants) {
+        if (condition === 'standing')
+          state = this.markGroupEscape(state, memberId)
+      }
+    }
+    const participants = state.group!.participants
+    if (!won && participants.some(({ condition }) => condition === 'standing'))
+      return false
+    const defeated =
+      !won && participants.some(({ condition }) => condition === 'knockedOut')
+    const zoneType = this.props.combatZone
+    this.props.combat = null
+    this.props.combatZone = undefined
+    const results = participants.map((entry) => {
+      const { memberId, condition } = entry
+      const index = this.combatMemberIndex(memberId)
+      const before = this.props.members[index].player
+      let player: TPlayerState = {
+        ...before,
+        abilityUsage: undefined,
+        statuses: combatStatusesAfterEnd(before.statuses, won),
+      }
+      if (defeated && condition === 'knockedOut' && zoneType !== undefined) {
+        player = this.resolveOutcomeSteps(
+          player,
+          state.card.badOutcome.steps ?? [],
+          { nextStep: 0 },
+          zoneType,
+          state.card.id,
+          state.id,
+          'setback',
+          { type: 'combatEvent', combatId: state.id },
+          cards
+        ).player
+        player = { ...player, health: 0, down: true }
+      }
+      player = this.recordQuestOutcome(
+        player,
+        state.id,
+        won,
+        won && condition === 'standing' ? 'combatVictories' : null,
+        cards
+      )
+      this.replaceActor(index, player)
+      if (condition === 'knockedOut')
+        this.respawn(index, this.savedAt, cards, state.id, undefined, false)
+      const after = this.props.members[index].player
+      return {
+        ...entry,
+        peakDelta: entry.peakDelta + after.peak - before.peak,
+        vigorDelta: entry.vigorDelta + after.vigor - before.vigor,
+        goldGranted: 0,
+        rewardIds: [],
+        respawned: condition === 'knockedOut',
+        skipsNextTurn:
+          condition === 'knockedOut' && after.skipNextTurn === true,
+      }
+    })
+    const initiator = results.find(
+      ({ memberId }) => memberId === state.memberId
+    )!
+    this.props.lastCombatResult = {
+      combatId: state.id,
+      cardId: state.card.id,
+      memberId: state.memberId,
+      ...(state.finalBoss && { finalBoss: true }),
+      resolution: won ? 'victory' : defeated ? 'defeat' : 'escaped',
+      cause: won
+        ? 'enemiesDefeated'
+        : limited
+          ? 'cycleLimit'
+          : defeated
+            ? 'playerDown'
+            : 'escapeSucceeded',
+      playerDown: initiator.condition === 'knockedOut',
+      peakDelta: initiator.peakDelta,
+      participants: results,
+    }
+    if (zoneType !== undefined)
+      this.releaseEventCard(state.id, zoneType, state.card.id)
+    this.recordCombatUpdates({
+      type: 'combatEnded',
+      combatId: state.id,
+      result: this.lastCombatResult!,
+    })
+    return true
   }
 
   private startCombat(
@@ -4606,6 +5399,19 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     })
     this.props.rngState = rng.state()
     const paid = { ...player, vigor: player.vigor - escape.vigorCost }
+    if (state.group && receipt.succeeded) {
+      state = {
+        ...state,
+        group: {
+          ...state.group,
+          participants: state.group.participants.map((entry) =>
+            entry.memberId === state.memberId
+              ? { ...entry, vigorDelta: entry.vigorDelta - escape.vigorCost }
+              : entry
+          ),
+        },
+      }
+    }
     if (receipt.succeeded)
       this.settleCombat(index, state, paid, cards, { escaped: true })
     else
@@ -5656,6 +6462,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   endSession(at: Date): Either<'sessionNotActive' | 'combatInProgress', void> {
     if (
       this.props.combat ||
+      this.props.combatRecruitment ||
       this.props.pendingTriggeredEffects?.continuation?.type === 'combatEntry'
     )
       return left('combatInProgress')
@@ -5856,7 +6663,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     at: Date,
     cards: ReadonlyMap<string, TCard>,
     combatId: string | null,
-    ids?: IdGenerator
+    ids?: IdGenerator,
+    advanceTurn = true
   ): void {
     let player = this.props.members[index].player
     const config = this.config
@@ -5932,8 +6740,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       health,
       gold: player.gold - purseGoldLost,
     })
-    this.advancePlayableTurn(at)
-    if (solo)
+    if (advanceTurn) this.advancePlayableTurn(at)
+    if (solo && advanceTurn)
       for (let round = 0; round < config.soloKnockoutWaitRounds; round++)
         this.advancePlayableTurn(at)
     const member = this.props.members[index]

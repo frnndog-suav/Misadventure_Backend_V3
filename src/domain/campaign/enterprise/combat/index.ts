@@ -51,7 +51,7 @@ type Participant = {
   health: number
 }
 
-function cycleOrder(participants: readonly Participant[]): string[] {
+export function cycleOrder(participants: readonly Participant[]): string[] {
   return participants
     .filter(({ health }) => health > 0)
     .sort(
@@ -247,6 +247,16 @@ type CombatEnemy = {
 
 export type TCombatState = {
   finalBoss?: boolean
+  group?: {
+    priority: readonly string[]
+    participants: readonly CombatGroupParticipant[]
+    lastAttacker: Readonly<Record<string, string>>
+    reactionMemberId?: string
+    areaReactions?: readonly {
+      memberId: string
+      notices: readonly CombatNotice[]
+    }[]
+  }
   id: string
   card: TCombatEventCard
   memberId: string
@@ -265,6 +275,15 @@ export type TCombatState = {
   actedThisCycle?: readonly string[]
 }
 
+export type CombatGroupParticipant = {
+  memberId: string
+  condition: 'standing' | 'knockedOut' | 'escaped'
+  knockedOut: boolean
+  revived: boolean
+  peakDelta: number
+  vigorDelta: number
+}
+
 type CombatAbilityUsage = {
   actorId: string
   /** `null` para inimigo e para a montaria (com `mountAbility`; D-150 b). */
@@ -281,6 +300,8 @@ type CombatAbilityUsage = {
 }
 
 export type TCombatUpdate = { combatId: string } & (
+  | { type: 'combatParticipantKnockedOut'; memberId: string }
+  | { type: 'combatParticipantRevived'; memberId: string }
   | {
       type: 'combatInviteOpened'
       initiatorMemberId: string
@@ -629,8 +650,10 @@ export function combatAttackTargets(
   return state.enemies.filter(({ health }) => health > 0).map(({ id }) => id)
 }
 
-function nextTurn(state: TCombatState, player: CombatPlayer): TCombatState {
-  const participants = participantsOf(state, player)
+export function nextCombatTurn(
+  state: TCombatState,
+  participants: readonly Participant[]
+): TCombatState {
   const living = new Set(
     participants.filter(({ health }) => health > 0).map(({ id }) => id)
   )
@@ -642,6 +665,11 @@ function nextTurn(state: TCombatState, player: CombatPlayer): TCombatState {
   const nextActor = state.order.find(
     (id) => living.has(id) && !acted.includes(id)
   )
+  if (state.group && nextActor) {
+    for (const id of state.order.slice(0, state.order.indexOf(nextActor))) {
+      if (!living.has(id) && !acted.includes(id)) acted.push(id)
+    }
+  }
   const order = nextActor ? state.order : cycleOrder(participants)
   const next = {
     cycle: state.cycle + (nextActor ? 0 : 1),
@@ -672,7 +700,7 @@ function nextTurn(state: TCombatState, player: CombatPlayer): TCombatState {
   }
 }
 
-function enemyWithModifiers(
+export function enemyWithModifiers(
   state: Pick<TCombatState, 'card' | 'enemies' | 'abilityUsage'>,
   enemy: CombatEnemy,
   config: TGameConfigValues
@@ -1301,12 +1329,18 @@ function payEnemyCosts(
   return current
 }
 
+type GroupAreaTargets = {
+  fighters: () => readonly { memberId: string; fighter: CombatPlayer }[]
+  commit: (memberId: string, fighter: CombatPlayer) => void
+}
+
 function resolveEnemyAbilities(
   state: TCombatState,
   enemy: CombatEnemy,
   player: CombatPlayer,
   config: TGameConfigValues,
-  rng: SeededRng
+  rng: SeededRng,
+  groupArea?: GroupAreaTargets
 ) {
   let current = state
   let health = player.health
@@ -1427,144 +1461,193 @@ function resolveEnemyAbilities(
       current = reactToEnemyAbilityUse(current, actor.id, ability, config)
       continue
     }
-    const roll = () => rng.nextUint32() / 2 ** 32
-    const target = {
-      id: state.memberId,
-      health,
-      element: null,
-      ...elementalDefense(player.statuses ?? [], ability.element),
-      defense: player.modifiers.defense,
-      evasion: player.modifiers.evasion,
-      reflection: player.modifiers.reflection,
-      shield: player.shield ?? false,
-    }
     const form = ability.channel?.releaseForm ?? ability.form
-    const notices: CombatNotice[] = []
-    let hit = true
-    if (
-      ability.power !== null &&
-      (form === 'targeted' || form === 'projectile' || form === 'area')
-    ) {
-      const modifiers = effectiveModifiers({
-        ...actor,
-        modifiers: state.card.enemies[actor.blockIndex].modifiers,
-        peak: 0,
-        equipment: [],
-        combat: {
-          power: ability.power,
-          projectileAccuracyBonusPercent:
-            form === 'projectile' ? config.projectileAccuracyBonusPercent : 0,
-          exhaustionPenaltyPercent:
-            payer.vigor === 0 ? config.exhaustionPenaltyPercent : 0,
-        },
-      })
-      const [result] = resolveCombatDamage({
-        kind: 'attack',
-        form,
-        projectileAccuracyIncluded: true,
-        ...modifiers,
-        element: ability.element,
-        config,
-        roll,
-        targets: [target],
-        elemental: elementalRules(actor.statuses),
-      })
-      health = Math.max(0, health - result.damage)
-      current = interruptChannel(current, state.memberId, result.damage, config)
-      current = damageEnemy(current, actor.id, result.reflectedDamage, config)
-      reportDamage(player, current, actor.id, 'ability', result, health)
-      if (result.damage > 0)
-        statuses = statuses.filter(
-          ({ duration }) => duration.kind !== 'untilDamageTaken'
-        )
-      hit = result.hit !== false
-      notices.push({
-        type: 'enemyAttack',
-        behavior: state.card.enemies[enemy.blockIndex].behavior,
-      })
-      if (result.damage > 0 && ability.element !== null)
-        notices.push({ type: 'elementDamage', element: ability.element })
-    }
-    for (const [effectIndex, raw] of (hit && health > 0
-      ? effects
-      : []
-    ).entries()) {
-      const effect = abilityEffectDuration(ability, raw)
-      const { activation } = effect
-      for (const effect of activation) {
-        if (effect.kind === 'breakEquipment') {
-          const eligible = (player.equippedSlots ?? []).filter(
-            (slot) =>
-              !brokenEquipment.includes(slot) &&
-              (!effect.slots.length || effect.slots.includes(slot))
-          )
-          const chosen =
-            eligible.length > 1
-              ? eligible[Math.floor(roll() * eligible.length)]
-              : eligible[0]
-          if (chosen) brokenEquipment = [...brokenEquipment, chosen]
-        }
-        if (effect.kind === 'removeBuffs' || effect.kind === 'removeDebuffs') {
-          const mark = effect.kind === 'removeBuffs' ? 'buff' : 'debuff'
-          statuses = statuses.filter((status) => status.mark !== mark)
-        }
-        if (effect.kind !== 'effectDamage' || health === 0) continue
+    const resolveTarget = (memberId: string, fighter: CombatPlayer) => {
+      let player = fighter
+      let health = fighter.health
+      let statuses = fighter.statuses ?? []
+      let brokenEquipment = fighter.brokenEquipment ?? []
+      const beforeTarget = current
+      current = { ...current, memberId }
+      const roll = () => rng.nextUint32() / 2 ** 32
+      const target = {
+        id: memberId,
+        health,
+        element: null,
+        ...elementalDefense(player.statuses ?? [], ability.element),
+        defense: player.modifiers.defense,
+        evasion: player.modifiers.evasion,
+        reflection: player.modifiers.reflection,
+        shield: player.shield ?? false,
+      }
+      const notices: CombatNotice[] = []
+      let hit = true
+      if (
+        ability.power !== null &&
+        (form === 'targeted' || form === 'projectile' || form === 'area')
+      ) {
+        const modifiers = effectiveModifiers({
+          ...actor,
+          modifiers: state.card.enemies[actor.blockIndex].modifiers,
+          peak: 0,
+          equipment: [],
+          combat: {
+            power: ability.power,
+            projectileAccuracyBonusPercent:
+              form === 'projectile' ? config.projectileAccuracyBonusPercent : 0,
+            exhaustionPenaltyPercent:
+              payer.vigor === 0 ? config.exhaustionPenaltyPercent : 0,
+          },
+        })
         const [result] = resolveCombatDamage({
-          kind: 'effect',
-          amount: effect.amount,
+          kind: 'attack',
+          form,
+          projectileAccuracyIncluded: true,
+          ...modifiers,
           element: ability.element,
           config,
           roll,
-          targets: [{ ...target, health }],
+          targets: [target],
           elemental: elementalRules(actor.statuses),
         })
         health = Math.max(0, health - result.damage)
-        reportDamage(player, current, actor.id, 'effect', result, health)
-        current = interruptChannel(
-          current,
-          state.memberId,
-          result.damage,
-          config
-        )
+        current = interruptChannel(current, memberId, result.damage, config)
+        current = damageEnemy(current, actor.id, result.reflectedDamage, config)
+        reportDamage(player, current, actor.id, 'ability', result, health)
         if (result.damage > 0)
           statuses = statuses.filter(
             ({ duration }) => duration.kind !== 'untilDamageTaken'
           )
+        hit = result.hit !== false
+        notices.push({
+          type: 'enemyAttack',
+          behavior: state.card.enemies[enemy.blockIndex].behavior,
+        })
         if (result.damage > 0 && ability.element !== null)
           notices.push({ type: 'elementDamage', element: ability.element })
       }
-      const status = abilityEffectStatus(
-        effect,
-        ability.id,
-        `${state.turn.id}:${use}:${effectIndex}`,
-        effectIndex
-      )
-      if (player.snapshot && player.withSnapshot) {
-        const changed = applyAbilityEffect(
-          { ...player.snapshot, health, statuses, brokenEquipment },
-          effect,
-          state.card.id,
-          `${state.turn.id}:${use}:${effectIndex}`,
-          capacitiesOf(config, player.snapshot.expansions).purse,
-          effectIndex,
-          player.limbo
-        )
-        if (changed.health < health) {
-          current = interruptChannel(
-            current,
-            state.memberId,
-            health - changed.health,
-            config
-          )
+      for (const [effectIndex, raw] of (hit && health > 0
+        ? effects
+        : []
+      ).entries()) {
+        const effect = abilityEffectDuration(ability, raw)
+        const { activation } = effect
+        for (const effect of activation) {
+          if (effect.kind === 'breakEquipment') {
+            const eligible = (player.equippedSlots ?? []).filter(
+              (slot) =>
+                !brokenEquipment.includes(slot) &&
+                (!effect.slots.length || effect.slots.includes(slot))
+            )
+            const chosen =
+              eligible.length > 1
+                ? eligible[Math.floor(roll() * eligible.length)]
+                : eligible[0]
+            if (chosen) brokenEquipment = [...brokenEquipment, chosen]
+          }
+          if (
+            effect.kind === 'removeBuffs' ||
+            effect.kind === 'removeDebuffs'
+          ) {
+            const mark = effect.kind === 'removeBuffs' ? 'buff' : 'debuff'
+            statuses = statuses.filter((status) => status.mark !== mark)
+          }
+          if (effect.kind !== 'effectDamage' || health === 0) continue
+          const [result] = resolveCombatDamage({
+            kind: 'effect',
+            amount: effect.amount,
+            element: ability.element,
+            config,
+            roll,
+            targets: [{ ...target, health }],
+            elemental: elementalRules(actor.statuses),
+          })
+          health = Math.max(0, health - result.damage)
+          reportDamage(player, current, actor.id, 'effect', result, health)
+          current = interruptChannel(current, memberId, result.damage, config)
+          if (result.damage > 0)
+            statuses = statuses.filter(
+              ({ duration }) => duration.kind !== 'untilDamageTaken'
+            )
+          if (result.damage > 0 && ability.element !== null)
+            notices.push({ type: 'elementDamage', element: ability.element })
         }
-        player = player.withSnapshot(changed)
-        health = changed.health
-        statuses = changed.statuses
-        brokenEquipment = changed.brokenEquipment ?? []
-      } else if (status) {
-        statuses = [...statuses, status]
+        const status = abilityEffectStatus(
+          effect,
+          ability.id,
+          `${state.turn.id}:${use}:${effectIndex}`,
+          effectIndex
+        )
+        if (player.snapshot && player.withSnapshot) {
+          const changed = applyAbilityEffect(
+            { ...player.snapshot, health, statuses, brokenEquipment },
+            effect,
+            state.card.id,
+            `${state.turn.id}:${use}:${effectIndex}`,
+            capacitiesOf(config, player.snapshot.expansions).purse,
+            effectIndex,
+            player.limbo
+          )
+          if (changed.health < health) {
+            current = interruptChannel(
+              current,
+              memberId,
+              health - changed.health,
+              config
+            )
+          }
+          player = player.withSnapshot(changed)
+          health = changed.health
+          statuses = changed.statuses
+          brokenEquipment = changed.brokenEquipment ?? []
+        } else if (status) {
+          statuses = [...statuses, status]
+        }
+      }
+      return {
+        fighter: player.refresh?.(health, statuses, brokenEquipment) ?? {
+          ...player,
+          health,
+          statuses,
+          brokenEquipment,
+        },
+        notices: [...notices, ...enemyDefeatNotices(beforeTarget, current)],
       }
     }
+
+    if (form === 'area' && groupArea && current.group) {
+      const areaReactions = []
+      for (const { memberId, fighter } of groupArea.fighters()) {
+        const resolved = resolveTarget(
+          memberId,
+          memberId === state.memberId ? player : fighter
+        )
+        areaReactions.push({ memberId, notices: resolved.notices })
+        if (memberId === state.memberId) player = resolved.fighter
+        else groupArea.commit(memberId, resolved.fighter)
+      }
+      health = player.health
+      statuses = player.statuses ?? []
+      brokenEquipment = player.brokenEquipment ?? []
+      current = reactToEnemyAbilityUse(
+        { ...current, memberId: state.memberId },
+        actor.id,
+        ability,
+        config
+      )
+      current = {
+        ...current,
+        group: { ...current.group!, areaReactions },
+        turn: { ...current.turn, enemyAbilitiesResolved: use + 1 },
+      }
+      break
+    }
+
+    const resolved = resolveTarget(state.memberId, player)
+    player = resolved.fighter
+    health = player.health
+    statuses = player.statuses ?? []
+    brokenEquipment = player.brokenEquipment ?? []
     current = reactToEnemyAbilityUse(current, actor.id, ability, config)
     const reaction = notifyCombat(
       player,
@@ -1572,7 +1655,10 @@ function resolveEnemyAbilities(
       statuses,
       brokenEquipment,
       current,
-      [...notices, ...enemyDefeatNotices(before, current)],
+      [
+        ...resolved.notices.filter((notice) => notice.type !== 'enemyDefeated'),
+        ...enemyDefeatNotices(before, current),
+      ],
       rng
     )
     player = reaction.fighter
@@ -1592,6 +1678,23 @@ function resolveEnemyAbilities(
   return { state: current, health, statuses, brokenEquipment, player, rng }
 }
 
+export function combatActiveStatuses(
+  state: TCombatState,
+  actorId: string,
+  statuses: readonly TPlayerStatus[]
+) {
+  return statuses.filter(
+    ({ duration }) =>
+      duration.kind !== 'whileAbilityActive' ||
+      state.abilityUsage?.some(
+        (usage) =>
+          usage.actorId === actorId &&
+          usage.sourceCardId === duration.cardId &&
+          (usage.activeUntilCycle ?? 0) > state.cycle
+      )
+  )
+}
+
 export function resolveCombatTurn(
   state: TCombatState,
   player: CombatPlayer,
@@ -1599,7 +1702,8 @@ export function resolveCombatTurn(
   rng: SeededRng,
   targetId?: string,
   resume = false,
-  failedEscape = false
+  failedEscape = false,
+  groupArea?: GroupAreaTargets
 ): {
   state: TCombatState
   health: number
@@ -1608,12 +1712,14 @@ export function resolveCombatTurn(
   snapshot: TPlayerState | undefined
   rngState: RngState
   playerDownBeforeLastEnemy: boolean
+  turnCompleted: boolean
 } {
   let current = state
   let health = player.health
   let statuses = player.statuses ?? []
   let brokenEquipment = player.brokenEquipment ?? []
   let playerDownBeforeLastEnemy = false
+  let turnCompleted = false
   const roll = () => rng.nextUint32() / 2 ** 32
   const finish = () => ({
     state: current,
@@ -1623,6 +1729,7 @@ export function resolveCombatTurn(
     snapshot: player.snapshot,
     rngState: rng.state(),
     playerDownBeforeLastEnemy,
+    turnCompleted,
   })
   const notify = (notices: readonly CombatNotice[]) => {
     const reaction = notifyCombat(
@@ -1642,6 +1749,10 @@ export function resolveCombatTurn(
     brokenEquipment = player.brokenEquipment ?? []
   }
   const advance = () => {
+    if (current.group) {
+      turnCompleted = true
+      return
+    }
     const actorId = current.turn.actorId
     if (actorId === current.memberId) {
       statuses = combatStatusesAfterTurn(statuses, true, false)
@@ -1666,7 +1777,10 @@ export function resolveCombatTurn(
           : enemy
       ),
     }
-    const advanced = nextTurn(participants, { ...player, health })
+    const advanced = nextCombatTurn(
+      participants,
+      participantsOf(participants, { ...player, health })
+    )
     if (advanced.cycle !== current.cycle) {
       statuses = combatStatusesAfterTurn(statuses, false, true)
       player = player.refresh?.(health, statuses, brokenEquipment) ?? {
@@ -1684,7 +1798,10 @@ export function resolveCombatTurn(
           config
         )
       )
-      current = nextTurn({ ...participants, enemies }, { ...player, health })
+      current = nextCombatTurn(
+        { ...participants, enemies },
+        participantsOf({ ...participants, enemies }, { ...player, health })
+      )
     } else {
       current = advanced
     }
@@ -1693,21 +1810,7 @@ export function resolveCombatTurn(
       current.cycle <= current.maxCycles
     )
       player.update?.(combatTurnStarted(current))
-    const expires = (status: TPlayerStatus, actor: string) => {
-      const { duration } = status
-      return (
-        duration.kind === 'whileAbilityActive' &&
-        !current.abilityUsage?.some(
-          (usage) =>
-            usage.actorId === actor &&
-            usage.sourceCardId === duration.cardId &&
-            (usage.activeUntilCycle ?? 0) > current.cycle
-        )
-      )
-    }
-    const remaining = statuses.filter(
-      (status) => !expires(status, current.memberId)
-    )
+    const remaining = combatActiveStatuses(current, current.memberId, statuses)
     if (remaining.length !== statuses.length) {
       statuses = remaining
       player = player.refresh?.(health, statuses, brokenEquipment) ?? {
@@ -1719,8 +1822,10 @@ export function resolveCombatTurn(
     current = {
       ...current,
       enemies: current.enemies.map((enemy) => {
-        const remaining = enemy.statuses.filter(
-          (status) => !expires(status, enemy.id)
+        const remaining = combatActiveStatuses(
+          current,
+          enemy.id,
+          enemy.statuses
         )
         return remaining.length === enemy.statuses.length
           ? enemy
@@ -1859,6 +1964,7 @@ export function resolveCombatTurn(
   }
 
   while (
+    !turnCompleted &&
     current.turn.actorId !== current.memberId &&
     !combatIsTerminal(current, health)
   ) {
@@ -1881,7 +1987,8 @@ export function resolveCombatTurn(
         enemy,
         { ...player, health },
         config,
-        rng
+        rng,
+        groupArea
       )
       current = used.state
       health = used.health
@@ -1889,7 +1996,10 @@ export function resolveCombatTurn(
       brokenEquipment = used.brokenEquipment
       player = used.player
       rng = used.rng
-      if (player.reactionPending?.()) return finish()
+      if (player.reactionPending?.() || current.group?.areaReactions)
+        return finish()
+      if (current.group)
+        current = { ...current, turn: { ...current.turn, phase: 'attack' } }
     }
     if (combatIsTerminal(current, health)) break
     enemy = current.enemies.find(({ id }) => id === current.turn.actorId)!
