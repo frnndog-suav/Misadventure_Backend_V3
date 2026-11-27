@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 1.18 · **Data:** 2026-11-27
+> **Versão do contrato:** 1.19 · **Data:** 2026-11-27
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -4054,15 +4054,15 @@ type DomainEvent = { id: string; memberId: string; dimensionId: string; round: n
 A T-105 começa com MSW após o acordo. A validação integrada ocorre após a implementação no backend, com os seis cenários e a medição de tamanho do lote e duração da resposta com cinco ajudantes.
 
 
-### FEAT-22 — Recrutar ajudantes e combate em grupo — `proposto (BE)`
+### FEAT-22 — Recrutar ajudantes e combate em grupo — `acordado`
 
 Base: README §§3.2, 11.3, 19.1, 19.5, 20.2, 21.1 e II.7, ROADMAP v1.02, SPEC-FRONTEND v1.12 (D-68, REQ-110 a REQ-114). Momento 2, um humano por save, incluindo combate de evento, missão e chefe final. A composição da campanha continua definida na criação. Reutilizar os parâmetros aplicáveis do laboratório, inclusive o limite de ciclos. Os relógios ficam desligados.
 
-#### Estado público e intenções propostas
+#### Estado público e intenções
 
 Reutilizar `POST /parties/:partyId/actions`, GET de save e POST de sessão. Proposta de projeção com uma decisão de combate pendente por save, identificada por ID opaco estável, ID do combate, membro responsável e tipo. GET e sessão devolvem a decisão corrente com suas opções públicas. Se o elenco confirmado contiver apenas o iniciador, aplicar as regras de combate solo. Isso vale sem candidato elegível, com lista vazia, com recusa de todos os convidados e com recusa do humano como único convidado.
 
-| Decisão | Quem responde | Intenção e projeção propostas |
+| Decisão | Quem responde | Intenção e projeção |
 |---|---|---|
 | Recrutamento | Humano iniciador | `confirmCombatRoster` recebe `combatId`, `decisionId` e IDs dos convidados escolhidos entre os candidatos projetados. Lista vazia confirma solo. O servidor avalia as respostas de IA antes do primeiro ciclo. |
 | Convite | Humano convidado pela IA | `respondCombatInvite` recebe `combatId`, `decisionId` e `accept`. A projeção identifica o iniciador e o encontro. |
@@ -4070,7 +4070,7 @@ Reutilizar `POST /parties/:partyId/actions`, GET de save e POST de sessão. Prop
 | Turno de combate | Humano combatente | Reutilizar ações da FEAT-13 com `combatId` e `turnId`. Opções, alvos e custos correspondem ao ator humano do turno, inclusive na vez de exploração de uma IA. |
 | Entrega de recompensa | Humano destinatário | Reutilizar `resolveReward` com o ID da recompensa corrente. Projetar destinatário e posição no rodízio quando aplicável. |
 
-**Projeção proposta.** `Party.pendingCombatDecision` é opcional em saves e recibos históricos e, nas projeções da FEAT-22, vale `null` ou contém `id`, `combatId`, `memberId` e `type`. Variantes: `roster` com `candidateMemberIds: string[]`, `invite` com `initiatorMemberId` e `cardTitle`, `order` com `defaultMemberIds: string[]` e `alternativeMemberOrders: string[][]`, `turn` com `turnId` e `reward` com `rewardId` e `rotationPosition?: number` (base 1, posição do destinatário na ordem gravada). Os novos corpos usam `inviteeMemberIds: string[]` em `confirmCombatRoster` e `memberIds: string[]` em `confirmCombatOrder`. As variantes de turno e recompensa referenciam as opções já projetadas pela FEAT-13 e por `pendingRewards`.
+**Projeção.** `Party.pendingCombatDecision` é opcional em saves e recibos históricos e, nas projeções da FEAT-22, vale `null` ou contém `id`, `combatId`, `memberId` e `type`. Variantes: `roster` com `candidateMemberIds: string[]`, `invite` com `initiatorMemberId` e `cardTitle`, `order` com `defaultMemberIds: string[]` e `alternativeMemberOrders: string[][]`, `turn` com `turnId` e `reward` com `rewardId` e `rotationPosition?: number` (base 1, posição do destinatário na ordem gravada). Os novos corpos usam `inviteeMemberIds: string[]` em `confirmCombatRoster` e `memberIds: string[]` em `confirmCombatOrder`. As variantes de turno e recompensa referenciam as opções já projetadas pela FEAT-13 e por `pendingRewards`.
 
 No combate em grupo, `CombatState.participants` contém `{ memberId, health, maxHealth, condition }`, com `condition: 'standing' | 'knockedOut' | 'escaped'`. `CombatResult.participants` contém `{ memberId, condition, peakDelta, vigorDelta, goldGranted, rewardIds, knockedOut, revived, respawned, skipsNextTurn }`. A condição é a do resultado coletivo antes do respawn. Os deltas registram efeitos do desfecho de combate e penalidade de nocaute, com a conclusão de dimensão no recibo da FEAT-19. Atualizar o resumo conforme as entregas e o respawn forem efetivados. Os campos históricos `CombatState.memberId` e `CombatResult.memberId` continuam identificando o iniciador. A vez de exploração continua em `Party`; o ator vem do turno; o responsável pela escolha vem da decisão. O combate solo conserva sua projeção e os campos novos de elenco e desfecho podem estar ausentes nos recibos antigos.
 
@@ -4266,3 +4266,4 @@ Preparar URL, IDs de saves, catálogo, sementes, estado inicial e resultados por
 | 1.16 | 2026-11-27 | FE | FEAT-22 `proposto (FE)`: recrutamento, combate em grupo, decisões persistidas e validação integrada. |
 | 1.17 | 2026-11-27 | BE | FEAT-22 `proposto (BE)`: autorização e retomada idempotente, política de IA e desempate, ordem do desfecho e revisão dos cenários 1, 2, 3, 5, 6 e 7. |
 | 1.18 | 2026-11-27 | BE | FEAT-22 `proposto (BE)`: registra o aceite da vitória por Reflexão em grupo sem sobreviventes e explicita elenco solo, precedência HTTP e reenvio do recibo. |
+| 1.19 | 2026-11-27 | BE | FEAT-22 `acordado` após confirmação do FE sobre elenco solo, Reflexão, precedência HTTP e reenvio. |
