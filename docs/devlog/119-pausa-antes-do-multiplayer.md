@@ -8,4 +8,6 @@ O ROADMAP v1.07 define a entrega da versão para um humano com ajudantes de IA, 
 
 Verificação documental com `git diff --check`. Caso de borda: o autor confirma que o teste com IA passou, mas ainda não autoriza o Momento 3. A FEAT-25 a FEAT-28 permanecem bloqueadas.
 
-Pendente a sincronização integral do roadmap no frontend. O ponto de retomada do backend continua na T-113.
+## Sincronização entre repositórios
+
+O frontend confirmou a cópia integral do ROADMAP v1.07 e registrou a pausa em suas diretrizes e no devlog 151. O backend incorporou a revisão de 2026-11-27 do README compartilhado (§III.4). Os hashes SHA-256 das cópias de cada documento coincidem. O ponto de retomada do backend continua na T-113.
