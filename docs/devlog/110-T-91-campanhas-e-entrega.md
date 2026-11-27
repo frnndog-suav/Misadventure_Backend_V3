@@ -83,3 +83,10 @@
 - Com Docker e backend ligados pelo autor, a API em `http://127.0.0.1:3391` respondeu a `GET /health`, `GET /lab/config` e `GET /parties/creation-options`. O laboratório estava habilitado e as opções retornaram 1 a 6 participantes.
 - A listagem HTTP confirmou os 31 saves citados neste registro. Consultas somente de leitura em `misadventures_t91` confirmaram que as três campanhas de replay da T-104 estão na rodada 1, com 3 PA e sem recibos de ação. Os checkpoints dos controles já retomados estão documentados em `virada.json`; `perda.json` também está disponível. Os cortes da T-104 são gerados durante o cenário.
 - Consultas HTTP por ID confirmaram o save de iniciativa em `idle`, o save de virada na rodada 1 e os dois saves de conclusão com `completeDimension` disponível. A validação integrada segue pendente do frontend.
+
+## Retorno da T-104 — versão de saúde
+
+- O autor confirmou os seis cenários funcionais com a API de preparação, conforme devlog frontend 136. A instância em 3391 respondeu HTTP 200 com `contractVersion: "1.04"` em `GET /health`.
+- `src/infra/http/contract-version.ts` passou a anunciar 1.09. O E2E de REQ-01 em `src/infra/http/controllers/health/index.controller.e2e-spec.ts` passou a verificar o valor explícito da entrega.
+- O build passou. O E2E padrão foi bloqueado na inicialização pelo cache do módulo nativo do SWC no Windows. Uma verificação HTTP com Supertest e o controlador compilado retornou 200 com `{"status":"ok","contractVersion":"1.09"}`.
+- Após o reinício pelo autor, `GET http://127.0.0.1:3391/health` retornou HTTP 200 com `{"status":"ok","contractVersion":"1.09"}`. O backend aguarda o registro da resolução da divergência no frontend para fechar a FEAT-20.

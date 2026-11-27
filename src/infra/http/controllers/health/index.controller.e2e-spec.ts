@@ -3,7 +3,6 @@ import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { AppModule } from '@/infra/app.module'
-import { CONTRACT_VERSION } from '@/infra/http/contract-version'
 
 describe('GET /health (e2e)', () => {
   let app: INestApplication
@@ -26,8 +25,7 @@ describe('GET /health (e2e)', () => {
     expect(response.status).toBe(200)
     expect(response.body).toEqual({
       status: 'ok',
-      contractVersion: CONTRACT_VERSION,
+      contractVersion: '1.09',
     })
-    expect(CONTRACT_VERSION).toMatch(/^\d+\.\d+$/)
   })
 })
