@@ -48,3 +48,10 @@ Nenhum aviso: o arquivo veio **do** frontend e a adaptação é local; nada para
 - **Arquivo alterado** — `tempo.html` detalha as etapas dos três marcos, indica a T-91 como concluída e a T-104 como aguardando validação. As faixas preliminares somam 49–98 h. A conversão usa 4 h por dia de trabalho e desconsidera a espera pelo retorno integrado.
 - **Verificação** — scripts executados no Node com DOM simulado. Conferidos total, subtotais, percentuais, links locais e quantidade de sessões renderizadas. Para conferência visual, abrir `tempo.html` e verificar a faixa geral e a T-104 sob **Aguardando validação**.
 - **Ponto de retomada** — aguardar o resultado da T-104 antes de registrar a FEAT-20 como validada, conforme devlog 110 e ROADMAP v0.97.
+
+## Revisão do panorama jogável em 2026-11-27
+
+- **Situação** — concluída. Horas a preencher pelo autor.
+- **Arquivo alterado** — `tempo.html` abre com o percurso jogável e reúne funcionalidades validadas, verificações pendentes e entregas futuras. O panorama usa ROADMAP v1.04, CONTRATO v1.18 e os registros das FEAT-19 a 22. Os percentuais por contagem de critérios deram lugar ao status observado. As estimativas anteriores para a campanha curta e as FEAT-25 a 28 somam 48–96 h após retirar a validação concluída da FEAT-20.
+- **Verificação** — Node com DOM simulado conferiu as 45 sessões renderizadas, as horas anteriores preservadas, os links locais e os rótulos das seções. A nova sessão tem duração `null` e fica fora da soma. `git diff --check` passou. Etapa documental, sem execução de cenários de jogo.
+- **Ponto de retomada** — FEAT-22 aguarda confirmação do frontend sobre elenco solo e precedência HTTP antes da T-109, conforme devlog 116.

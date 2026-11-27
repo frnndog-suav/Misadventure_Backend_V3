@@ -8,8 +8,7 @@
      - horas: número decimal (2.5 = 2h30). Use null se ainda não souber (fica fora do total).
      - etapa: o ID do devlog (T-xx, CONTRATO, FEAT-nn, 'setup'...).
   2. Abra este arquivo no navegador (duplo clique) para ver os totais.
-  3. A skill /registrar-etapa acrescenta a sessão de cada etapa aqui, com as horas
-     calculadas automaticamente pela hora do sistema (.claude/hooks/tempo.mjs; a partir de 2026-11-14).
+  3. Ao revisar o panorama, confira o roadmap, o contrato e os registros de validação.
 
   As horas pré-preenchidas foram ESTIMADAS pela janela entre o primeiro e o
   último commit de cada dia, sem descontar pausas — corrija-as.
@@ -20,41 +19,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Misadventures — Tempo de desenvolvimento (backend)</title>
     <script>
-      // Atualize a data e os critérios ao revisar o progresso dos marcos.
-      const REVISAO_MARCOS = '2026-11-27'
-      const HORAS_POR_DIA = 4
-      // Campos de cada etapa: situação, título, descrição, registro e faixa restante em horas.
-      const MARCOS = [
-        {
-          titulo: '1. Campanha solo',
-          criterios: [
-            ['Concluído', 'Criação e retomada da partida', 'A criação prepara o mapa e a classe escolhida. O jogador pode encerrar a sessão e retomá-la com o progresso salvo.', '../ROADMAP.md'],
-            ['Concluído', 'Exploração, turnos e missões', 'O jogador se movimenta, gasta pontos de ação, resolve encontros e avança nos objetivos da campanha.', '../ROADMAP.md'],
-            ['Concluído', 'Chefe final e passagem de dimensão (T-86)', 'As campanhas de teste cobriram o chefe final, a falta de espaço para o prêmio, a passagem e o congelamento do save.', '103-T-86-campanhas-da-feat-19.md'],
-            ['A fazer', 'Campanha curta jogável', 'Preparar e ajustar o conteúdo de uma dimensão curta. Criar um save pelo fluxo normal e jogar até concluir a dimensão.', null, [8, 16]],
-          ],
-        },
-        {
-          titulo: '2. Um humano com companheiros de IA',
-          criterios: [
-            ['Concluído', 'Criação e ordem dos ajudantes (T-88)', 'A criação aceita ajudantes, sorteia classes e ordena os membros por D20. Saves antigos continuam abrindo com seu progresso.', '107-T-88-criacao-com-ajudantes.md'],
-            ['Concluído', 'Decisões dos ajudantes (T-89)', 'Os ajudantes escolhem ações disponíveis na própria vez conforme as prioridades persistidas na campanha.', '108-T-89-configuracao-e-politica-da-ia.md'],
-            ['Concluído', 'Avanço automático e recuperação (T-90)', 'O backend executa as vezes da IA até devolver a vez ao humano. Em caso de interrupção, a sessão pode retomar do ponto salvo sem reaplicar a jogada.', '109-T-90-avanco-automatico-e-recuperacao.md'],
-            ['Concluído', 'Campanhas de teste e desempenho (T-91)', 'Seis cenários foram verificados no backend. Em uma medição local com cinco ajudantes, abrir a sessão levou 435 ms e encerrar o turno levou 488 ms.', '110-T-91-campanhas-e-entrega.md'],
-            ['Aguardando validação', 'Validação integrada (T-104)', 'O frontend precisa rodar os seis cenários contra a API real. Após o retorno, o backend revisa os resultados e registra a validação se os cenários passarem.', '110-T-91-campanhas-e-entrega.md', [1, 2]],
-          ],
-        },
-        {
-          titulo: '3. Multiplayer online',
-          criterios: [
-            ['A fazer', 'Autenticação (FEAT-25)', 'Definir e implementar o acesso por usuário e as permissões do papel de administrador.', '../ROADMAP.md', [8, 16]],
-            ['A fazer', 'Sessões em tempo real (FEAT-26)', 'Permitir vários humanos no grupo, aplicar as permissões do anfitrião e verificar a sincronização via Socket.IO com múltiplos clientes.', '../ROADMAP.md', [16, 32]],
-            ['A fazer', 'Prazos de turno e ausências (FEAT-27)', 'Aplicar o prazo da vez e verificar o avanço da partida quando um jogador estiver ausente.', '../ROADMAP.md', [8, 16]],
-            ['A fazer', 'Desconexão e substituição por IA (FEAT-28)', 'Tratar a perda de conexão e testar a passagem do controle do personagem para a IA conforme as regras a detalhar.', '../ROADMAP.md', [8, 16]],
-          ],
-        },
-      ]
-
       // === EDITE AQUI: uma linha por sessão de trabalho ===
       const SESSOES = [
         { data: '2026-11-13', horas: 1, etapa: 'FEAT-00', nota: 'Fundação: agentes, skills, guardas, spec. Estimado: 1 commit às 20:48, sem janela — corrija.' },
@@ -101,119 +65,169 @@
         { data: '2026-11-25', horas: 1.75, etapa: 'T-78', nota: 'Movimentar com montaria: moveRoutes, viaZoneId, PlayerMoved.viaZoneId (auto, 13:12–20:01)' },
         { data: '2026-11-25', horas: 0, etapa: 'T-79', nota: 'Montaria como recompensa: entrega, volta ao deck, limbo (auto, 20:01–20:07)' },
         { data: '2026-11-27', horas: null, etapa: 'FEAT-21', nota: 'Implementação do backend e preparação da T-108, devlog 113.' },
+        { data: '2026-11-27', horas: null, etapa: 'tempo', nota: 'Revisão do panorama jogável, da situação das funcionalidades e do layout.' },
       ]
       // ====================================================
     </script>
     <style>
       :root {
         color-scheme: light;
-        --bg: #f6f4ef;
-        --card: #ffffff;
-        --ink: #2b2a26;
-        --muted: #6f6a60;
-        --line: #e2ddd2;
-        --accent: #7a5c2e;
+        --paper: #fffefa;
+        --ink: #202b27;
+        --muted: #4f6057;
+        --line: #d5ddd5;
+        --accent: #205941;
       }
       body {
         margin: 0;
-        padding: 32px 24px 64px;
-        background: var(--bg);
+        background: #eff2ec;
         color: var(--ink);
-        font: 15px/1.5 system-ui, 'Segoe UI', sans-serif;
-        max-width: 880px;
-        margin-inline: auto;
+        font: 1rem/1.55 system-ui, sans-serif;
       }
-      h1 { font-size: 22px; margin: 0 0 4px; }
-      .sub { color: var(--muted); margin: 0 0 24px; font-size: 13px; }
-      .cards { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 28px; }
-      .card {
-        background: var(--card);
+      .container { width: min(1080px, calc(100% - 2rem)); margin-inline: auto; }
+      .masthead { padding: 2.5rem 0 2rem; background: #193c30; color: #fffefa; }
+      .masthead p { margin: 0; color: #e0ede2; }
+      h1 { margin: .3rem 0 .5rem; font-size: clamp(1.8rem, 4vw, 3rem); line-height: 1.12; }
+      h2 { margin: 0 0 .75rem; font-size: 1.45rem; }
+      h3 { margin: 0 0 .5rem; font-size: 1.1rem; }
+      p { margin: .5rem 0; }
+      main { padding-block: 1.5rem 3rem; }
+      main > section { margin-bottom: 2rem; }
+      a { color: var(--accent); }
+      .panel, .card {
+        background: var(--paper);
         border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 12px 18px;
-        min-width: 150px;
+        border-radius: .65rem;
+        padding: 1rem 1.2rem;
       }
-      .card b { display: block; font-size: 24px; color: var(--accent); }
-      .card span { font-size: 12px; color: var(--muted); }
-      h2 { font-size: 15px; margin: 28px 0 8px; }
-      .marcos { display: grid; gap: 12px; margin-bottom: 28px; }
-      .marco { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 18px; }
-      .marco header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-      .marco h3 { margin: 0; font-size: 16px; }
-      .marco strong { color: var(--accent); font-size: 20px; }
-      .marco progress { width: 100%; height: 14px; accent-color: var(--accent); }
-      .marco ul { margin: 8px 0 0; padding-left: 20px; }
-      .marco li { margin-bottom: 10px; }
-      .marco li p { margin: 2px 0; }
-      .marco h4 { margin: 14px 0 4px; }
-      .marco a { color: var(--accent); }
-      table { border-collapse: collapse; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-      th, td { text-align: left; padding: 8px 12px; border-top: 1px solid var(--line); vertical-align: top; }
-      thead th { border-top: none; background: #efece4; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-      td.num, th.num { text-align: right; white-space: nowrap; }
-      .nota { color: var(--muted); font-size: 13px; }
-      .aviso { color: var(--muted); font-size: 13px; margin-top: 8px; }
+      .highlight { border-left: .35rem solid var(--accent); }
+      .grid, .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: .85rem; }
+      .timeline { margin: 1rem 0 0; padding-left: 1.4rem; }
+      .timeline li, .status li { margin-bottom: .7rem; }
+      .status { padding-left: 1.25rem; margin-bottom: 0; }
+      .nota, .aviso, .card span { color: var(--muted); font-size: .9rem; }
+      .card b { display: block; color: var(--accent); font-size: 1.25rem; }
+      .tables { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2.4fr); gap: 1rem; margin-top: 1rem; }
+      .table-wrap { overflow-x: auto; }
+      table { border-collapse: collapse; width: 100%; background: var(--paper); }
+      th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+      thead th { background: #e0ebe1; }
+      tbody tr:nth-child(even) { background: #f7f8f4; }
+      td.num, th.num, .data { white-space: nowrap; }
+      td.num, th.num { text-align: right; }
+      @media (max-width: 760px) { .tables { grid-template-columns: minmax(0, 1fr); } }
+      @media print {
+        body, .masthead { background: white; color: black; }
+        .masthead p { color: black; }
+        .container { width: 100%; }
+        .tables { display: block; }
+        .panel, tr { break-inside: avoid; }
+      }
     </style>
   </head>
   <body>
-    <h1>Misadventures — Tempo de desenvolvimento</h1>
-    <p class="sub">Backend · fonte: array <code>SESSOES</code> dentro deste arquivo · edite e recarregue</p>
-    <section aria-labelledby="tituloMarcos">
-      <h2 id="tituloMarcos">Progresso até os marcos jogáveis</h2>
-      <p class="nota">Revisão de <time id="revisaoMarcos"></time>. Cada barra mostra a proporção de critérios concluídos, com peso igual. A contagem exclui o trabalho do frontend e independe das horas registradas.</p>
-      <div class="cards"><div class="card"><b id="esforcoRestante"></b><span>Esforço restante para as etapas exibidas</span></div></div>
-      <p class="nota">Faixas preliminares de esforço ativo, com <span id="horasPorDia"></span> h por dia de trabalho. Incluem preparação, implementação e testes quando pertinentes. A espera pelo frontend e eventuais correções identificadas na integração ficam fora das faixas. As etapas online ainda dependem de detalhamento.</p>
-      <div class="marcos" id="marcos"></div>
-    </section>
-    <h2>Tempo registrado</h2>
-    <div class="cards" id="cards"></div>
-    <h2>Horas por etapa</h2>
-    <table><thead><tr><th>Etapa</th><th class="num">Horas</th></tr></thead><tbody id="porEtapa"></tbody></table>
-    <h2>Sessões</h2>
-    <table>
-      <thead><tr><th>Data</th><th>Etapa</th><th class="num">Horas</th><th>Nota</th></tr></thead>
-      <tbody id="sessoes"></tbody>
-    </table>
-    <p class="aviso" id="aviso"></p>
+    <header class="masthead">
+      <div class="container">
+        <p>Misadventures · Backend</p>
+        <h1>Progresso e tempo de desenvolvimento</h1>
+        <p>Situação em <time datetime="2026-11-27">27/11/2026</time> · Roadmap 1.04 · Contrato 1.18</p>
+      </div>
+    </header>
+    <main class="container">
+      <section class="panel highlight" aria-labelledby="jogavel">
+        <h2 id="jogavel">Até onde dá para jogar?</h2>
+        <p><strong>Um jogador humano já pode jogar sozinho ou começar a campanha com ajudantes de IA.</strong> Com o conteúdo adequado, o fluxo chega ao chefe final e à conclusão da dimensão. Se a sucessora estiver publicada, a campanha pode passar para ela. Se estiver indisponível, o save congela e pode ser retomado quando ela for publicada.</p>
+        <ol class="timeline">
+          <li><strong>Começar.</strong> Criar a campanha, escolher a classe, receber o deck inicial e entrar no mapa. É possível sair e continuar pelo save.</li>
+          <li><strong>Explorar e evoluir.</strong> Usar pontos de ação, Vasculhar, resolver encontros e combates solo, cumprir missões e ajustar a build. Mercado, ferreiro, artífice e estábulo entram conforme o conteúdo e a zona.</li>
+          <li><strong>Jogar com IA.</strong> Os ajudantes entram na criação e agem em suas próprias vezes. O frontend apresenta a sequência de acontecimentos até o retorno da vez ao humano.</li>
+          <li><strong>Concluir a dimensão.</strong> Cumprir os requisitos da Carta de Dimensão, enfrentar o chefe quando configurado e resolver o prêmio e a passagem.</li>
+        </ol>
+        <p class="nota">A conclusão foi validada com campanhas preparadas, incluindo Fragmentos concedidos para montar o estado de teste. Ainda falta registrar uma campanha curta completa, de um save novo à conclusão, com conteúdo preparado e ajustado para esse percurso. <a href="103-T-86-campanhas-da-feat-19.md">Cenários da dimensão</a> · <a href="114-FEAT-21-validacao-integrada.md">Validação das vezes da IA</a></p>
+      </section>
+
+      <section aria-labelledby="situacao">
+        <h2 id="situacao">Situação das funcionalidades</h2>
+        <div class="grid">
+          <article class="panel">
+            <h3>Prontas e validadas</h3>
+            <ul class="status">
+              <li>Laboratório, catálogo, editor de conteúdo, saves e preparação do mapa (FEAT-03 a 06 e 31).</li>
+              <li>Movimentação, vez, deck, inventário, equipamentos, bolsa, cofre e Vasculhar (FEAT-07 a 10 e 32).</li>
+              <li>Efeitos, encontros, combate solo, nocaute, missões, provação e mentor (FEAT-11 a 15).</li>
+              <li>Mercado, ferreiro, Oficina do Artífice, montarias, conclusão da dimensão e coleções estendidas (FEAT-16 a 19 e 33).</li>
+              <li>Criação com ajudantes, execução automática e acompanhamento das vezes (FEAT-20 e 21).</li>
+            </ul>
+            <p class="nota">A fundação e a base visual também estão prontas no roadmap (FEAT-00 a 02).</p>
+          </article>
+          <article class="panel">
+            <h3>Faltam validar ou testar</h3>
+            <ul class="status">
+              <li><strong>Campanha curta do início ao fim.</strong> Configurar uma dimensão, criar um save pelo fluxo normal e registrar a progressão até a conclusão.</li>
+              <li><strong>Endpoint de saúde (FEAT-01).</strong> A seção própria segue como <em>implementado (BE)</em> no contrato. O devlog da FEAT-21 já registra um HTTP 200 no backend real durante a validação integrada.</li>
+            </ul>
+          </article>
+          <article class="panel">
+            <h3>A fazer</h3>
+            <ul class="status">
+              <li><strong>Recrutamento e combate em grupo (FEAT-22).</strong> Contrato proposto. O frontend precisa confirmar os ajustes de elenco solo e precedência HTTP antes da T-109. Após a implementação, ainda haverá testes e validação com a API real.</li>
+              <li>Negociação e métricas de IA no laboratório (FEAT-23 e 24).</li>
+              <li>Multiplayer online entre humanos: autenticação, sessões em tempo real, relógio da vez, ausência e desconexão (FEAT-25 a 28).</li>
+              <li>Acabamento visual e executável Tauri, nessa ordem (FEAT-30 e 29, frontend).</li>
+            </ul>
+          </article>
+        </div>
+        <p class="nota">“Validada” indica cenários do contrato aprovados com o backend real. <a href="../ROADMAP.md">Roadmap</a> · <a href="../CONTRATO.md">Contrato</a> · <a href="116-FEAT-22-ajustes-contrato.md">Ponto de retomada da FEAT-22</a></p>
+      </section>
+
+      <section class="panel" aria-labelledby="estimativas">
+        <h2 id="estimativas">Estimativas já registradas</h2>
+        <div class="table-wrap">
+          <table aria-labelledby="estimativas">
+            <thead><tr><th scope="col">Escopo</th><th scope="col" class="num">Esforço ativo</th></tr></thead>
+            <tbody>
+              <tr><td>Preparar e jogar uma campanha solo curta</td><td class="num">8–16 h</td></tr>
+              <tr><td>Autenticação (FEAT-25)</td><td class="num">8–16 h</td></tr>
+              <tr><td>Sessões em tempo real (FEAT-26)</td><td class="num">16–32 h</td></tr>
+              <tr><td>Relógio da vez e ausência (FEAT-27)</td><td class="num">8–16 h</td></tr>
+              <tr><td>Desconexão e substituição por IA (FEAT-28)</td><td class="num">8–16 h</td></tr>
+              <tr><th scope="row">Total das estimativas disponíveis</th><td class="num">48–96 h</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="nota">Faixas preliminares. A 4 h de trabalho por dia, as estimativas disponíveis correspondem a 12–24 dias de trabalho. FEAT-22 a 24, acabamento visual, executável, espera por retornos e correções de integração ficam fora da soma.</p>
+      </section>
+
+      <section aria-labelledby="tempo">
+        <h2 id="tempo">Tempo registrado</h2>
+        <div class="cards" id="cards"></div>
+        <p class="aviso" id="aviso"></p>
+        <noscript><p>Os totais e as tabelas de sessões são calculados pelo JavaScript deste arquivo.</p></noscript>
+        <div class="tables">
+          <section aria-labelledby="etapas">
+            <h3 id="etapas">Horas por etapa</h3>
+            <div class="table-wrap">
+              <table aria-labelledby="etapas"><thead><tr><th scope="col">Etapa</th><th scope="col" class="num">Horas</th></tr></thead><tbody id="porEtapa"></tbody></table>
+            </div>
+          </section>
+          <section aria-labelledby="historico">
+            <h3 id="historico">Sessões por data</h3>
+            <div class="table-wrap">
+              <table aria-labelledby="historico">
+                <thead><tr><th scope="col">Data</th><th scope="col">Etapa</th><th scope="col" class="num">Horas</th><th scope="col">Nota</th></tr></thead>
+                <tbody id="sessoes"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
     <script>
       const fmtH = (h) => (h === null ? '—' : h.toLocaleString('pt-BR') + ' h')
       const fmtData = (iso) => {
         const [a, m, d] = iso.split('-')
         return d + '/' + m + '/' + a
       }
-      const revisaoMarcos = document.getElementById('revisaoMarcos')
-      revisaoMarcos.dateTime = REVISAO_MARCOS
-      revisaoMarcos.textContent = fmtData(REVISAO_MARCOS)
-      const somarEstimativas = (criterios) => criterios.reduce(([min, max], [, , , , horas]) =>
-        horas ? [min + horas[0], max + horas[1]] : [min, max], [0, 0])
-      const formatarFaixa = ([min, max]) => min === max
-        ? min.toLocaleString('pt-BR')
-        : min.toLocaleString('pt-BR') + '–' + max.toLocaleString('pt-BR')
-      const formatarEstimativa = (horas) => formatarFaixa(horas) + ' h · ' +
-        formatarFaixa(horas.map((h) => h / HORAS_POR_DIA)) + ' dias de trabalho'
-
-      document.getElementById('horasPorDia').textContent = HORAS_POR_DIA
-      document.getElementById('esforcoRestante').textContent =
-        formatarEstimativa(somarEstimativas(MARCOS.flatMap(({ criterios }) => criterios)))
-      document.getElementById('marcos').innerHTML = MARCOS.map(({ titulo, criterios }, indice) => {
-        const feitos = criterios.filter(([situacao]) => situacao === 'Concluído').length
-        const percentual = Math.round(100 * feitos / criterios.length)
-        const tituloId = 'marco-' + indice
-        const grupos = Map.groupBy(criterios, ([situacao]) => situacao)
-        const itens = [...grupos].map(([situacao, etapas]) =>
-          '<h4>' + situacao + '</h4><ul>' + etapas.map(([, nome, descricao, fonte, horas]) => {
-            const referencia = fonte ? ' <a href="' + fonte + '">Registro</a>' : ''
-            const estimativa = horas ? '<p class="nota">' + formatarEstimativa(horas) + '</p>' : ''
-            return '<li><b>' + nome + '</b><p>' + descricao + referencia + '</p>' + estimativa + '</li>'
-          }).join('') + '</ul>')
-        return '<article class="marco"><header><h3 id="' + tituloId + '">' + titulo + '</h3>' +
-          '<strong>' + percentual + '%</strong></header>' +
-          '<progress aria-labelledby="' + tituloId + '" value="' + feitos + '" max="' + criterios.length + '"></progress>' +
-          '<div class="nota">' + feitos + ' de ' + criterios.length + ' critérios concluídos · ' +
-          formatarEstimativa(somarEstimativas(criterios)) + ' restantes</div>' +
-          itens.join('') + '</article>'
-      }).join('')
-
       const ordenadas = [...SESSOES].sort((a, b) => a.data.localeCompare(b.data))
       const comHoras = ordenadas.filter((s) => s.horas !== null)
       const total = comHoras.reduce((t, s) => t + s.horas, 0)
@@ -224,7 +238,7 @@
 
       document.getElementById('cards').innerHTML = [
         ['Total registrado', total.toLocaleString('pt-BR') + ' h'],
-        ['Dias trabalhados', dias.size],
+        ['Dias com sessão registrada', dias.size],
         ['Período', primeira ? fmtData(primeira) + ' → ' + fmtData(ultima) + ' (' + corridos + ' dias corridos)' : '—'],
         ['Sessões', ordenadas.length],
       ]
@@ -241,7 +255,7 @@
       document.getElementById('sessoes').innerHTML = ordenadas
         .map(
           (s) =>
-            '<tr><td>' + fmtData(s.data) + '</td><td>' + s.etapa + '</td><td class="num">' + fmtH(s.horas) +
+            '<tr><td class="data">' + fmtData(s.data) + '</td><td>' + s.etapa + '</td><td class="num">' + fmtH(s.horas) +
             '</td><td class="nota">' + s.nota + '</td></tr>',
         )
         .join('')
