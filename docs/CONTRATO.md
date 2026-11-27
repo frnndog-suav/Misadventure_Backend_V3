@@ -1,6 +1,6 @@
 # Misadventures — Contrato frontend ↔ backend
 
-> **Versão do contrato:** 1.12 · **Data:** 2026-11-27
+> **Versão do contrato:** 1.13 · **Data:** 2026-11-27
 >
 > **Arquivo compartilhado:** a mesma cópia vive no repositório do frontend e no do backend. Quem altera incrementa a versão, registra no histórico (§5) e o autor copia o arquivo inteiro para o outro lado. O protocolo completo está em [`ROADMAP.md`](ROADMAP.md) §2.
 >
@@ -48,7 +48,7 @@
 O backend informa qual versão deste contrato implementa (o endpoint é definido na seção da FEAT-01).
 
 ### 1.6 Estado e intenções
-O frontend lê o **estado** e envia **intenções** (o que o jogador quer fazer). O backend valida a intenção, aplica as regras e devolve o novo estado (ou um erro de §1.4). A proposta de transporte dos acontecimentos intermediários está na FEAT-21, conforme a decisão da P-02.
+O frontend lê o **estado** e envia **intenções** (o que o jogador quer fazer). O backend valida a intenção, aplica as regras e devolve o novo estado (ou um erro de §1.4). O transporte dos acontecimentos intermediários está definido na FEAT-21, conforme a decisão da P-02.
 
 ## 2. Glossário termo → identificador — `acordado`
 
@@ -3999,7 +3999,7 @@ Reenviar a mesma chave e o mesmo corpo validado enquanto o avanço estiver pende
 5. Preparar dois saves perto da conclusão: um com sucessora e semente que coloque IA primeiro no novo D20, outro na última dimensão. Conferir ordem, cidade inicial, progressão individual e próxima vez humana no primeiro; status congelado e fim do avanço no segundo.
 6. Entregar configuração inicial e uma permutação alternativa. Exercitar GET/PATCH/reset e uma lista inválida, comparar duas campanhas criadas antes/depois do PATCH e confirmar que a primeira conserva a configuração fotografada.
 
-### FEAT-21 — Acompanhar as vezes dos ajudantes — `proposto (BE)`
+### FEAT-21 — Acompanhar as vezes dos ajudantes — `acordado`
 
 Base: README §11.4, P-02 aprovada no ROADMAP v0.99, SPEC-FRONTEND D-67 e REQ-107 a REQ-109, e avanço da FEAT-20 (SPEC-BACKEND REQ-183 a REQ-185 e D-157). No momento 2, o frontend apresenta as vezes em sequência após a resposta HTTP. A entrega contínua por Socket.IO fica para a FEAT-26.
 
@@ -4199,3 +4199,4 @@ A T-105 começa com MSW após o acordo. A validação integrada ocorre após a i
 | 1.10 | 2026-11-27 | BE | FEAT-20 `validado` após os seis cenários da T-104 e a confirmação de `GET /health` com a versão implementada 1.09 (devlogs FE 136 e BE 110). |
 | 1.11 | 2026-11-27 | FE | FEAT-21 `proposto (FE)`: acontecimentos públicos ordenados, reprodução após HTTP e retomada. |
 | 1.12 | 2026-11-27 | BE | FEAT-21 `proposto (BE)`: payloads públicos, índices de combate, revisão monotônica, recibo de abertura e critérios para os seis cenários. |
+| 1.13 | 2026-11-27 | BE | FEAT-21 `acordado` após o frontend aceitar os seis cenários da v1.12. T-105 liberada com MSW. |
