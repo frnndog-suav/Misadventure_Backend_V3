@@ -368,6 +368,7 @@ export type TCombatUpdate = { combatId: string } & (
       vigorSpent: number
       succeeded: boolean
     }
+  | { type: 'combatRewardDelivered'; memberId: string; rewardId: string }
   | { type: 'combatEnded'; result: import('../entities/party').TCombatResult }
 )
 

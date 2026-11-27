@@ -460,6 +460,7 @@ const pendingReward = z.strictObject({
       maxCopies: copies,
     })
   ),
+  roundRobinPosition: copies.optional(),
   decisionDeadlineAt: z.null(),
 })
 const boosterQueue = z.strictObject({
@@ -675,6 +676,9 @@ const combatOutcome = z.strictObject({
   cursor: z.strictObject({ nextStep: count, nextCopy: count.optional() }),
   startingPeak: count,
   victoryPeak: count,
+  group: z
+    .strictObject({ recipients: z.array(id).min(1), nextRecipient: count })
+    .optional(),
 })
 const combatResult = z.strictObject({
   finalBoss: z.boolean().optional(),

@@ -53,7 +53,8 @@ function encounter(
   order = members,
   battleCard = card,
   maxCombatCycles?: number,
-  catalog = new Map(cards).set(battleCard.id, battleCard)
+  catalog = new Map(cards).set(battleCard.id, battleCard),
+  rewardCards: string[] = []
 ) {
   const party = makeParty({
     ...(maxCombatCycles !== undefined && {
@@ -63,6 +64,7 @@ function encounter(
     hostMemberId: members.find(({ kind }) => kind === 'human')!.id,
     turnOrder: order.map(({ id }) => id),
     turn: { memberId: initiator.id, round: 2, actionPoints: 1 },
+    rewardDecks: [{ zoneType: zone.zoneType, cards: rewardCards }],
     eventDecks: [
       { zoneType: zone.zoneType, cards: [battleCard.id], discard: [] },
     ],
@@ -650,7 +652,7 @@ describe('REQ-188 — alvos, nocaute, ressurreição e limite', () => {
         zoneId: revived ? zone.id : 'fixture.respawn',
         gold: 10,
       })
-      if (revived) expect(party.members[1].player.peak).toBe(10)
+      if (revived) expect(party.members[1].player.peak).toBe(11)
     }
   )
 
@@ -996,5 +998,414 @@ describe('REQ-188 — encerramento sem dano e turno de inimigo pulado', () => {
     expect(
       party.combatUpdates.filter(({ type }) => type === 'combatDamageResolved')
     ).toEqual([])
+  })
+})
+
+describe('REQ-189 e REQ-190 — recompensas e desfecho em grupo', () => {
+  const target = makeEnemy({
+    enemyCategory: 'boss',
+    count: 1,
+    health: 1,
+    modifiers: {
+      ...makeEnemy().modifiers,
+      celerity: 0,
+      defense: 0,
+      evasion: 0,
+    },
+  })
+
+  it('REQ-189 aplica Pico e Vigor aos sobreviventes e reserva ouro ao iniciador', () => {
+    const battle = makeCombatEventCard({
+      enemies: [target],
+      badOutcome: { text: '', steps: [] },
+      goodOutcome: {
+        text: '',
+        steps: [
+          {
+            type: 'effect',
+            effect: makeEffect({
+              cost: [],
+              activation: [
+                { kind: 'gainPeak', amount: 4 },
+                { kind: 'restoreVigor', amount: 2 },
+                { kind: 'gainGold', amount: 7 },
+              ],
+            }),
+          },
+        ],
+      },
+    })
+    const human = combatMember('human', 'human', 9, { vigor: 0, gold: 0 })
+    const ai = combatMember('ai', 'aiHelper', 8, { vigor: 0, gold: 0 })
+    const setup = encounter([human, ai], human, [human, ai], battle)
+    recruit(setup, 'ai')
+    const { party } = setup
+    expect(
+      combatAction(setup, {
+        type: 'combatAttack',
+        targetId: party.combat!.enemies[0].id,
+      }).isRight()
+    ).toBe(true)
+    expect(party.lastCombatResult?.participants).toMatchObject([
+      {
+        peakDelta: 4 + party.config.bossPeakGain,
+        vigorDelta: 2,
+        goldGranted: 7,
+      },
+      {
+        peakDelta: 4 + party.config.bossPeakGain,
+        vigorDelta: 2,
+        goldGranted: 0,
+      },
+    ])
+    expect(party.members.map(({ player }) => player.gold)).toEqual([7, 0])
+  })
+
+  it('REQ-189 divide ouro e pausa o rodízio até o humano resolver a carta', () => {
+    const loot = ['first', 'second', 'third'].map((id) =>
+      makeItemCard({ id: 'fixture.' + id })
+    )
+    const battle = makeCombatEventCard({
+      enemies: [target],
+      badOutcome: { text: '', steps: [] },
+      goodOutcome: {
+        text: '',
+        steps: [
+          {
+            type: 'effect',
+            effect: makeEffect({
+              cost: [],
+              activation: [{ kind: 'gainGold', amount: 7 }],
+            }),
+          },
+          { type: 'drawRewards', count: 3 },
+        ],
+      },
+    })
+    const filler = Array.from({ length: 10 }, (_, i) =>
+      makeItemCard({ id: 'fixture.filler-' + i })
+    )
+    const human = combatMember('human', 'human', 8, {
+      gold: 0,
+      inventory: filler.map(({ id }) => ({ cardId: id, quantity: 1 })),
+    })
+    const initiator = combatMember('initiator', 'aiHelper', 9, {
+      gold: 0,
+      automaticEventEscape: true,
+    })
+    const helper = combatMember('helper', 'aiHelper', 8, { gold: 0 })
+    const catalog = new Map(cards).set(battle.id, battle)
+    for (const item of [...loot, ...filler]) catalog.set(item.id, item)
+    const members = [initiator, human, helper]
+    const setup = encounter(
+      members,
+      initiator,
+      members,
+      battle,
+      3,
+      catalog,
+      loot.map(({ id }) => id)
+    )
+    const { party, combatId } = setup
+    expect(
+      party
+        .respondCombatInvite(
+          'human',
+          combatId,
+          party.pendingCombatDecision!.id,
+          true,
+          catalog,
+          now
+        )
+        .isRight()
+    ).toBe(true)
+    const order = party.pendingCombatDecision
+    if (order?.type === 'order')
+      expect(
+        party
+          .confirmCombatOrder(
+            'human',
+            combatId,
+            order.id,
+            order.defaultMemberIds,
+            catalog,
+            now
+          )
+          .isRight()
+      ).toBe(true)
+    expect(combatAction(setup, { type: 'escapeCombat' }).isRight()).toBe(true)
+    expect(
+      combatAction(setup, {
+        type: 'combatAttack',
+        targetId: party.combat!.enemies[0].id,
+      }).isRight()
+    ).toBe(true)
+    expect(party.members.map(({ player }) => player.gold)).toEqual([0, 3, 3])
+    expect(party.pendingRewards[0]).toMatchObject({
+      memberId: 'human',
+      cardId: loot[0].id,
+      roundRobinPosition: 1,
+    })
+    expect(party.rewardDecks[0].cards).toEqual([loot[1].id, loot[2].id])
+    expect(
+      party.combatUpdates.filter(({ type }) => type === 'combatEnded')
+    ).toHaveLength(0)
+    const first = party.pendingRewards[0].id
+    expect(
+      party
+        .resolveReward(
+          {
+            type: 'resolveReward',
+            rewardId: first,
+            choice: 'keep',
+            discard: [{ cardId: filler[0].id, copies: 1 }],
+          },
+          catalog,
+          now,
+          sequentialIds()
+        )
+        .isRight()
+    ).toBe(true)
+    expect(party.members[2].player.inventory).toEqual([
+      { cardId: loot[1].id, quantity: 1 },
+    ])
+    expect(party.pendingRewards[0]).toMatchObject({
+      memberId: 'human',
+      cardId: loot[2].id,
+      roundRobinPosition: 1,
+    })
+    expect(
+      party
+        .resolveReward(
+          {
+            type: 'resolveReward',
+            rewardId: party.pendingRewards[0].id,
+            choice: 'leave',
+          },
+          catalog,
+          now,
+          undefined
+        )
+        .isRight()
+    ).toBe(true)
+    expect(
+      party.lastCombatResult?.participants?.map(
+        ({ rewardIds }) => rewardIds.length
+      )
+    ).toEqual([0, 2, 1])
+    expect(
+      party.combatUpdates.filter(({ type }) => type === 'combatEnded')
+    ).toHaveLength(1)
+  })
+
+  it.each([true, false])(
+    'REQ-189 preserva vitória por Reflexão com elenco solo ou grupo (%s)',
+    (group) => {
+      const battle = makeCombatEventCard({
+        enemies: [
+          { ...target, modifiers: { ...target.modifiers, reflection: 1 } },
+        ],
+        goodOutcome: {
+          text: '',
+          steps: [
+            {
+              type: 'effect',
+              effect: makeEffect({
+                cost: [],
+                activation: [{ kind: 'gainGold', amount: 7 }],
+              }),
+            },
+          ],
+        },
+        badOutcome: { text: '', steps: [] },
+      })
+      const human = combatMember('human', 'human', 8, { health: 1, gold: 0 })
+      const ai = combatMember('ai', 'aiHelper', 9, {
+        automaticEventEscape: true,
+        gold: 0,
+      })
+      const setup = encounter([human, ai], human, [human, ai], battle)
+      recruit(setup, ...(group ? ['ai'] : []))
+      if (group)
+        expect(combatAction(setup, { type: 'escapeCombat' }).isRight()).toBe(
+          true
+        )
+      expect(
+        combatAction(setup, {
+          type: 'combatAttack',
+          targetId: setup.party.combat!.enemies[0].id,
+        }).isRight()
+      ).toBe(true)
+      expect(setup.party.lastCombatResult).toMatchObject({
+        resolution: 'victory',
+        playerDown: true,
+      })
+      expect(setup.party.members[0].player.gold).toBe(group ? 0 : 7)
+      if (group)
+        expect(setup.party.lastCombatResult?.participants?.[0]).toMatchObject({
+          condition: 'knockedOut',
+          goldGranted: 0,
+          respawned: true,
+          skipsNextTurn: true,
+        })
+    }
+  )
+
+  it.each(['victory', 'escaped', 'defeat'] as const)(
+    'REQ-189 registra o resultado %s na etapa do dono da missão',
+    (resolution) => {
+      const enemy = {
+        ...target,
+        modifiers: {
+          ...target.modifiers,
+          attack: 60,
+          accuracy: 100,
+          celerity: 0,
+        },
+      }
+      const quest: TZoneQuestCard = {
+        type: 'zoneQuest',
+        id: 'fixture.group-quest',
+        collectionId: 'fixture',
+        title: 'Combate',
+        summary: '',
+        rewards: [],
+        stages: [
+          {
+            type: 'combatEvent',
+            location: { type: 'zoneType', zoneType: zone.zoneType },
+            text: '',
+            combat: {
+              enemies: [enemy],
+              noEscape: false,
+              goodOutcome: { text: '', steps: [] },
+              badOutcome: { text: '', steps: [] },
+            },
+          },
+        ],
+      }
+      const questState = {
+        questId: 'quest',
+        questCardId: quest.id,
+        originZoneId: zone.id,
+        stageIndex: 0,
+      }
+      const human = combatMember('human', 'human', 9, {
+        automaticEventEscape: true,
+        openZoneQuests: [questState],
+      })
+      const ai = combatMember('ai', 'aiHelper', 8, {
+        automaticEventEscape: true,
+        openZoneQuests: [{ ...questState, status: 'inProgress' }],
+      })
+      const party = makeParty({
+        members: [human, ai],
+        hostMemberId: human.id,
+        turnOrder: [human.id, ai.id],
+        turn: { memberId: human.id, round: 2, actionPoints: 1 },
+      })
+      const catalog = new Map(cards).set(quest.id, quest)
+      expect(
+        party
+          .takeZoneQuestAction(
+            { type: 'continueQuest', questId: 'quest' },
+            catalog,
+            now,
+            sequentialIds(),
+            null
+          )
+          .isRight()
+      ).toBe(true)
+      const setup = {
+        party,
+        combatId: party.pendingCombatDecision!.combatId,
+        catalog,
+      }
+      recruit(setup, 'ai')
+      expect(combatAction(setup, { type: 'escapeCombat' }).isRight()).toBe(true)
+      const turn = party.combat!.turn
+      const action =
+        resolution === 'victory'
+          ? {
+              type: 'combatAttack' as const,
+              targetId: party.combat!.enemies[0].id,
+            }
+          : {
+              type:
+                resolution === 'escaped'
+                  ? ('escapeCombat' as const)
+                  : ('endCombatTurn' as const),
+            }
+      expect(combatAction(setup, action).isRight()).toBe(true)
+      expect(party.lastCombatResult?.resolution).toBe(resolution)
+      expect(party.members[0].player.openZoneQuests?.[0].status).toBe(
+        resolution === 'victory' ? 'completed' : 'ready'
+      )
+      expect(party.members[1].player.openZoneQuests?.[0].status).toBe(
+        'inProgress'
+      )
+      expect(party.questAttempt).toBeUndefined()
+      expect(
+        party
+          .takeCombatAction(
+            { ...action, combatId: setup.combatId, turnId: turn.id },
+            catalog,
+            now
+          )
+          .isLeft()
+      ).toBe(true)
+    }
+  )
+
+  it('REQ-190 concede o Pico de Chefe ao sobrevivente após a fuga do iniciador', () => {
+    const human = combatMember('human', 'human', 9, {
+      automaticEventEscape: true,
+    })
+    const ai = combatMember('ai', 'aiHelper', 8, { vigor: 0 })
+    const dimension = makeDimensionCard({
+      completion: {
+        zoneTitle: zone.title,
+        requirement: [],
+        grandPrize: { cards: [], gold: 5 },
+        finalBoss: { ...card, noEscape: false, enemies: [target] },
+      },
+    })
+    const party = makeParty({
+      members: [human, ai],
+      hostMemberId: human.id,
+      turnOrder: [human.id, ai.id],
+      turn: { memberId: human.id, round: 2, actionPoints: 1 },
+    })
+    const catalog = new Map(cards).set(dimension.id, dimension)
+    expect(
+      party
+        .completeDimension(zone, dimension, catalog, now, sequentialIds())
+        .isRight()
+    ).toBe(true)
+    const setup = {
+      party,
+      combatId: party.pendingCombatDecision!.combatId,
+      catalog,
+    }
+    recruit(setup, 'ai')
+    expect(combatAction(setup, { type: 'escapeCombat' }).isRight()).toBe(true)
+    expect(
+      combatAction(setup, {
+        type: 'combatAttack',
+        targetId: party.combat!.enemies[0].id,
+      }).isRight()
+    ).toBe(true)
+    expect(party.lastCombatResult).toMatchObject({
+      finalBoss: true,
+      resolution: 'victory',
+      participants: [
+        { condition: 'escaped' },
+        {
+          condition: 'standing',
+          peakDelta: party.config.bossPeakGain,
+          vigorDelta: 0,
+        },
+      ],
+    })
   })
 })

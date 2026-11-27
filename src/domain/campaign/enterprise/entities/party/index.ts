@@ -516,6 +516,7 @@ type CombatOutcome = {
   cursor: OutcomeCursor
   startingPeak: number
   victoryPeak: number
+  group?: { recipients: string[]; nextRecipient: number }
 }
 
 export type TDimensionCompletionResult = {
@@ -2160,7 +2161,8 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     encounterId: string,
     succeeded: boolean,
     counter: 'randomEventSuccesses' | 'combatVictories' | null,
-    cards: ReadonlyMap<string, TCard>
+    cards: ReadonlyMap<string, TCard>,
+    ownsAttempt = true
   ): TPlayerState {
     if (!player.openZoneQuests?.length && !player.openGenericQuests?.length)
       return player
@@ -2181,6 +2183,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       ...(player.openZoneQuests && {
         openZoneQuests: player.openZoneQuests.map((quest) => {
           if (
+            ownsAttempt &&
             attempt?.encounterId === encounterId &&
             quest.questId === attempt.questId &&
             quest.stageIndex === attempt.stageIndex &&
@@ -5164,52 +5167,80 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       return false
     const defeated =
       !won && participants.some(({ condition }) => condition === 'knockedOut')
-    const zoneType = this.props.combatZone
+    const initiatorZone = cards.get(
+      this.props.members[this.combatMemberIndex(state.memberId)].player.zoneId
+    )
+    const zoneType =
+      this.props.combatZone ??
+      (state.finalBoss && initiatorZone?.type === 'zone'
+        ? initiatorZone.zoneType
+        : undefined)
     this.props.combat = null
     this.props.combatZone = undefined
+    const standing = cycleOrder(this.groupInitiative(state, cards))
+    const recipients = standing.includes(state.memberId)
+      ? [state.memberId]
+      : standing
+    const activations = (state.card.goodOutcome.steps ?? []).flatMap((step) =>
+      step.type === 'effect' ? step.effect.activation : []
+    )
+    const explicitPeak = activations.flatMap((effect) =>
+      effect.kind === 'gainPeak' ? [effect.amount] : []
+    )
+    const victoryPeak =
+      explicitPeak.reduce((total, amount) => total + amount, 0) +
+      state.card.enemies.reduce(
+        (total, enemy) =>
+          total +
+          enemy.count *
+            (enemy.enemyCategory === 'boss'
+              ? this.config.bossPeakGain
+              : explicitPeak.length
+                ? 0
+                : enemy.enemyCategory === 'elite'
+                  ? 3
+                  : 1),
+        0
+      )
+    const victoryVigor = activations.reduce(
+      (total, effect) =>
+        total + (effect.kind === 'restoreVigor' ? effect.amount : 0),
+      0
+    )
+    const gold = activations.reduce(
+      (total, effect) =>
+        total + (effect.kind === 'gainGold' ? effect.amount : 0),
+      0
+    )
     const results = participants.map((entry) => {
       const { memberId, condition } = entry
       const index = this.combatMemberIndex(memberId)
       const before = this.props.members[index].player
-      let player: TPlayerState = {
-        ...before,
-        abilityUsage: undefined,
-        statuses: combatStatusesAfterEnd(before.statuses, won),
-      }
-      if (defeated && condition === 'knockedOut' && zoneType !== undefined) {
-        player = this.resolveOutcomeSteps(
-          player,
-          state.card.badOutcome.steps ?? [],
-          { nextStep: 0 },
-          zoneType,
-          state.card.id,
-          state.id,
-          'setback',
-          { type: 'combatEvent', combatId: state.id },
-          cards
-        ).player
-        player = { ...player, health: 0, down: true }
-      }
-      player = this.recordQuestOutcome(
-        player,
+      const rewarded = won && condition === 'standing'
+      const peak = before.peak + (rewarded ? victoryPeak : 0)
+      const player = this.recordQuestOutcome(
+        {
+          ...before,
+          peak,
+          vigor: Math.min(peak, before.vigor + (rewarded ? victoryVigor : 0)),
+          abilityUsage: undefined,
+          statuses: combatStatusesAfterEnd(before.statuses, won),
+        },
         state.id,
         won,
-        won && condition === 'standing' ? 'combatVictories' : null,
-        cards
+        rewarded ? 'combatVictories' : null,
+        cards,
+        memberId === state.memberId
       )
       this.replaceActor(index, player)
-      if (condition === 'knockedOut')
-        this.respawn(index, this.savedAt, cards, state.id, undefined, false)
-      const after = this.props.members[index].player
       return {
         ...entry,
-        peakDelta: entry.peakDelta + after.peak - before.peak,
-        vigorDelta: entry.vigorDelta + after.vigor - before.vigor,
+        peakDelta: entry.peakDelta + player.peak - before.peak,
+        vigorDelta: entry.vigorDelta + player.vigor - before.vigor,
         goldGranted: 0,
         rewardIds: [],
-        respawned: condition === 'knockedOut',
-        skipsNextTurn:
-          condition === 'knockedOut' && after.skipNextTurn === true,
+        respawned: false,
+        skipsNextTurn: false,
       }
     })
     const initiator = results.find(
@@ -5232,14 +5263,216 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       peakDelta: initiator.peakDelta,
       participants: results,
     }
-    if (zoneType !== undefined)
-      this.releaseEventCard(state.id, zoneType, state.card.id)
+    if (won && recipients.length) this.grantGroupCombatGold(recipients, gold)
+    const deliveryMembers = won
+      ? recipients
+      : defeated
+        ? results
+            .filter(({ condition }) => condition === 'knockedOut')
+            .map(({ memberId }) => memberId)
+        : []
+    if (zoneType !== undefined && deliveryMembers.length) {
+      this.props.combatOutcome = {
+        card: state.card,
+        zoneType,
+        cursor: { nextStep: 0 },
+        startingPeak: 0,
+        victoryPeak: 0,
+        group: { recipients: deliveryMembers, nextRecipient: 0 },
+      }
+      this.finishGroupCombatOutcome(cards)
+    } else {
+      this.closeGroupCombatOutcome(state.card, zoneType, cards)
+    }
+    return true
+  }
+
+  private grantGroupCombatGold(recipients: readonly string[], amount: number) {
+    const share = Math.floor(amount / recipients.length)
+    for (const entry of this.props.lastCombatResult!.participants!) {
+      if (!recipients.includes(entry.memberId)) continue
+      const index = this.combatMemberIndex(entry.memberId)
+      const player = this.props.members[index].player
+      const granted = Math.min(
+        share,
+        Math.max(
+          0,
+          capacitiesOf(this.config, player.expansions).purse - player.gold
+        )
+      )
+      entry.goldGranted += granted
+      this.replaceActor(index, { ...player, gold: player.gold + granted })
+    }
+  }
+
+  private finishGroupCombatOutcome(
+    cards: ReadonlyMap<string, TCard>,
+    ids?: IdGenerator
+  ) {
+    const pending = this.props.combatOutcome!
+    const { card, zoneType } = pending
+    const group = pending.group!
+    const result = this.props.lastCombatResult!
+    const won = result.resolution === 'victory'
+    const steps = (won ? card.goodOutcome : card.badOutcome).steps ?? []
+    while (group.nextRecipient < group.recipients.length) {
+      const { nextStep, nextCopy = 0 } = pending.cursor
+      const step = steps[nextStep]
+      if (!step) {
+        if (won) break
+        group.nextRecipient++
+        pending.cursor = { nextStep: 0 }
+        continue
+      }
+      const memberId = group.recipients[group.nextRecipient]
+      const index = this.combatMemberIndex(memberId)
+      const before = this.props.members[index].player
+      let player = before
+      let drawnGold = 0
+      if (step.type === 'effect') {
+        const activation = won
+          ? step.effect.activation.filter(
+              ({ kind }) =>
+                kind !== 'gainPeak' &&
+                kind !== 'restoreVigor' &&
+                kind !== 'gainGold'
+            )
+          : step.effect.activation
+        if (activation.length)
+          player = this.applyEventOutcomeEffect(
+            player,
+            { ...step.effect, activation },
+            card.id,
+            nextStep,
+            result.combatId,
+            won ? 'success' : 'setback',
+            ids,
+            true
+          )
+        pending.cursor = { nextStep: nextStep + 1 }
+      } else {
+        const count =
+          step.type === 'drawRewards'
+            ? step.count
+            : step.type === 'grantReward'
+              ? step.copies
+              : 1
+        if (nextCopy >= count) {
+          pending.cursor = { nextStep: nextStep + 1 }
+          continue
+        }
+        pending.cursor =
+          nextCopy + 1 < count
+            ? { nextStep, nextCopy: nextCopy + 1 }
+            : { nextStep: nextStep + 1 }
+        const delivered = this.resolveOutcomeSteps(
+          player,
+          [
+            step.type === 'drawRewards'
+              ? { ...step, count: 1 }
+              : step.type === 'grantReward'
+                ? { ...step, copies: 1 }
+                : step,
+          ],
+          { nextStep: 0 },
+          zoneType,
+          card.id,
+          result.combatId,
+          won ? 'success' : 'setback',
+          { type: 'combatEvent', combatId: result.combatId },
+          cards,
+          ids,
+          memberId,
+          won
+            ? (amount) => {
+                drawnGold = amount
+              }
+            : undefined
+        )
+        player = delivered.player
+        const reward = this.props.pendingReward
+        const delivery = player.lastRewardDelivery
+        if (reward || delivery !== before.lastRewardDelivery) {
+          if (won) {
+            if (reward && group.recipients.length > 1)
+              reward.roundRobinPosition = group.nextRecipient + 1
+            group.nextRecipient =
+              (group.nextRecipient + 1) % group.recipients.length
+          }
+          if (!reward && delivery)
+            this.recordGroupCombatReward(memberId, delivery.rewardId)
+        }
+      }
+      const entry = result.participants!.find(
+        (entry) => entry.memberId === memberId
+      )!
+      entry.peakDelta += player.peak - before.peak
+      entry.vigorDelta += player.vigor - before.vigor
+      if (memberId === result.memberId) result.peakDelta = entry.peakDelta
+      this.replaceActor(
+        index,
+        won ? player : { ...player, health: 0, down: true }
+      )
+      if (drawnGold) this.grantGroupCombatGold(group.recipients, drawnGold)
+      if (this.props.pendingReward) {
+        if (this.props.members[index].kind === 'human') return
+        this.settleReward(
+          {
+            type: 'resolveReward',
+            rewardId: this.props.pendingReward.id,
+            choice: 'leave',
+          },
+          cards,
+          this.savedAt,
+          ids
+        )
+      }
+    }
+    this.closeGroupCombatOutcome(card, zoneType, cards, ids)
+  }
+
+  private recordGroupCombatReward(memberId: string, rewardId: string) {
+    const result = this.props.lastCombatResult!
+    result
+      .participants!.find((entry) => entry.memberId === memberId)!
+      .rewardIds.push(rewardId)
+    this.recordCombatUpdates({
+      type: 'combatRewardDelivered',
+      combatId: result.combatId,
+      memberId,
+      rewardId,
+    })
+  }
+
+  private closeGroupCombatOutcome(
+    card: TCombatEventCard,
+    zoneType: TEventDeck['zoneType'] | undefined,
+    cards: ReadonlyMap<string, TCard>,
+    ids?: IdGenerator
+  ) {
+    const result = this.props.lastCombatResult!
+    for (const entry of result.participants!) {
+      if (entry.condition !== 'knockedOut') continue
+      const index = this.combatMemberIndex(entry.memberId)
+      const before = this.props.members[index].player
+      this.respawn(index, this.savedAt, cards, result.combatId, ids, false)
+      const after = this.props.members[index].player
+      entry.peakDelta += after.peak - before.peak
+      entry.vigorDelta += after.vigor - before.vigor
+      entry.respawned = true
+      entry.skipsNextTurn = after.skipNextTurn === true
+    }
+    result.peakDelta = result.participants!.find(
+      ({ memberId }) => memberId === result.memberId
+    )!.peakDelta
+    this.props.combatOutcome = null
+    if (zoneType !== undefined && !result.finalBoss)
+      this.releaseEventCard(result.combatId, zoneType, card.id)
     this.recordCombatUpdates({
       type: 'combatEnded',
-      combatId: state.id,
+      combatId: result.combatId,
       result: this.lastCombatResult!,
     })
-    return true
   }
 
   private startCombat(
@@ -5559,7 +5792,9 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     phase: 'success' | 'setback',
     source: TPendingReward['source'],
     cards: ReadonlyMap<string, TCard>,
-    ids?: IdGenerator
+    ids?: IdGenerator,
+    memberId = this.turn.memberId.toString(),
+    distributeGold?: (amount: number) => void
   ): { player: TPlayerState; cursor?: OutcomeCursor } {
     const firstStep = cursor.nextStep
     for (let nextStep = firstStep; nextStep < steps.length; nextStep++) {
@@ -5595,6 +5830,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           case 'drawRewards': {
             const drawn = this.drawReward(zoneType)
             if (drawn.type === 'gold') {
+              if (distributeGold) {
+                distributeGold(drawn.amount)
+                continue
+              }
               player = {
                 ...player,
                 gold: Math.min(
@@ -5635,7 +5874,12 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         if (!reward) continue
         const rewardCard = cards.get(reward.cardId)
         if (rewardCard?.type === 'mount') {
-          player = this.deliverMountReward(player, reward, ids)
+          player = this.deliverMountReward(
+            player,
+            reward,
+            ids,
+            this.props.members[this.combatMemberIndex(memberId)].id
+          )
           continue
         }
         if (
@@ -5658,7 +5902,14 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
           }
           continue
         }
-        this.openReward(player, rewardCard, reward.origin, source, ids)
+        this.props.pendingReward = this.makePendingReward(
+          player,
+          rewardCard,
+          reward.origin,
+          source,
+          ids,
+          memberId
+        )
         return { player, cursor: { nextStep, nextCopy: copy + 1 } }
       }
     }
@@ -5849,10 +6100,23 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     at: Date,
     ids: IdGenerator | undefined
   ): Either<TRewardRefusal, void> {
+    const settled = this.settleReward(action, cards, at, ids)
+    if (settled.isRight() && this.props.combatOutcome?.group)
+      this.finishGroupCombatOutcome(cards, ids)
+    return settled
+  }
+
+  private settleReward(
+    action: TResolveRewardAction,
+    cards: ReadonlyMap<string, TCard>,
+    at: Date,
+    ids: IdGenerator | undefined
+  ): Either<TRewardRefusal, void> {
     const reward = this.pendingRewards.find(({ id }) => id === action.rewardId)
     if (!reward) return left('staleReward')
     if (
       reward.source.type !== 'grandPrize' &&
+      !this.props.combatOutcome?.group &&
       reward.memberId !== this.turn.memberId.toString()
     )
       return left('staleReward')
@@ -6036,7 +6300,12 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.replaceActor(index, player)
       this.openNextBoosterReward(index, source, cards, ids)
     } else if (source.type === 'combatEvent') {
-      this.finishCombatOutcome(index, player, cards, ids)
+      if (this.props.combatOutcome?.group) {
+        this.replaceActor(index, player)
+        this.recordGroupCombatReward(reward.memberId, reward.id)
+      } else {
+        this.finishCombatOutcome(index, player, cards, ids)
+      }
     } else if (source.type === 'quest' && delivery) {
       this.deliverQuestRewards(index, player, delivery, source, cards, ids)
     } else {

@@ -139,6 +139,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 119 | planejamento | [Pausa antes do multiplayer online](119-pausa-antes-do-multiplayer.md) | concluída |
 | 120 | T-113 | [Recrutamento e elenco](120-T-113-recrutamento-e-elenco.md) | concluída |
 | 121 | T-114 | [Ciclos de combate em grupo](121-T-114-ciclos-de-combate-em-grupo.md) | concluída |
+| 122 | T-115 | [Recompensas e desfecho de combate em grupo](122-T-115-recompensas-e-desfecho-em-grupo.md) | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).

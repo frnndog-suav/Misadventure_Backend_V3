@@ -334,7 +334,10 @@ describe('DrizzlePartyMapper', () => {
     expect(restored.pendingRewards).toEqual(party.pendingRewards)
   })
 
-  it('REQ-123: preserva recompensa de vitória pendente e queda por Reflexão', () => {
+  it.each([
+    undefined,
+    { recipients: ['member-1', 'member-2'], nextRecipient: 1 },
+  ])('REQ-123/REQ-189 preserva a entrega pendente e o cursor: %j', (group) => {
     const card = makeCombatEventCard({
       goodOutcome: {
         text: 'Compre uma recompensa.',
@@ -369,6 +372,7 @@ describe('DrizzlePartyMapper', () => {
         cursor: { nextStep: 0, nextCopy: 1 },
         startingPeak: 10,
         victoryPeak: 12,
+        ...(group && { group }),
       },
       pendingReward: {
         id: 'reward',
@@ -381,6 +385,7 @@ describe('DrizzlePartyMapper', () => {
           { cardId: 'fixture.silver-fish', space: 'inventory', maxCopies: 1 },
         ],
         decisionDeadlineAt: null,
+        ...(group && { roundRobinPosition: 1 }),
       },
       eventDecks: [{ zoneType: 'urban', cards: [], discard: [] }],
     })
@@ -395,7 +400,11 @@ describe('DrizzlePartyMapper', () => {
     expect(restored.pendingRewards).toEqual(party.pendingRewards)
     expect(restored.eventDecks).toEqual(party.eventDecks)
     expect(DrizzlePartyMapper.toDrizzle(restored).state).toMatchObject({
-      combatOutcome: { card, cursor: { nextStep: 0, nextCopy: 1 } },
+      combatOutcome: {
+        card,
+        cursor: { nextStep: 0, nextCopy: 1 },
+        ...(group && { group }),
+      },
     })
   })
 

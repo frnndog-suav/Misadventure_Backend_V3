@@ -34,6 +34,7 @@ export type TPendingReward = {
   destination: 'inventory' | 'tcgFolder'
   /** Uma entrada por carta e espaço (REQ-159), em ordem de `cardId` e depois principal → montaria. */
   discardOptions: { cardId: string; space: TReceiveSpace; maxCopies: number }[]
+  roundRobinPosition?: number
   decisionDeadlineAt: null
 }
 

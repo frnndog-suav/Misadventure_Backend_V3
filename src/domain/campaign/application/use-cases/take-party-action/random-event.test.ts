@@ -1637,6 +1637,221 @@ describe('TakePartyActionUseCase — chefe final (T-83)', () => {
     })
   })
 
+  it.each([
+    { successor: true, reflection: false },
+    { successor: false, reflection: false },
+    { successor: false, reflection: true },
+  ])(
+    'REQ-190 conclui o chefe em grupo ($successor, $reflection)',
+    async ({ successor, reflection }) => {
+      const next = makeDimensionCard({
+        id: 'fixture-next.dimension',
+        collectionId: 'fixture-next',
+        releaseOrder: 2,
+      })
+      const city = makeUrbanZoneCard({
+        id: 'fixture-next.city',
+        collectionId: next.collectionId,
+      })
+      const game = setup({
+        completion: {
+          ...completion,
+          grandPrize: { cards: [{ cardId: potion.id, copies: 1 }], gold: 5 },
+          finalBoss: {
+            ...completion.finalBoss,
+            enemies: [
+              {
+                ...enemy,
+                modifiers: {
+                  ...enemy.modifiers,
+                  reflection: reflection ? 1 : 0,
+                },
+              },
+            ],
+          },
+        },
+        actionPoints: 2,
+        rewardConfig: { ...GAME_CONFIG_DEFAULTS, inventoryCapacity: 1 },
+        player: {
+          completionItems: items,
+          automaticEventEscape: true,
+          inventory: [{ cardId: ore.id, quantity: 1 }],
+          modifiers: { ...makePlayerState().modifiers, celerity: 10 },
+        },
+        otherMember: makePlayerState(
+          reflection ? { health: 1, baseHealth: 1, peak: 0, vigor: 0 } : {}
+        ),
+        otherMemberKind: 'aiHelper',
+        additionalCards: [shard, next, city],
+        publishedCollections: successor ? [next.collectionId] : [],
+      })
+      const party = game.party()
+      const dimension = game.catalog.cards.find(
+        ({ id }) => id === party.dimension.dimensionCardId
+      )!
+      if (dimension.type !== 'dimension') throw new Error('Dimensão ausente')
+      const cards = new Map(game.catalog.cards.map((card) => [card.id, card]))
+      const ids = sequentialIds()
+      const at = fixedClock('2026-11-20T12:00:00Z').now()
+      expect(
+        party.completeDimension(harbor, dimension, cards, at, ids).isRight()
+      ).toBe(true)
+      const decision = party.pendingCombatDecision!
+      expect(
+        party
+          .confirmCombatRoster(
+            'member-1',
+            decision.combatId,
+            decision.id,
+            ['member-2'],
+            cards,
+            at
+          )
+          .isRight()
+      ).toBe(true)
+      const attack = () => ({
+        type: 'combatAttack',
+        combatId: party.combat!.id,
+        turnId: party.combat!.turn.id,
+        targetId: party.combat!.enemies[0].id,
+      })
+      const battle = party.combat!
+      await game.accept({
+        type: 'escapeCombat',
+        combatId: battle.id,
+        turnId: battle.turn.id,
+      })
+      const won = await game.accept(attack())
+      expect(
+        won.lastCombatResult?.participants?.map(({ condition }) => condition)
+      ).toEqual(['escaped', reflection ? 'knockedOut' : 'standing'])
+      expect(won.lastCombatResult?.participants?.[1]?.respawned).toBe(
+        reflection
+      )
+      expect(won.lastDimensionCompletion).toMatchObject({
+        finalBossDefeated: true,
+        members: [
+          { peakDelta: 25, gold: 5 },
+          { peakDelta: 25, gold: 5 },
+        ],
+        next: { type: successor ? 'nextDimension' : 'frozen' },
+      })
+      expect(won.pendingRewards).toMatchObject([
+        { memberId: 'member-1', source: { type: 'grandPrize' } },
+      ])
+      expect(won.members[1].player.peak).toBe(
+        reflection ? 25 : 35 + won.config.bossPeakGain
+      )
+    }
+  )
+
+  it('REQ-190 mant?m o respawn e a conclusão pendentes durante a entrega do chefe', async () => {
+    const game = setup({
+      completion: {
+        ...completion,
+        finalBoss: {
+          ...completion.finalBoss,
+          noEscape: true,
+          enemies: [
+            {
+              ...enemy,
+              behavior: 'hunter',
+              modifiers: {
+                ...enemy.modifiers,
+                attack: 60,
+                accuracy: 100,
+                celerity: 8,
+              },
+            },
+          ],
+        },
+      },
+      actionPoints: 2,
+      rewardConfig: { ...GAME_CONFIG_DEFAULTS, inventoryCapacity: 1 },
+      player: {
+        completionItems: items,
+        inventory: [{ cardId: ore.id, quantity: 1 }],
+        modifiers: { ...makePlayerState().modifiers, celerity: 9 },
+      },
+      otherMember: makePlayerState({
+        health: 11,
+        modifiers: { ...makePlayerState().modifiers, evasion: 0 },
+      }),
+      otherMemberKind: 'aiHelper',
+      additionalCards: [shard],
+    })
+    const party = game.party()
+    const dimension = game.catalog.cards.find(
+      ({ id }) => id === party.dimension.dimensionCardId
+    )!
+    if (dimension.type !== 'dimension') throw new Error('Dimensão ausente')
+    const cards = new Map(game.catalog.cards.map((card) => [card.id, card]))
+    const ids = sequentialIds()
+    const at = fixedClock('2026-11-20T12:00:00Z').now()
+    expect(
+      party.completeDimension(harbor, dimension, cards, at, ids).isRight()
+    ).toBe(true)
+    const decision = party.pendingCombatDecision!
+    expect(
+      party
+        .confirmCombatRoster(
+          'member-1',
+          decision.combatId,
+          decision.id,
+          ['member-2'],
+          cards,
+          at
+        )
+        .isRight()
+    ).toBe(true)
+    Object.assign(party.combatSnapshot().combat!.card, {
+      goodOutcome: {
+        text: '',
+        steps: [{ type: 'grantReward', cardId: potion.id, copies: 1 }],
+      },
+    })
+    const initial = party.combat!
+    await game.refuse(
+      { type: 'escapeCombat', combatId: initial.id, turnId: initial.turn.id },
+      { reason: 'escapeForbidden' }
+    )
+    await game.accept({
+      type: 'endCombatTurn',
+      combatId: initial.id,
+      turnId: initial.turn.id,
+    })
+    const battle = party.combat!
+    await game.accept({
+      type: 'combatAttack',
+      combatId: battle.id,
+      turnId: battle.turn.id,
+      targetId: battle.enemies[0].id,
+    })
+    expect(party.lastCombatResult?.participants?.[1]).toMatchObject({
+      condition: 'knockedOut',
+      respawned: false,
+    })
+    expect(party.members[1].player.health).toBe(0)
+    expect(party.dimension.dimensionCardId).toBe(dimension.id)
+    expect(party.lastDimensionCompletion).toBeNull()
+    expect(game.playerState().completionItems).toEqual(items)
+    const rewardId = party.pendingRewards[0].id
+    await game.accept({ type: 'resolveReward', rewardId, choice: 'leave' })
+    expect(party.lastCombatResult?.participants?.[1]).toMatchObject({
+      condition: 'knockedOut',
+      respawned: true,
+      skipsNextTurn: true,
+    })
+    expect(party.status).toBe('frozen')
+    expect(
+      party.lastDimensionCompletion?.members.map(({ peakDelta }) => peakDelta)
+    ).toEqual([25, 25])
+    expect(party.combatUpdates.map(({ type }) => type)).toEqual([
+      'combatRewardDelivered',
+      'combatEnded',
+    ])
+  })
+
   it.each([0, 37])(
     'REQ-165: aplica bossPeakGain = %i por chefe em evento',
     async (bossPeakGain) => {
@@ -1846,6 +2061,7 @@ function setup({
   dimensionEffects = [],
   completion,
   otherMember,
+  otherMemberKind = 'human',
   publishedCollections = [],
   zone = harbor,
 }: {
@@ -1866,6 +2082,7 @@ function setup({
   dimensionEffects?: ReturnType<typeof makeDimensionCard>['effects']
   completion?: ReturnType<typeof makeDimensionCard>['completion']
   otherMember?: TPlayerState
+  otherMemberKind?: 'human' | 'aiHelper'
   publishedCollections?: string[]
   zone?: typeof harbor
 } = {}) {
@@ -1903,7 +2120,7 @@ function setup({
   if (otherMember) {
     members.push(
       PartyMember.create(
-        { characterName: 'Rui', kind: 'human', player: otherMember },
+        { characterName: 'Rui', kind: otherMemberKind, player: otherMember },
         new UniqueEntityID('member-2')
       )
     )

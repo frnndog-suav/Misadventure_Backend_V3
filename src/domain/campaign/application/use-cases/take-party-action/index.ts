@@ -730,7 +730,9 @@ export class TakePartyActionUseCase {
           this.clock.now(),
           this.ids,
           bossVictory?.type === 'combatEnded'
-            ? bossVictory.result.peakDelta
+            ? bossVictory.result.participants
+              ? 0
+              : bossVictory.result.peakDelta
             : null,
           turnBeforeAction
         )
@@ -795,7 +797,10 @@ export class TakePartyActionUseCase {
     const ids = new Set([
       ...(dimension?.completion?.grandPrize.cards.map(({ cardId }) => cardId) ??
         []),
-      ...(player?.openZoneQuests?.map(({ questCardId }) => questCardId) ?? []),
+      ...party.members.flatMap(
+        ({ player }) =>
+          player.openZoneQuests?.map(({ questCardId }) => questCardId) ?? []
+      ),
       ...(reservedCardId ? [reservedCardId] : []),
       ...(questStage?.type === 'randomEvent' ? [questStage.eventCardId] : []),
       ...(deck?.cards.map(({ cardId }) => cardId) ?? []),
