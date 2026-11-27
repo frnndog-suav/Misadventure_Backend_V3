@@ -41,3 +41,10 @@ Nenhum aviso: o arquivo veio **do** frontend e a adaptação é local; nada para
 ## Commit sugerido
 
 `docs/registro de tempo (tempo.html) e passo na skill registrar-etapa`
+
+## Atualização de 2026-11-27
+
+- **Situação** — concluída. Horas a preencher pelo autor.
+- **Arquivo alterado** — `tempo.html` detalha as etapas dos três marcos, indica a T-91 como concluída e a T-104 como aguardando validação. As faixas preliminares somam 49–98 h. A conversão usa 4 h por dia de trabalho e desconsidera a espera pelo retorno integrado.
+- **Verificação** — scripts executados no Node com DOM simulado. Conferidos total, subtotais, percentuais, links locais e quantidade de sessões renderizadas. Para conferência visual, abrir `tempo.html` e verificar a faixa geral e a T-104 sob **Aguardando validação**.
+- **Ponto de retomada** — aguardar o resultado da T-104 antes de registrar a FEAT-20 como validada, conforme devlog 110 e ROADMAP v0.97.

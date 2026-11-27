@@ -21,33 +21,36 @@
     <title>Misadventures — Tempo de desenvolvimento (backend)</title>
     <script>
       // Atualize a data e os critérios ao revisar o progresso dos marcos.
-      const REVISAO_MARCOS = '2026-11-26'
+      const REVISAO_MARCOS = '2026-11-27'
+      const HORAS_POR_DIA = 4
+      // Campos de cada etapa: situação, título, descrição, registro e faixa restante em horas.
       const MARCOS = [
         {
           titulo: '1. Campanha solo',
           criterios: [
-            [true, 'Criar, salvar e retomar uma partida solo', '../ROADMAP.md'],
-            [true, 'Explorar, jogar turnos, resolver encontros e progredir em missões', '../ROADMAP.md'],
-            [true, 'Validar conclusão da dimensão e chefe final com conteúdo de teste', '103-T-86-campanhas-da-feat-19.md'],
-            [false, 'Preparar uma dimensão jogável e concluir uma campanha a partir de um save novo'],
+            ['Concluído', 'Criação e retomada da partida', 'A criação prepara o mapa e a classe escolhida. O jogador pode encerrar a sessão e retomá-la com o progresso salvo.', '../ROADMAP.md'],
+            ['Concluído', 'Exploração, turnos e missões', 'O jogador se movimenta, gasta pontos de ação, resolve encontros e avança nos objetivos da campanha.', '../ROADMAP.md'],
+            ['Concluído', 'Chefe final e passagem de dimensão (T-86)', 'As campanhas de teste cobriram o chefe final, a falta de espaço para o prêmio, a passagem e o congelamento do save.', '103-T-86-campanhas-da-feat-19.md'],
+            ['A fazer', 'Campanha curta jogável', 'Preparar e ajustar o conteúdo de uma dimensão curta. Criar um save pelo fluxo normal e jogar até concluir a dimensão.', null, [8, 16]],
           ],
         },
         {
           titulo: '2. Um humano com companheiros de IA',
           criterios: [
-            [true, 'Criar o grupo com ajudantes e projetar a ordem de turnos (T-88)', '../SPEC-BACKEND.md'],
-            [true, 'Executar as decisões e ações dos ajudantes (T-89)', '../SPEC-BACKEND.md'],
-            [true, 'Avançar automaticamente e recuperar uma partida interrompida (T-90)', '109-T-90-avanco-automatico-e-recuperacao.md'],
-            [false, 'Verificar campanhas e tempo de resposta na API (T-91), incluindo uma jogada com três ajudantes', '../SPEC-BACKEND.md'],
+            ['Concluído', 'Criação e ordem dos ajudantes (T-88)', 'A criação aceita ajudantes, sorteia classes e ordena os membros por D20. Saves antigos continuam abrindo com seu progresso.', '107-T-88-criacao-com-ajudantes.md'],
+            ['Concluído', 'Decisões dos ajudantes (T-89)', 'Os ajudantes escolhem ações disponíveis na própria vez conforme as prioridades persistidas na campanha.', '108-T-89-configuracao-e-politica-da-ia.md'],
+            ['Concluído', 'Avanço automático e recuperação (T-90)', 'O backend executa as vezes da IA até devolver a vez ao humano. Em caso de interrupção, a sessão pode retomar do ponto salvo sem reaplicar a jogada.', '109-T-90-avanco-automatico-e-recuperacao.md'],
+            ['Concluído', 'Campanhas de teste e desempenho (T-91)', 'Seis cenários foram verificados no backend. Em uma medição local com cinco ajudantes, abrir a sessão levou 435 ms e encerrar o turno levou 488 ms.', '110-T-91-campanhas-e-entrega.md'],
+            ['Aguardando validação', 'Validação integrada (T-104)', 'O frontend precisa rodar os seis cenários contra a API real. Após o retorno, o backend revisa os resultados e registra a validação se os cenários passarem.', '110-T-91-campanhas-e-entrega.md', [1, 2]],
           ],
         },
         {
           titulo: '3. Multiplayer online',
           criterios: [
-            [false, 'Autenticar jogadores (FEAT-25)', '../ROADMAP.md'],
-            [false, 'Iniciar uma sessão com vários humanos e sincronizar em tempo real (FEAT-26)', '../ROADMAP.md'],
-            [false, 'Aplicar prazos de turno e tratar jogadores ausentes (FEAT-27)', '../ROADMAP.md'],
-            [false, 'Tratar desconexão com IA assumindo o personagem (FEAT-28)', '../ROADMAP.md'],
+            ['A fazer', 'Autenticação (FEAT-25)', 'Definir e implementar o acesso por usuário e as permissões do papel de administrador.', '../ROADMAP.md', [8, 16]],
+            ['A fazer', 'Sessões em tempo real (FEAT-26)', 'Permitir vários humanos no grupo, aplicar as permissões do anfitrião e verificar a sincronização via Socket.IO com múltiplos clientes.', '../ROADMAP.md', [16, 32]],
+            ['A fazer', 'Prazos de turno e ausências (FEAT-27)', 'Aplicar o prazo da vez e verificar o avanço da partida quando um jogador estiver ausente.', '../ROADMAP.md', [8, 16]],
+            ['A fazer', 'Desconexão e substituição por IA (FEAT-28)', 'Tratar a perda de conexão e testar a passagem do controle do personagem para a IA conforme as regras a detalhar.', '../ROADMAP.md', [8, 16]],
           ],
         },
       ]
@@ -139,6 +142,9 @@
       .marco strong { color: var(--accent); font-size: 20px; }
       .marco progress { width: 100%; height: 14px; accent-color: var(--accent); }
       .marco ul { margin: 8px 0 0; padding-left: 20px; }
+      .marco li { margin-bottom: 10px; }
+      .marco li p { margin: 2px 0; }
+      .marco h4 { margin: 14px 0 4px; }
       .marco a { color: var(--accent); }
       table { border-collapse: collapse; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
       th, td { text-align: left; padding: 8px 12px; border-top: 1px solid var(--line); vertical-align: top; }
@@ -154,7 +160,8 @@
     <section aria-labelledby="tituloMarcos">
       <h2 id="tituloMarcos">Progresso até os marcos jogáveis</h2>
       <p class="nota">Revisão de <time id="revisaoMarcos"></time>. Cada barra mostra a proporção de critérios concluídos, com peso igual. A contagem exclui o trabalho do frontend e independe das horas registradas.</p>
-      <p>O fluxo solo foi validado com conteúdo de teste. Falta uma campanha curta que possa ser vencida a partir de um save novo. O avanço da IA já foi testado e aguarda a preparação das campanhas. O modo online ainda está no roadmap.</p>
+      <div class="cards"><div class="card"><b id="esforcoRestante"></b><span>Esforço restante para as etapas exibidas</span></div></div>
+      <p class="nota">Faixas preliminares de esforço ativo, com <span id="horasPorDia"></span> h por dia de trabalho. Incluem preparação, implementação e testes quando pertinentes. A espera pelo frontend e eventuais correções identificadas na integração ficam fora das faixas. As etapas online ainda dependem de detalhamento.</p>
       <div class="marcos" id="marcos"></div>
     </section>
     <h2>Tempo registrado</h2>
@@ -176,19 +183,34 @@
       const revisaoMarcos = document.getElementById('revisaoMarcos')
       revisaoMarcos.dateTime = REVISAO_MARCOS
       revisaoMarcos.textContent = fmtData(REVISAO_MARCOS)
+      const somarEstimativas = (criterios) => criterios.reduce(([min, max], [, , , , horas]) =>
+        horas ? [min + horas[0], max + horas[1]] : [min, max], [0, 0])
+      const formatarFaixa = ([min, max]) => min === max
+        ? min.toLocaleString('pt-BR')
+        : min.toLocaleString('pt-BR') + '–' + max.toLocaleString('pt-BR')
+      const formatarEstimativa = (horas) => formatarFaixa(horas) + ' h · ' +
+        formatarFaixa(horas.map((h) => h / HORAS_POR_DIA)) + ' dias de trabalho'
+
+      document.getElementById('horasPorDia').textContent = HORAS_POR_DIA
+      document.getElementById('esforcoRestante').textContent =
+        formatarEstimativa(somarEstimativas(MARCOS.flatMap(({ criterios }) => criterios)))
       document.getElementById('marcos').innerHTML = MARCOS.map(({ titulo, criterios }, indice) => {
-        const feitos = criterios.filter(([feito]) => feito).length
+        const feitos = criterios.filter(([situacao]) => situacao === 'Concluído').length
         const percentual = Math.round(100 * feitos / criterios.length)
         const tituloId = 'marco-' + indice
-        const itens = criterios.map(([feito, descricao, fonte]) => {
-          const referencia = fonte ? ' <a href="' + fonte + '">Registro</a>' : ''
-          return '<li><b>' + (feito ? 'Feito' : 'Pendente') + '</b> · ' + descricao + referencia + '</li>'
-        })
+        const grupos = Map.groupBy(criterios, ([situacao]) => situacao)
+        const itens = [...grupos].map(([situacao, etapas]) =>
+          '<h4>' + situacao + '</h4><ul>' + etapas.map(([, nome, descricao, fonte, horas]) => {
+            const referencia = fonte ? ' <a href="' + fonte + '">Registro</a>' : ''
+            const estimativa = horas ? '<p class="nota">' + formatarEstimativa(horas) + '</p>' : ''
+            return '<li><b>' + nome + '</b><p>' + descricao + referencia + '</p>' + estimativa + '</li>'
+          }).join('') + '</ul>')
         return '<article class="marco"><header><h3 id="' + tituloId + '">' + titulo + '</h3>' +
           '<strong>' + percentual + '%</strong></header>' +
           '<progress aria-labelledby="' + tituloId + '" value="' + feitos + '" max="' + criterios.length + '"></progress>' +
-          '<div class="nota">' + feitos + ' de ' + criterios.length + ' critérios concluídos</div>' +
-          '<ul>' + itens.join('') + '</ul></article>'
+          '<div class="nota">' + feitos + ' de ' + criterios.length + ' critérios concluídos · ' +
+          formatarEstimativa(somarEstimativas(criterios)) + ' restantes</div>' +
+          itens.join('') + '</article>'
       }).join('')
 
       const ordenadas = [...SESSOES].sort((a, b) => a.data.localeCompare(b.data))
