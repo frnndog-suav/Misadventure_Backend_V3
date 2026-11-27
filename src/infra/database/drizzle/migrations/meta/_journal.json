@@ -29,6 +29,13 @@
       "when": 1795738503458,
       "tag": "0003_party_action_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795780800000,
+      "tag": "0004_feat21_revisions_and_receipts",
+      "breakpoints": true
     }
   ]
 }

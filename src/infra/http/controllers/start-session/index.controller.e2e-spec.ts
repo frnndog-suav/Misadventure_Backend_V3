@@ -37,6 +37,8 @@ describe('POST /parties/:partyId/session (e2e)', () => {
     expect(started.body).toEqual({
       ...created,
       status: 'inSession',
+      revision: 2,
+      domainEvents: [],
       savedAt: expect.stringMatching(ISO_UTC),
       members: [
         {
@@ -65,7 +67,10 @@ describe('POST /parties/:partyId/session (e2e)', () => {
     const read = await request(app.getHttpServer()).get(
       `/parties/${created.id}`
     )
-    expect(read.body).toEqual(started.body)
+    const { domainEvents, ...snapshot } = started.body
+    expect(domainEvents).toEqual([])
+    expect(snapshot.revision).toBe(2)
+    expect(read.body).toEqual(snapshot)
 
     const again = await request(app.getHttpServer()).post(
       `/parties/${created.id}/session`

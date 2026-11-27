@@ -25,7 +25,7 @@ describe('GET /health (e2e)', () => {
     expect(response.status).toBe(200)
     expect(response.body).toEqual({
       status: 'ok',
-      contractVersion: '1.09',
+      contractVersion: '1.13',
     })
   })
 })

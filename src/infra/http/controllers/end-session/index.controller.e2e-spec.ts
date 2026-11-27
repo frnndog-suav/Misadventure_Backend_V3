@@ -45,6 +45,7 @@ describe('POST /parties/:partyId/session/end (e2e)', () => {
     expect(ended.body).toEqual({
       ...created,
       status: 'idle',
+      revision: 3,
       savedAt: expect.stringMatching(ISO_UTC),
     })
     expect(Date.parse(ended.body.savedAt)).toBeGreaterThanOrEqual(

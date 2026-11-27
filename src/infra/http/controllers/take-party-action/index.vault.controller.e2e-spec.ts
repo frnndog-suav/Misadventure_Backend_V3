@@ -272,7 +272,8 @@ describe('Cofre e Vasculhar (e2e)', () => {
       ],
     })
     {
-      const { combatUpdates, ...snapshot } = full.body
+      const { combatUpdates, domainEvents, ...snapshot } = full.body
+      expect(domainEvents).toEqual([])
       expect(combatUpdates).toEqual([])
       expect(await get(party.id)).toEqual(snapshot)
     }

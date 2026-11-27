@@ -1,3 +1,4 @@
+import type { TAutomaticTurnEvent } from '../../ai-turn/public-events'
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { type Either, left, right } from '@/core/error/either'
 import { AggregateRoot } from '@/core/pattern/aggregate-root'
@@ -472,6 +473,7 @@ export type TDimensionCompletionResult = {
 }
 
 export interface TPartyProps {
+  revision?: number
   name: string
   members: PartyMember[]
   hostMemberId: UniqueEntityID
@@ -679,6 +681,16 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   protected override addDomainEvent(event: TPartyEvent): void {
     this.flushLimbo(event.occurredAt)
     super.addDomainEvent(event)
+    if (this.automaticTurnEvents && event.type === 'PlayerMoved') {
+      const { fromZoneId, viaZoneId, toZoneId } = event
+      this.automaticTurnEvents.push({
+        type: 'moved',
+        payload: {
+          fromZoneId,
+          traversedZoneIds: viaZoneId ? [viaZoneId, toZoneId] : [toZoneId],
+        },
+      })
+    }
   }
 
   override pullDomainEvents(): TPartyEvent[] {
@@ -696,6 +708,24 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         occurredAt,
         ...entry,
       })
+  }
+
+  private automaticTurnEvents?: TAutomaticTurnEvent[]
+  private automaticCombatIndex = 0
+
+  recordAutomaticTurn(events: TAutomaticTurnEvent[] | undefined): void {
+    this.automaticTurnEvents = events
+    this.automaticCombatIndex = 0
+  }
+
+  private recordCombatUpdates(...updates: TCombatUpdate[]): void {
+    this.updates.push(...updates)
+    if (this.automaticTurnEvents)
+      for (const update of updates)
+        this.automaticTurnEvents.push({
+          type: 'combatUpdated',
+          payload: { update, combatUpdateIndex: this.automaticCombatIndex++ },
+        })
   }
 
   get combatUpdates(): readonly TCombatUpdate[] {
@@ -2225,7 +2255,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     return {
       health: player.health,
       snapshot: player,
-      update: (update) => this.updates.push(update),
+      update: (update) => this.recordCombatUpdates(update),
       limbo: this.limboSink,
       withSnapshot: (state) =>
         this.combatPlayer(state, cards, power, projectile, battle),
@@ -2537,7 +2567,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         this.props.lastCombatResult.peakDelta += victoryPeak
       }
       this.replaceActor(index, player)
-      this.updates.push({
+      this.recordCombatUpdates({
         type: 'combatEnded',
         combatId: state.id,
         result: this.lastCombatResult!,
@@ -2552,7 +2582,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       victoryPeak,
     }
     this.finishCombatOutcome(index, player, cards)
-    this.updates.push({
+    this.recordCombatUpdates({
       type: 'combatEnded',
       combatId: state.id,
       result: this.lastCombatResult!,
@@ -2660,7 +2690,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     )
     if (paid.isLeft()) return left(paid.value.reason)
     let rng = SeededRng.fromState(paid.value.rngState)
-    this.updates.push({
+    this.recordCombatUpdates({
       type: 'combatAbilityUsed',
       combatId: state.id,
       actorId: state.memberId,
@@ -2828,7 +2858,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       { enemyCount: state.enemies.filter(({ health }) => health > 0).length }
     )
     if (paid.isLeft()) return left(paid.value.reason)
-    this.updates.push({
+    this.recordCombatUpdates({
       type: 'combatEffectActivated',
       combatId: state.id,
       actorId: state.memberId,
@@ -3308,7 +3338,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
   ) {
     const { effect, origin, effectId, effectIndex, targetIds } = selected
     if (battle)
-      this.updates.push({
+      this.recordCombatUpdates({
         type: 'combatEffectActivated',
         combatId: battle.id,
         actorId: battle.memberId,
@@ -3809,6 +3839,14 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       )
       if (isExecutableEvent(card)) {
         this.props.eventEncounter = { ...encounter, phase: 'encounter', card }
+        this.automaticTurnEvents?.push({
+          type: 'randomEventRevealed',
+          payload: {
+            encounterId: encounter.id,
+            cardId: card.id,
+            cardTitle: card.title,
+          },
+        })
       } else {
         complete()
         this.engageCombat(
@@ -3970,6 +4008,10 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       handCopies: copies,
       handCopySequence: player.handCopySequence ?? copies.length,
     })
+    this.automaticTurnEvents?.push({
+      type: 'randomEventStarted',
+      payload: { encounterId: id, zoneId: player.zoneId },
+    })
     this.props.eventEncounter = {
       id,
       memberId: memberId.toValue(),
@@ -4084,7 +4126,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
       this.config
     )
     if (finalBoss) state.finalBoss = finalBoss
-    this.updates.push(
+    this.recordCombatUpdates(
       {
         type: 'combatStarted',
         combatId: state.id,
@@ -4213,7 +4255,7 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
     }
     const rng = SeededRng.fromState(this.rngState)
     const receipt = this.rollEscape(player, escape, rng)
-    this.updates.push({
+    this.recordCombatUpdates({
       type: 'combatEscapeAttempted',
       combatId: state.id,
       actorId: state.memberId,
@@ -4253,6 +4295,11 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         : cause === 'escapeSucceeded'
           ? 'escaped'
           : 'setback'
+    if (resolution !== 'escaped' && encounter.phase !== resolution)
+      this.automaticTurnEvents?.push({
+        type: 'randomEventPhaseChanged',
+        payload: { encounterId: encounter.id, phase: resolution },
+      })
     const startingPeak = encounter.outcome?.startingPeak ?? player.peak
     const outcome =
       resolution === 'success'
@@ -4325,6 +4372,15 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
         peakDelta: peak - startingPeak,
         replacement: { requested, drawn: drawn.length },
         escape,
+      },
+    })
+    this.automaticTurnEvents?.push({
+      type: 'randomEventEnded',
+      payload: {
+        encounterId: encounter.id,
+        cardId: card.id,
+        resolution,
+        cause,
       },
     })
     this.releaseEventCard(encounter.id, encounter.zoneType, card.id)
@@ -4949,6 +5005,14 @@ export class Party extends AggregateRoot<TPartyProps, TPartyEvent> {
 
   get createdAt(): Date {
     return this.props.createdAt
+  }
+
+  get revision(): number {
+    return this.props.revision ?? 1
+  }
+
+  recordSavedRevision(revision: number): void {
+    this.props.revision = revision
   }
 
   get savedAt(): Date {

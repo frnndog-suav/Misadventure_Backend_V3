@@ -247,6 +247,7 @@ export interface TPartyHttp {
   lastCombatResult: Party['lastCombatResult']
   lastDimensionCompletion: Party['lastDimensionCompletion']
   createdAt: string
+  revision: number
   savedAt: string
 }
 
@@ -665,6 +666,7 @@ export class PartyPresenter {
       lastCombatResult: party.lastCombatResult,
       lastDimensionCompletion: party.lastDimensionCompletion,
       createdAt: party.createdAt.toISOString(),
+      revision: party.revision,
       savedAt: party.savedAt.toISOString(),
     }
   }

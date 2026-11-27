@@ -10,6 +10,7 @@ import type {
 } from '@/domain/catalog/enterprise/value-objects/card'
 import { GAME_CONFIG_DEFAULTS } from '@/domain/lab/enterprise/value-objects/game-config/defaults'
 import { availableActions } from '../../../enterprise/available-actions'
+import type { TAutomaticTurnEvent } from '../../../enterprise/ai-turn/public-events'
 import { shuffle } from '../../../enterprise/shuffle'
 import {
   PartyMember,
@@ -1796,6 +1797,35 @@ it('REQ-171/REQ-172: reabre o save congelado, projeta idle após publicação e 
   expect(replay.value.party.members[0].player.hand).toEqual(
     resumed.members[0].player.hand
   )
+})
+
+it('REQ-183 / FEAT-21: captura as fases públicas mesmo após encerrar o encontro', async () => {
+  const game = setup({
+    eventDecks: [
+      { zoneType: 'urban', cards: [makeRandomEventCard().id], discard: [] },
+    ],
+  })
+  const events: TAutomaticTurnEvent[] = []
+  game.party().recordAutomaticTurn(events)
+  const encounterId = await game.reveal()
+  await game.accept({ type: 'giveUpEvent', encounterId })
+  expect(game.party().randomEventEncounter).toBeNull()
+  const cardId = game.event.id
+  expect(events).toEqual([
+    { type: 'randomEventStarted', payload: { encounterId, zoneId: harbor.id } },
+    {
+      type: 'randomEventRevealed',
+      payload: { encounterId, cardId, cardTitle: game.event.title },
+    },
+    {
+      type: 'randomEventPhaseChanged',
+      payload: { encounterId, phase: 'setback' },
+    },
+    {
+      type: 'randomEventEnded',
+      payload: { encounterId, cardId, resolution: 'setback', cause: 'gaveUp' },
+    },
+  ])
 })
 
 function setup({

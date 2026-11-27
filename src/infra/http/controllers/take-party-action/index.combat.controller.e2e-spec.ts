@@ -373,7 +373,8 @@ describe('Combate solo (HTTP e save)', () => {
     expect(
       revealed.body.combatUpdates.map(({ type }: { type: string }) => type)
     ).toEqual(['combatStarted', 'combatTurnStarted'])
-    const { combat, combatUpdates, ...rest } = revealed.body
+    const { combat, combatUpdates, domainEvents, ...rest } = revealed.body
+    expect(domainEvents).toEqual([])
     expect((await get(id).expect(200)).body).toEqual({ ...rest, combat })
     expect(combatUpdates[0].participants).toHaveLength(3)
 
@@ -407,7 +408,12 @@ describe('Combate solo (HTTP e save)', () => {
       turnId: active.turn.id,
       targetId: active.enemies[1].id,
     }).expect(200)
-    const { combatUpdates: victoryUpdates, ...victorySnapshot } = victory.body
+    const {
+      combatUpdates: victoryUpdates,
+      domainEvents: victoryEvents,
+      ...victorySnapshot
+    } = victory.body
+    expect(victoryEvents).toEqual([])
     expect(victoryUpdates.map(({ type }: { type: string }) => type)).toEqual([
       'combatDamageResolved',
       'combatEnded',
@@ -485,7 +491,12 @@ describe('Combate solo (HTTP e save)', () => {
       choice: 'keep',
       discard: [{ cardId: fish, copies: 1 }],
     }).expect(200)
-    const { combatUpdates: resolutionUpdates, ...snapshot } = resolved.body
+    const {
+      combatUpdates: resolutionUpdates,
+      domainEvents: resolutionEvents,
+      ...snapshot
+    } = resolved.body
+    expect(resolutionEvents).toEqual([])
     expect(resolutionUpdates).toEqual([])
     expect(snapshot).toMatchObject({
       pendingRewards: [],
@@ -616,7 +627,9 @@ describe('Combate solo (HTTP e save)', () => {
         ],
       })
       const persisted = await stored(id)
-      expect((await get(id).expect(200)).body).toEqual(first)
+      const { domainEvents, ...snapshot } = first
+      expect(domainEvents).toEqual(entry === 'reabertura' ? [] : undefined)
+      expect((await get(id).expect(200)).body).toEqual(snapshot)
       expect(await stored(id)).toEqual(persisted)
       const restored = DrizzlePartyMapper.toDomain(persisted)
       expect(restored.rngState).toEqual(state.rngState)

@@ -248,7 +248,8 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
     expect(drawn.body.members[0].player.hand).toHaveLength(7)
     expect(drawn.body.members[0].player.attributeDeckCount).toBe(53)
     {
-      const { combatUpdates, ...snapshot } = drawn.body
+      const { combatUpdates, domainEvents, ...snapshot } = drawn.body
+      expect(domainEvents).toEqual([])
       expect(combatUpdates).toEqual([])
       expect(await get(party.id)).toEqual(snapshot)
     }
@@ -347,7 +348,8 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
       { playerClass: 'warrior', deckLockMet: true },
     ])
     {
-      const { combatUpdates, ...snapshot } = response.body
+      const { combatUpdates, domainEvents, ...snapshot } = response.body
+      expect(domainEvents).toEqual([])
       expect(combatUpdates).toEqual([])
       expect(await get(party.id)).toEqual(snapshot)
     }
@@ -383,7 +385,8 @@ describe('Deck de atributos — recover e adjustDeck (e2e)', () => {
       { playerClass: 'warrior', deckLockMet: false },
     ])
     {
-      const { combatUpdates, ...snapshot } = response.body
+      const { combatUpdates, domainEvents, ...snapshot } = response.body
+      expect(domainEvents).toEqual([])
       expect(combatUpdates).toEqual([])
       expect(await get(party.id)).toEqual(snapshot)
     }

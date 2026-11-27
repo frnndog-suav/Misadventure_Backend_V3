@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common'
+import { and, eq, sql } from 'drizzle-orm'
 import request from 'supertest'
 import {
   afterAll,
@@ -16,7 +17,9 @@ import { TakePartyActionUseCase } from '@/domain/campaign/application/use-cases/
 import type { TCombatUpdate } from '@/domain/campaign/enterprise/combat'
 import { maxHealthOf } from '@/domain/campaign/enterprise/entities/party-member'
 import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
+import { type Database, DRIZZLE } from '@/infra/database/database.tokens'
 import { DrizzlePartyMapper } from '@/infra/database/drizzle/mappers/drizzle-party-mapper'
+import { partyActionReceipts } from '@/infra/database/drizzle/schema'
 import {
   makeDimensionCard,
   makeItemCard,
@@ -52,8 +55,9 @@ describe('FEAT-20: avanço e recuperação (T-90)', () => {
     return post.send(body)
   }
 
-  function session(id: string) {
-    return api().post('/parties/' + id + '/session')
+  function session(id: string, key?: string) {
+    const post = api().post('/parties/' + id + '/session')
+    return key === undefined ? post : post.set('Idempotency-Key', key)
   }
 
   async function stored(id: string) {
@@ -88,6 +92,74 @@ describe('FEAT-20: avanço e recuperação (T-90)', () => {
     ).body
   }
 
+  it('REQ-183 a REQ-185 / FEAT-21: recupera abertura com chave em paralelo', async () => {
+    const { id } = await fixture('helper')
+    await session(id, 'invalid').expect(400)
+    const original = await session(id, KEY).expect(200)
+    expect(original.body.domainEvents.length).toBeGreaterThan(0)
+    await action(id, KEY).expect(200)
+    const replays = await Promise.all([
+      session(id, KEY).expect(200),
+      session(id, KEY).expect(200),
+    ])
+    for (const replay of replays) expect(replay.body).toEqual(original.body)
+    expect((await current(id)).revision).toBeGreaterThan(original.body.revision)
+    expect((await session(id, NEXT_KEY).expect(200)).body.domainEvents).toEqual(
+      []
+    )
+  })
+
+  it('REQ-185 / FEAT-21: preserva os campos do recibo de ação anterior à revisão', async () => {
+    const { id } = await fixture('human')
+    await session(id).expect(200)
+    const original = await action(id, KEY).expect(200)
+    const db = app.get<Database>(DRIZZLE)
+    await db
+      .update(partyActionReceipts)
+      .set({
+        response: sql`${partyActionReceipts.response} - 'revision' - 'domainEvents'`,
+      })
+      .where(
+        and(
+          eq(partyActionReceipts.partyId, id),
+          eq(partyActionReceipts.key, KEY)
+        )
+      )
+    await action(id, KEY).expect(200, {
+      ...original.body,
+      revision: 0,
+      domainEvents: [],
+    })
+    expect((await current(id)).revision).toBe(original.body.revision)
+  })
+
+  it('REQ-183 a REQ-185 / FEAT-21: checkpoint de abertura bloqueia acoes e associa outra chave', async () => {
+    const { id, human, lastHelper } = await fixture('helper')
+    const row = await stored(id)
+    row.state.turnOrder = [row.state.turnOrder[0], lastHelper, human]
+    await repository.save(DrizzlePartyMapper.toDomain(row))
+    const executor = app.get(TakePartyActionUseCase)
+    const execute = executor.executeAiTurn.bind(executor)
+    const interrupted = vi
+      .spyOn(executor, 'executeAiTurn')
+      .mockImplementation((party) => {
+        if (party.turn.memberId.toString() === lastHelper)
+          throw new Error('Interrupcao apos checkpoint')
+        return execute(party)
+      })
+    await session(id, KEY).expect(500)
+    expect((await current(id)).turn.memberId).toBe(lastHelper)
+    await action(id, KEY).expect(409)
+    interrupted.mockRestore()
+    const resumed = await session(id, NEXT_KEY).expect(200)
+    expect(resumed.body.turn.memberId).toBe(human)
+    const ids = resumed.body.domainEvents.map(({ id }: { id: string }) => id)
+    expect(ids).toHaveLength(4)
+    expect(new Set(ids).size).toBe(4)
+    await session(id, KEY).expect(200, resumed.body)
+    await session(id, NEXT_KEY).expect(200, resumed.body)
+  })
+
   it('REQ-183: inicia com IA em primeiro e devolve a vez humana gravada', async () => {
     const { id, human, firstHelper } = await fixture('helper')
     expect(await current(id)).toMatchObject({
@@ -99,12 +171,17 @@ describe('FEAT-20: avanço e recuperação (T-90)', () => {
       status: 'inSession',
       turn: { memberId: human, round: 1 },
     })
-    expect(await current(id)).toEqual(started.body)
+    const { domainEvents, ...snapshot } = started.body
+    expect(domainEvents.map(({ type }: { type: string }) => type)).toEqual([
+      'turnStarted',
+      'turnEnded',
+    ])
+    expect(await current(id)).toEqual(snapshot)
   })
 
   it('REQ-183/D-157: executa em ordem, relê o save por vez e avança a rodada', async () => {
     const { id, human, firstHelper, lastHelper } = await fixture('human')
-    await session(id).expect(200)
+    const initial = await session(id).expect(200)
     const executor = app.get(TakePartyActionUseCase)
     const execute = executor.executeAiTurn.bind(executor)
     const turns: string[] = []
@@ -118,7 +195,26 @@ describe('FEAT-20: avanço e recuperação (T-90)', () => {
 
     const response = await action(id, KEY).expect(200)
     expect(turns).toEqual([lastHelper, firstHelper])
-    const { combatUpdates, ...snapshot } = response.body
+    const { combatUpdates, domainEvents, ...snapshot } = response.body
+    expect(snapshot.revision).toBe(initial.body.revision + 3)
+    expect(
+      domainEvents.map(
+        ({
+          memberId,
+          round,
+          type,
+        }: {
+          memberId: string
+          round: number
+          type: string
+        }) => [memberId, round, type]
+      )
+    ).toEqual([
+      [lastHelper, 1, 'turnStarted'],
+      [lastHelper, 1, 'turnEnded'],
+      [firstHelper, 2, 'turnStarted'],
+      [firstHelper, 2, 'turnEnded'],
+    ])
     expect(combatUpdates).toEqual([])
     expect(snapshot.turn).toMatchObject({ memberId: human, round: 2 })
     expect(await current(id)).toEqual(snapshot)
@@ -208,7 +304,8 @@ describe('FEAT-20: avanço e recuperação (T-90)', () => {
     expect(executor).toHaveBeenCalledTimes(2)
 
     const later = await action(id, NEXT_KEY).expect(200)
-    const { combatUpdates, ...snapshot } = later.body
+    const { combatUpdates, domainEvents, ...snapshot } = later.body
+    expect(Array.isArray(domainEvents)).toBe(true)
     expect(combatUpdates).toEqual([])
     expect(snapshot.turn).toMatchObject({ memberId: human, round: 3 })
     const beforeReplay = await stored(id)
@@ -288,6 +385,13 @@ describe('FEAT-20: avanço e recuperação (T-90)', () => {
     const replay = await action(id, KEY).expect(200)
     expect(replay.body.turn).toMatchObject({ memberId: human, round: 2 })
     expect(replay.body).toEqual({ ...resumed.body, combatUpdates: batch })
+    expect(
+      replay.body.domainEvents
+        .filter(({ type }: { type: string }) => type === 'combatUpdated')
+        .map(({ payload }: { payload: unknown }) => payload)
+    ).toEqual(
+      batch.map((update, combatUpdateIndex) => ({ update, combatUpdateIndex }))
+    )
     await action(id, NEXT_KEY).expect(200)
     const later = await stored(id)
     await action(id, KEY).expect(200, replay.body)
@@ -368,7 +472,8 @@ describe('FEAT-20: avanço e recuperação (T-90)', () => {
 
       const automatic = vi.spyOn(executor, 'executeAiTurn')
       const result = await action(id, KEY, completion).expect(200)
-      const { combatUpdates, ...snapshot } = result.body
+      const { combatUpdates, domainEvents, ...snapshot } = result.body
+      expect(Array.isArray(domainEvents)).toBe(true)
       expect(combatUpdates).toEqual([])
       expect(await current(id)).toEqual(snapshot)
       expect(
@@ -409,6 +514,22 @@ describe('FEAT-20: avanço e recuperação (T-90)', () => {
           'PARTY_FROZEN'
         )
         await action(id, KEY, completion).expect(200, result.body)
+        const last = await fixture('helper')
+        await api()
+          .post(`/lab/parties/${last.id}/members/${last.firstHelper}/grants`)
+          .send({ type: 'card', cardId: shard.id, quantity: 1 })
+          .expect(200)
+        const frozen = await session(last.id, KEY).expect(200)
+        expect(frozen.body.status).toBe('frozen')
+        expect(frozen.body.domainEvents.at(-1)).toMatchObject({
+          type: 'turnEnded',
+          memberId: last.firstHelper,
+          dimensionId: dimension.id,
+          round: 1,
+          payload: { reason: 'frozen' },
+        })
+        await session(last.id, KEY).expect(200, frozen.body)
+        await session(last.id, NEXT_KEY).expect(409)
       }
     }
   )

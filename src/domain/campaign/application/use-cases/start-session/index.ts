@@ -35,27 +35,31 @@ export class StartSessionUseCase {
       partyId,
       async (party, save) => {
         if (!party) return left(new PartyNotFoundError())
-        const at = this.clock.now()
-        if (party.status === 'frozen') {
-          const successor = await findFrozenDimensionSuccessor(
-            this.catalog,
-            party
-          )
-          if (!successor) return left(new PartyFrozenError())
-          const resumed = party.resumeFrozenDimension(successor, at)
-          if (resumed.isLeft()) {
-            const { dimensionCardId, problems } = resumed.value
-            return left(new DimensionInvalidError(dimensionCardId, problems))
-          }
-          if (!resumed.value) return left(new PartyFrozenError())
-          await save(party)
-          return right({ party })
-        }
-        const started = party.startSession(at)
-        const resumed = await this.resumeKnockout.execute(party, at)
-        if (started || resumed) await save(party)
+        const result = await this.open(party)
+        if (result.isLeft()) return left(result.value)
+        if (result.value) await save(party)
         return right({ party })
       }
     )
+  }
+
+  async open(
+    party: Party
+  ): Promise<Either<PartyFrozenError | DimensionInvalidError, boolean>> {
+    const at = this.clock.now()
+    if (party.status === 'frozen') {
+      const successor = await findFrozenDimensionSuccessor(this.catalog, party)
+      if (!successor) return left(new PartyFrozenError())
+      const resumed = party.resumeFrozenDimension(successor, at)
+      if (resumed.isLeft()) {
+        const { dimensionCardId, problems } = resumed.value
+        return left(new DimensionInvalidError(dimensionCardId, problems))
+      }
+      if (!resumed.value) return left(new PartyFrozenError())
+      return right(true)
+    }
+    const started = party.startSession(at)
+    const resumed = await this.resumeKnockout.execute(party, at)
+    return right(started || resumed)
   }
 }

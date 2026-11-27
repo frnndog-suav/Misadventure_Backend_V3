@@ -1230,6 +1230,7 @@ export interface TPartyRow {
   name: string
   status: string
   state: unknown
+  revision?: number
   createdAt: Date
   savedAt: Date
 }
@@ -1331,12 +1332,15 @@ export class DrizzlePartyMapper {
               },
         createdAt: row.createdAt,
         savedAt: row.savedAt,
+        revision: row.revision,
       },
       new UniqueEntityID(row.id)
     )
   }
 
-  static toDrizzle(party: Party): TPartyRow & { state: TPartyState } {
+  static toDrizzle(
+    party: Party
+  ): TPartyRow & { state: TPartyState; revision: number } {
     const snapshot = party.combatSnapshot()
     const [a, b, c, d] = party.rngState
     const {
@@ -1351,6 +1355,7 @@ export class DrizzlePartyMapper {
       status: party.status,
       createdAt: party.createdAt,
       savedAt: party.savedAt,
+      revision: party.revision,
       state: {
         schemaVersion: SCHEMA_VERSION,
         members: party.members.map((m) => ({

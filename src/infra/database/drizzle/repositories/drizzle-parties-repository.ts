@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util'
 import { Inject, Injectable } from '@nestjs/common'
 import { and, eq, isNull } from 'drizzle-orm'
 import { PartiesRepository } from '@/domain/campaign/application/repositories/parties-repository'
@@ -12,8 +13,8 @@ export const UUID =
 
 type TReceipt = typeof partyActionReceipts.$inferSelect
 interface TLockedReceipts {
-  find(key: string): Promise<TReceipt | undefined>
-  findPending(): Promise<TReceipt | undefined>
+  find(route: TReceipt['route'], key: string): Promise<TReceipt | undefined>
+  findPending(): Promise<TReceipt[]>
   save(receipt: Omit<TReceipt, 'partyId'>): Promise<void>
 }
 
@@ -30,13 +31,10 @@ export class DrizzlePartiesRepository implements PartiesRepository {
   }
 
   async save(party: Party): Promise<void> {
-    const { id, ...row } = DrizzlePartyMapper.toDrizzle(party)
-    const updated = await this.db
-      .update(parties)
-      .set(row)
-      .where(eq(parties.id, id))
-      .returning({ id: parties.id })
-    if (updated.length === 0) throw new Error(`Grupo inexistente: ${id}`)
+    await this.withLockedParty(party.id.toString(), async (current, save) => {
+      if (!current) throw new Error(`Grupo inexistente: ${party.id.toString()}`)
+      await save(party)
+    })
   }
 
   async findById(id: string): Promise<Party | null> {
@@ -62,35 +60,81 @@ export class DrizzlePartiesRepository implements PartiesRepository {
             .where(eq(parties.id, id))
             .for('update')
         : []
+      const current = row ? DrizzlePartyMapper.toDomain(row) : null
+      const revision = current?.revision ?? 1
+      const before = current
+        ? JSON.stringify(DrizzlePartyMapper.toDrizzle(current))
+        : null
       const forParty = eq(partyActionReceipts.partyId, id)
       return run(
-        row ? DrizzlePartyMapper.toDomain(row) : null,
+        current,
         async (party) => {
-          const { id: partyId, ...values } = DrizzlePartyMapper.toDrizzle(party)
-          await tx.update(parties).set(values).where(eq(parties.id, partyId))
+          const next = { ...DrizzlePartyMapper.toDrizzle(party), revision }
+          if (
+            before !== null &&
+            isDeepStrictEqual(
+              JSON.parse(before),
+              JSON.parse(JSON.stringify(next))
+            )
+          ) {
+            party.recordSavedRevision(revision)
+            return
+          }
+          const newRevision = revision + 1
+          if (!Number.isSafeInteger(newRevision))
+            throw new Error('Revisão do save excedida')
+          await tx
+            .update(parties)
+            .set({ ...next, revision: newRevision })
+            .where(eq(parties.id, id))
+          party.recordSavedRevision(newRevision)
         },
         {
-          find: async (key) => {
+          find: async (route, key) => {
             const [receipt] = await tx
               .select()
               .from(partyActionReceipts)
-              .where(and(forParty, eq(partyActionReceipts.key, key)))
+              .where(
+                and(
+                  forParty,
+                  eq(partyActionReceipts.route, route),
+                  eq(partyActionReceipts.key, key)
+                )
+              )
             return receipt
           },
           findPending: async () => {
-            const [receipt] = await tx
+            return tx
               .select()
               .from(partyActionReceipts)
               .where(and(forParty, isNull(partyActionReceipts.response)))
-            return receipt
           },
-          save: async ({ key, action, combatUpdates, response }) => {
+          save: async ({
+            key,
+            route,
+            action,
+            domainEvents,
+            combatUpdates,
+            response,
+          }) => {
             await tx
               .insert(partyActionReceipts)
-              .values({ partyId: id, key, action, combatUpdates, response })
+              .values({
+                partyId: id,
+                key,
+                route,
+                action,
+                domainEvents,
+                combatUpdates,
+                response,
+              })
               .onConflictDoUpdate({
-                target: [partyActionReceipts.partyId, partyActionReceipts.key],
-                set: { combatUpdates, response },
+                target: [
+                  partyActionReceipts.partyId,
+                  partyActionReceipts.route,
+                  partyActionReceipts.key,
+                ],
+                set: { domainEvents, combatUpdates, response },
               })
           },
         }

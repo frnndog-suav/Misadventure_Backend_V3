@@ -141,7 +141,8 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
       Date.parse(party.savedAt)
     )
     {
-      const { combatUpdates, ...snapshot } = moved.body
+      const { combatUpdates, domainEvents, ...snapshot } = moved.body
+      expect(domainEvents).toEqual([])
       expect(combatUpdates).toEqual([])
       expect(await get(party.id)).toEqual(snapshot)
     }
@@ -330,7 +331,8 @@ describe('POST /parties/:partyId/actions (e2e)', () => {
       Date.parse(last.savedAt)
     )
     {
-      const { combatUpdates, ...snapshot } = ended.body
+      const { combatUpdates, domainEvents, ...snapshot } = ended.body
+      expect(domainEvents).toEqual([])
       expect(combatUpdates).toEqual([])
       expect(await get(party.id)).toEqual(snapshot)
     }

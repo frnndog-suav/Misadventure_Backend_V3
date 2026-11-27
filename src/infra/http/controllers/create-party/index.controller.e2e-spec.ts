@@ -46,6 +46,7 @@ describe('POST /parties (e2e)', () => {
     const memberId: string = response.body.members[0].id
     expect(response.body).toEqual({
       id: expect.any(String),
+      revision: 1,
       name: 'Os Teimosos',
       status: 'idle',
       members: [

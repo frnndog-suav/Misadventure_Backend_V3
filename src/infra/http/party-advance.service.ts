@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import { Injectable } from '@nestjs/common'
 import {
@@ -9,6 +10,10 @@ import { PartyNotFoundError } from '@/domain/campaign/application/use-cases/_err
 import { PartySessionNotActiveError } from '@/domain/campaign/application/use-cases/_errors/party-session-not-active-error'
 import { StartSessionUseCase } from '@/domain/campaign/application/use-cases/start-session'
 import { TakePartyActionUseCase } from '@/domain/campaign/application/use-cases/take-party-action'
+import type {
+  TAutomaticTurnEvent,
+  TPublicDomainEvent,
+} from '@/domain/campaign/enterprise/ai-turn/public-events'
 import type { TCombatUpdate } from '@/domain/campaign/enterprise/combat'
 import type { Party } from '@/domain/campaign/enterprise/entities/party'
 import { CardCatalog } from '@/domain/catalog/application/repositories/card-catalog'
@@ -16,7 +21,11 @@ import {
   DrizzlePartiesRepository,
   UUID,
 } from '../database/drizzle/repositories/drizzle-parties-repository'
-import type { TPartyActionHttp } from '../database/drizzle/schema/parties'
+import type {
+  TPartyActionHttp,
+  TPartySessionHttp,
+  TStoredPartyActionHttp,
+} from '../database/drizzle/schema/parties'
 import { DomainErrorException } from './errors/domain-error-exception'
 import {
   findPartyCards,
@@ -33,6 +42,36 @@ function hasAiTurn(party: Party): boolean {
   )
 }
 
+function validKey(
+  header: string | undefined,
+  required: boolean
+): string | undefined {
+  if (typeof header === 'string' && UUID.test(header))
+    return header.toLowerCase()
+  if (header !== undefined || required)
+    throw new DomainErrorException(
+      new ActionInvalidError([
+        { field: 'Idempotency-Key', reason: 'invalidIdempotencyKey' },
+      ])
+    )
+  return undefined
+}
+
+function restoreReceipt(response: TStoredPartyActionHttp): TPartyActionHttp {
+  return {
+    ...response,
+    revision: response.revision ?? 0,
+    domainEvents: response.domainEvents ?? [],
+  }
+}
+
+function sessionProjection(response: TPartyActionHttp): TPartySessionHttp {
+  const snapshot: TPartySessionHttp &
+    Partial<Pick<TPartyActionHttp, 'combatUpdates'>> = { ...response }
+  delete snapshot.combatUpdates
+  return snapshot
+}
+
 @Injectable()
 export class PartyAdvanceService {
   constructor(
@@ -47,25 +86,18 @@ export class PartyAdvanceService {
     body: unknown,
     header: string | undefined
   ): Promise<TPartyActionHttp> {
-    const key = typeof header === 'string' ? header.toLowerCase() : undefined
-    const response = await this.parties.withLockedParty(
+    const { response, key } = await this.parties.withLockedParty(
       partyId,
       async (party, save, receipts) => {
         if (!party) throw new DomainErrorException(new PartyNotFoundError())
         const hasHelpers = party.members.some(({ kind }) => kind === 'aiHelper')
-        if (hasHelpers && (!key || !UUID.test(key))) {
-          throw new DomainErrorException(
-            new ActionInvalidError([
-              { field: 'Idempotency-Key', reason: 'invalidIdempotencyKey' },
-            ])
-          )
-        }
+        const key = hasHelpers ? validKey(header, true) : undefined
         const parsed = this.actions.parseAction(body)
         if (parsed.isLeft()) throw new DomainErrorException(parsed.value)
         const action = parsed.value
 
         if (hasHelpers && key) {
-          const previous = await receipts.find(key)
+          const previous = await receipts.find('action', key)
           if (previous) {
             if (
               !isDeepStrictEqual(
@@ -76,69 +108,152 @@ export class PartyAdvanceService {
               throw new DomainErrorException(
                 new ActionIdempotencyConflictError()
               )
-            return previous.response
+            return {
+              key,
+              response: previous.response && restoreReceipt(previous.response),
+            }
           }
-          if (await receipts.findPending())
-            throw new DomainErrorException(new ActionAdvancePendingError())
         }
+        if ((await receipts.findPending()).length)
+          throw new DomainErrorException(new ActionAdvancePendingError())
 
         const applied = await this.actions.executeHumanAction(party, action)
         if (applied.isLeft()) throw new DomainErrorException(applied.value)
         const combatUpdates = party.combatUpdates
+        await save(party)
         const response = hasAiTurn(party)
           ? null
-          : await this.present(party, combatUpdates)
-        await save(party)
+          : await this.present(party, combatUpdates, [])
         if (hasHelpers && key)
-          await receipts.save({ key, action, combatUpdates, response })
-        return response
+          await receipts.save({
+            route: 'action',
+            key,
+            action,
+            combatUpdates,
+            domainEvents: [],
+            response,
+          })
+        return { response, key }
       }
     )
-    return response ?? this.advance(partyId, key)
+    if (response) return response
+    if (!key) throw new Error('Ação pendente sem chave')
+    return this.advance(partyId, 'action', key)
   }
 
-  async startSession(partyId: string): Promise<TPartyHttp> {
-    const started = await this.sessions.execute({ partyId })
-    if (started.isLeft()) throw new DomainErrorException(started.value)
-    const { party } = started.value
-    if (!party.members.some(({ kind }) => kind === 'aiHelper'))
-      return this.presentParty(party)
-    const snapshot: TPartyHttp & { combatUpdates?: readonly TCombatUpdate[] } =
-      await this.advance(partyId)
-    delete snapshot.combatUpdates
-    return snapshot
+  async startSession(
+    partyId: string,
+    header: string | undefined
+  ): Promise<TPartySessionHttp> {
+    const key = validKey(header, false)
+    const route = key ? 'session' : 'advance'
+    const receiptKey = key ?? randomUUID()
+    const response = await this.parties.withLockedParty(
+      partyId,
+      async (party, save, receipts) => {
+        if (!party) throw new DomainErrorException(new PartyNotFoundError())
+        const previous = key && (await receipts.find(route, key))
+        if (previous && previous.response)
+          return restoreReceipt(previous.response)
+        const [pending] = await receipts.findPending()
+        if (!pending || party.status === 'idle') {
+          const opened = await this.sessions.open(party)
+          if (opened.isLeft()) throw new DomainErrorException(opened.value)
+          if (opened.value) await save(party)
+        }
+        if (previous) return null
+        const { combatUpdates = [], domainEvents = [] } = pending ?? {}
+        const result =
+          pending || hasAiTurn(party)
+            ? null
+            : await this.present(party, combatUpdates, domainEvents)
+        if (key || !result)
+          await receipts.save({
+            route,
+            key: receiptKey,
+            action: null,
+            combatUpdates,
+            domainEvents,
+            response: result,
+          })
+        return result
+      }
+    )
+    return sessionProjection(
+      response ?? (await this.advance(partyId, route, receiptKey))
+    )
   }
 
   private async advance(
     partyId: string,
-    key?: string
+    route: 'action' | 'session' | 'advance',
+    key: string
   ): Promise<TPartyActionHttp> {
     for (;;) {
-      // A próxima iteração só começa após o commit desta vez e relê o save sob a trava.
       const response = await this.parties.withLockedParty(
         partyId,
         async (party, save, receipts) => {
           if (!party) throw new DomainErrorException(new PartyNotFoundError())
-          const receipt = key
-            ? await receipts.find(key)
-            : await receipts.findPending()
-          if (receipt?.response) return receipt.response
-          if (key && party.status === 'idle')
+          const receipt = await receipts.find(route, key)
+          if (!receipt) throw new Error('Recibo de avanço ausente')
+          if (receipt.response) return restoreReceipt(receipt.response)
+          if (party.status === 'idle')
             throw new DomainErrorException(new PartySessionNotActiveError())
 
-          const combatUpdates = [...(receipt?.combatUpdates ?? [])]
+          const combatUpdates = [...receipt.combatUpdates]
+          const domainEvents = [...receipt.domainEvents]
           if (hasAiTurn(party)) {
-            const result = await this.actions.executeAiTurn(party)
+            const { memberId, round, actionPoints } = party.turn
+            const dimensionId = party.dimension.dimensionCardId
+            const zoneId = party.members.find(({ id }) => id.equals(memberId))!
+              .player.zoneId
+            const events: TAutomaticTurnEvent[] = [
+              { type: 'turnStarted', payload: { zoneId, actionPoints } },
+            ]
+            party.recordAutomaticTurn(events)
+            let result
+            try {
+              result = await this.actions.executeAiTurn(party)
+            } finally {
+              party.recordAutomaticTurn(undefined)
+            }
             if (result.isLeft()) throw new DomainErrorException(result.value)
-            combatUpdates.push(...result.value.combatUpdates)
+            events.push({
+              type: 'turnEnded',
+              payload: {
+                reason:
+                  party.status === 'frozen'
+                    ? 'frozen'
+                    : party.dimension.dimensionCardId !== dimensionId
+                      ? 'dimensionChanged'
+                      : 'passed',
+              },
+            })
             await save(party)
+            for (const [index, event] of events.entries()) {
+              if (event.type === 'combatUpdated')
+                event.payload.combatUpdateIndex += combatUpdates.length
+              domainEvents.push({
+                ...event,
+                id: `${party.revision}-${index}`,
+                memberId: memberId.toString(),
+                dimensionId,
+                round,
+              })
+            }
+            combatUpdates.push(...result.value.combatUpdates)
           }
 
           const response = hasAiTurn(party)
             ? null
-            : await this.present(party, combatUpdates)
-          if (receipt && party.status !== 'idle')
-            await receipts.save({ ...receipt, combatUpdates, response })
+            : await this.present(party, combatUpdates, domainEvents)
+          for (const pending of await receipts.findPending())
+            await receipts.save({
+              ...pending,
+              combatUpdates,
+              domainEvents,
+              response,
+            })
           return response
         }
       )
@@ -148,9 +263,10 @@ export class PartyAdvanceService {
 
   private async present(
     party: Party,
-    combatUpdates: readonly TCombatUpdate[]
+    combatUpdates: readonly TCombatUpdate[],
+    domainEvents: readonly TPublicDomainEvent[]
   ): Promise<TPartyActionHttp> {
-    return { ...(await this.presentParty(party)), combatUpdates }
+    return { ...(await this.presentParty(party)), combatUpdates, domainEvents }
   }
 
   private async presentParty(party: Party): Promise<TPartyHttp> {

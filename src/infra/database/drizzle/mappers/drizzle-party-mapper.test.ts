@@ -432,6 +432,7 @@ describe('DrizzlePartyMapper', () => {
     expect(lastKnockout).toBeNull()
     expect(skipNextTurn).toBe(false)
     expect(row).toEqual({
+      revision: 1,
       id: 'party-1',
       name: 'Os Teimosos',
       status: 'inSession',

@@ -138,7 +138,8 @@ describe('Eventos aleatórios (HTTP e save)', () => {
     })
     expect(started.body).not.toHaveProperty('eventDecks')
     {
-      const { combatUpdates, ...snapshot } = started.body
+      const { combatUpdates, domainEvents, ...snapshot } = started.body
+      expect(domainEvents).toEqual([])
       expect(combatUpdates).toEqual([])
       expect((await get(id).expect(200)).body).toEqual(snapshot)
     }
@@ -183,7 +184,9 @@ describe('Eventos aleatórios (HTTP e save)', () => {
     row.state.turnOrder = [actor.id, hostId]
     const party = DrizzlePartyMapper.toDomain(row)
 
-    const result = await ctx.app.get(TakePartyActionUseCase).executeAiTurn(party)
+    const result = await ctx.app
+      .get(TakePartyActionUseCase)
+      .executeAiTurn(party)
 
     expect(result.isRight()).toBe(true)
     expect(party.members[0].player.lastRandomEvent).toMatchObject({
@@ -285,7 +288,8 @@ describe('Eventos aleatórios (HTTP e save)', () => {
     })
     expect(paid.body.members[0].player.handCopies).toHaveLength(2)
     {
-      const { combatUpdates, ...snapshot } = paid.body
+      const { combatUpdates, domainEvents, ...snapshot } = paid.body
+      expect(domainEvents).toEqual([])
       expect(combatUpdates).toEqual([])
       expect((await get(id).expect(200)).body).toEqual(snapshot)
     }
@@ -305,7 +309,8 @@ describe('Eventos aleatórios (HTTP e save)', () => {
       })
     expect(await stored(id)).toEqual(before)
     {
-      const { combatUpdates, ...snapshot } = paid.body
+      const { combatUpdates, domainEvents, ...snapshot } = paid.body
+      expect(domainEvents).toEqual([])
       expect(combatUpdates).toEqual([])
       expect((await get(id).expect(200)).body).toEqual(snapshot)
     }
@@ -362,7 +367,8 @@ describe('Eventos aleatórios (HTTP e save)', () => {
         ],
       })
       {
-        const { combatUpdates, ...snapshot } = escaped.body
+        const { combatUpdates, domainEvents, ...snapshot } = escaped.body
+        expect(domainEvents).toEqual([])
         expect(combatUpdates).toEqual([])
         expect((await get(id).expect(200)).body).toEqual(snapshot)
       }
@@ -391,7 +397,8 @@ describe('Eventos aleatórios (HTTP e save)', () => {
       ],
     })
     {
-      const { combatUpdates, ...snapshot } = paused.body
+      const { combatUpdates, domainEvents, ...snapshot } = paused.body
+      expect(domainEvents).toEqual([])
       expect(combatUpdates).toEqual([])
       expect((await get(id).expect(200)).body).toEqual(snapshot)
     }
@@ -421,9 +428,10 @@ describe('Eventos aleatórios (HTTP e save)', () => {
       results.find(({ status }) => status === 409)?.body.error.details.reason
     ).toBe('staleReward')
     const resumed = await get(id).expect(200)
-    const { combatUpdates, ...snapshot } = results.find(
+    const { combatUpdates, domainEvents, ...snapshot } = results.find(
       ({ status }) => status === 200
     )!.body
+    expect(domainEvents).toEqual([])
     expect(combatUpdates).toEqual([])
     expect(resumed.body).toEqual(snapshot)
     expect(resumed.body.pendingRewards).toMatchObject([
