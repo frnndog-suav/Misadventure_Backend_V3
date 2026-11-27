@@ -132,6 +132,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 112 | FEAT-21 | [Acordo de contrato](112-FEAT-21-acordo.md) | concluída |
 | 113 | FEAT-21 | [Implementação do backend e preparação da T-108](113-FEAT-21-implementacao.md) | concluída |
 | 114 | FEAT-21 | [Fechamento da validação integrada da T-108](114-FEAT-21-validacao-integrada.md) | concluída |
+| 115 | FEAT-22 | [Revisão e contraproposta de contrato](115-FEAT-22-contraproposta.md) | concluída |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
