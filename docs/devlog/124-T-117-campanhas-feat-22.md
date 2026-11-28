@@ -256,3 +256,18 @@ A T-117 e a T-112 seguem abertas. O CONTRATO v1.19 permanece com a FEAT-22 em `a
 - **Pontos de injeção** — `test/serve-feat-22-recovery.cjs <save> auto auto` usa a primeira chave válida que alcançar cada ponto, apenas no save indicado. A primeira falha ocorre no avanço da sessão, antes de abrir o convite. A segunda ocorre no avanço da ação, depois de gravar a recusa. Cada falha é injetada uma vez por processo. Após o primeiro reenvio, esperar convite na r3. Após recuperar a recusa, esperar r5, A1 vencedor solo com 11 Pico e Lia fora com 10 Pico e a poção, RNG `[0,0,10,11]`. Os UUIDs explícitos da execução anterior seguem aceitos pelo script.
 - **Disponibilidade** — o autor iniciou a instância de recuperação em 3334. As três APIs responderam em `/health`. O GET em 3334 confirmou o save reservado na r1, com a vez de A1, 1 PA e nenhuma decisão pendente. As duas injeções ficaram reservadas para o navegador.
 - **Pendente** — retorno do frontend sobre os cinco checkpoints. Para esta rodada, manter o PostgreSQL e as APIs em 3333 e 3334 disponíveis. A porta 3335 já pode ser desligada, pois o frontend confirmou os dois percursos com sucessora. Arquivos da retomada: os dois scripts de teste e este registro.
+
+## T-112 — confirmação dos cinco checkpoints pelo frontend
+
+- **Evidências** — em 2026-11-27, o autor confirmou os cinco percursos com MSW desligado, CONTRATO v1.20 e ROADMAP v1.09. Resultados detalhados no devlog 151 do frontend. Horas a preencher pelo autor.
+
+| Percurso | Resultado observado pelo frontend |
+| --- | --- |
+| `2-responsavel-incorreto` | `409 ACTION_NOT_ALLOWED` com `details.reason: combatDecisionNotOwned`. GET `200` na r3 com JSON idêntico, incluindo o convite e a poção de Lia. |
+| `4-fuga-do-iniciador` | Ações e GET `200`, r6. A1 venceu com 11 Pico e 10 Vigor. Lia terminou com 8 Pico e 8 Vigor. |
+| `5-iniciador-fugido` | Ações e GET `200`, r6. Lia terminou com 8 Pico, 8 Vigor e inventário vazio. A1 e A2 ficaram com 11 Pico. A1 recebeu poção e peixe, e A2 recebeu minério. |
+| `6-iniciador-fugido` | Ações e GET `200`, r5. A1 recebeu 15 Pico de combate. Ambos receberam 25 Pico de conclusão e 5 ouro. O save congelou com Pico 33/50, Vigor 8/10 e ouro 15/15. |
+| `7-injecao-browser` | No Chrome em 3334, a abertura e a recusa retornaram `500`. Cada reenvio repetiu a chave e o corpo originais e retornou `200`, recuperando o convite na r3 e a vitória solo de A1 na r5. A1 terminou com 11 Pico. Lia manteve 10 Pico e a poção. O recibo veio na resposta do reenvio da recusa. Ao reabrir o save, o Chrome exibiu “Vitória · inimigos derrotados · Pico +1”. |
+
+- **Situação** — cinco checkpoints aprovados, sem divergência funcional. A T-112 continua aberta e a FEAT-22 permanece `implementado (BE)`. A retomada aguarda o próximo retorno da T-112. A instância de recuperação em 3334 pode ser parada após esta rodada. A API em 3333 e o PostgreSQL seguem disponíveis para a validação integrada pendente.
+- **Arquivo alterado** — este registro. Conferência documental dos cinco resultados contra os checkpoints acima.
