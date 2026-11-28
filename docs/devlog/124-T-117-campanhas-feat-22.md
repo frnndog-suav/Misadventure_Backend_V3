@@ -271,3 +271,11 @@ A T-117 e a T-112 seguem abertas. O CONTRATO v1.19 permanece com a FEAT-22 em `a
 
 - **Situação** — cinco checkpoints aprovados, sem divergência funcional. A T-112 continua aberta e a FEAT-22 permanece `implementado (BE)`. A retomada aguarda o próximo retorno da T-112. A instância de recuperação em 3334 pode ser parada após esta rodada. A API em 3333 e o PostgreSQL seguem disponíveis para a validação integrada pendente.
 - **Arquivo alterado** — este registro. Conferência documental dos cinco resultados contra os checkpoints acima.
+
+## T-112 — confirmação final da FEAT-22
+
+- **Data** — 2026-11-27. Horas a preencher pelo autor.
+- **Base** — fechamento do devlog 151 do frontend (commit `63e5610`), CONTRATO v1.20, ROADMAP v1.09 e os cinco checkpoints deste registro (commit `027b7aa`).
+- **Verificação** — a evidência da API real com MSW desligado cobre os sete cenários. Os cinco checkpoints finais conferem com as revisões e resultados esperados. O PostgreSQL confirmou a contagem do baralho no rodízio e na Reflexão em grupo. A comparação com o controle confirmou estado e RNG, e os registros de recuperação demonstraram igualdade dos recibos JSON e retomada após os dois HTTP 500. O fechamento foi feito por conferência documental dos resultados já executados.
+- **Entrega** — T-117 concluída e FEAT-22 validada nos dois lados. Atualizados CONTRATO v1.21, ROADMAP v1.10, SPEC-BACKEND v1.18, índice do devlog e este registro. Arquivos compartilhados aguardam sincronização pelo autor.
+- **Retomada** — os sete cenários foram concluídos. O PostgreSQL e as instâncias usadas para a T-112 já podem ser parados. A próxima FEAT no roadmap é a FEAT-23, Negociação, cujo planejamento aguarda autorização.

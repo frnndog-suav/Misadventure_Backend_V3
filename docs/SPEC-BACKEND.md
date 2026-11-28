@@ -1,6 +1,6 @@
 # Misadventures — Especificação do backend
 
-> **Versão da spec:** 1.17 · **Data:** 2026-11-27
+> **Versão da spec:** 1.18 · **Data:** 2026-11-27
 >
 > Fonte da verdade do **comportamento do backend** (spec-anchored). Regras do jogo: [`README.md`](README.md) (citar por seção, nunca copiar). O que trafega com o frontend: [`CONTRATO.md`](CONTRATO.md). Fases: [`ROADMAP.md`](ROADMAP.md).
 
@@ -896,11 +896,11 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 
 ### FEAT-22 — Recrutar ajudantes e combate em grupo
 
-- [ ] **T-113 — Recrutamento e elenco (REQ-186).** Implementar elegibilidade, política de convites, confirmação antes do primeiro ciclo e entrada solo compatível. Cobrir os casos de elenco dos cenários 1 e 2.
-- [ ] **T-114 — Ciclos de combate em grupo (REQ-188).** Implementar elenco ativo, iniciativa, alvos, nocaute, ressurreição, fuga e limite de ciclos. Cobrir os cenários 3 e 4.
-- [ ] **T-115 — Recompensas e desfecho (REQ-189, REQ-190).** Implementar efeitos individuais, missão, rodízio, respawn e conclusão da dimensão. Cobrir os cenários 5 e 6.
-- [ ] **T-116 — Decisões HTTP, retomada e projeções (REQ-187, REQ-191).** Integrar as pausas ao avanço e aos recibos existentes, verificar a precedência HTTP e os eventos, e cobrir os cenários 2 e 7 em E2E. Reexecutar os cenários afetados das etapas anteriores pela API.
-- [ ] **T-117 — Campanhas e entrega para a T-112 (REQ-186 a REQ-191).** Verificar os sete cenários e suas variações no backend, preparar saves independentes para percursos incompatíveis e entregar revisão da API, URL, IDs dos saves, catálogo, sementes, estados iniciais e resultados esperados por participante. Registrar `implementado (BE)` após os testes e `validado` após o retorno da T-112.
+- [x] **T-113 — Recrutamento e elenco (REQ-186).** Implementar elegibilidade, política de convites, confirmação antes do primeiro ciclo e entrada solo compatível. Cobrir os casos de elenco dos cenários 1 e 2.
+- [x] **T-114 — Ciclos de combate em grupo (REQ-188).** Implementar elenco ativo, iniciativa, alvos, nocaute, ressurreição, fuga e limite de ciclos. Cobrir os cenários 3 e 4.
+- [x] **T-115 — Recompensas e desfecho (REQ-189, REQ-190).** Implementar efeitos individuais, missão, rodízio, respawn e conclusão da dimensão. Cobrir os cenários 5 e 6.
+- [x] **T-116 — Decisões HTTP, retomada e projeções (REQ-187, REQ-191).** Integrar as pausas ao avanço e aos recibos existentes, verificar a precedência HTTP e os eventos, e cobrir os cenários 2 e 7 em E2E. Reexecutar os cenários afetados das etapas anteriores pela API.
+- [x] **T-117 — Campanhas e entrega para a T-112 (REQ-186 a REQ-191).** Verificar os sete cenários e suas variações no backend, preparar saves independentes para percursos incompatíveis e entregar revisão da API, URL, IDs dos saves, catálogo, sementes, estados iniciais e resultados esperados por participante. Registrar `implementado (BE)` após os testes e `validado` após o retorno da T-112.
 
 ## 8. Histórico
 
@@ -1027,3 +1027,4 @@ Contrato necessário (seção FEAT-11, a propor pelo backend com `/contrato FEAT
 | 1.15 | 2026-11-27 | FEAT-20 encerrada após os seis cenários da T-104 e a confirmação de `GET /health`. |
 | 1.16 | 2026-11-27 | Planejamento da FEAT-22 conforme CONTRATO v1.19, com REQ-186 a REQ-191 e T-113 a T-117. Próxima etapa T-113. |
 | 1.17 | 2026-11-27 | Pausa obrigatória antes do Momento 3 conforme ROADMAP v1.07. |
+| 1.18 | 2026-11-27 | FEAT-22 encerrada após o retorno final da T-112, com T-113 a T-117 concluídas conforme os devlogs 120 a 124. |
