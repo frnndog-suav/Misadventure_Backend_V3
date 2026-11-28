@@ -1,7 +1,7 @@
-﻿# T-117 — Campanhas e verificação da FEAT-22
+# T-117 — Campanhas e verificação da FEAT-22
 
 - **Data** — 2026-11-27
-- **Status** — em andamento
+- **Status** — verificação do backend concluída, aguardando retorno da T-112
 - **Horas** — a preencher pelo autor
 - **Base** — REQ-186 a REQ-191, CONTRATO v1.19, devlog 123
 - **API** — revisão do processo informada pelo autor: `6dedd02`, igual ao HEAD conferido. `http://localhost:3333/health` respondeu `200` com `contractVersion: "1.13"`. O roteiro conferido é o CONTRATO v1.19.
@@ -143,3 +143,97 @@ Use a API real em `http://localhost:3333`, o catálogo desta retomada e MSW desl
 ~~~
 
 A T-117 e a T-112 seguem abertas. O CONTRATO v1.19 permanece com a FEAT-22 em `acordado`. Arquivos desta retomada: este registro e `test/serve-feat-22-recovery.cjs`.
+
+## Cenários 3 a 6 — preparação offline
+
+- **Base** — retomada de `d4f9168` sobre o HEAD `c98efdb`, com REQ-188 a REQ-190 e CONTRATO v1.19. Horas a preencher pelo autor.
+- **Arquivos** — `test/prepare-feat-22.cjs` e este registro. O modo `saves pending` provisiona 19 checkpoints. O modo `saves successor` provisiona os dois checkpoints que usam a sucessora publicada. Cada percurso cria uma campanha com ID próprio. Os saves já registrados acima continuam reservados para a T-112.
+- **Entrada** — semente inicial `[0,0,0,10]` na dimensão `fixture.test-dimension`, URL padrão `http://localhost:3333`. O preparador emite JSONL com ID, revisão, turno, elenco, estado do RNG e decisão inicial. Os percursos em missão começam no recrutamento da etapa de combate. O elenco só de IAs começa na abertura da sessão. O rodízio humano começa com o convite da IA já aberto. Os demais começam no recrutamento.
+- **Verificações sem serviços** — build aprovado. Validador aprovou os catálogos sem sucessora (1 coleção, 35 cartas) e com sucessora (2 coleções, 37 cartas). Sintaxe, ESLint e `git diff --check` aprovados. Os 30 testes de domínio passaram com transformação TypeScript temporária devido à falha de carregamento nativo do SWC.
+
+| Checkpoints | Percurso e resultado esperado |
+| --- | --- |
+| `3-recalculo-padrao`, `3-recalculo-humano` | Confirmar todos e escolher a prioridade indicada. H encerra o turno no primeiro ciclo. Conferir o bônus temporário de A1, sua expiração, o desempate recalculado e a prioridade inimiga em igualdade. |
+| `3-apenas-ias` | Abrir sessão e conferir a ordem padrão do elenco de A1 e A2, com H em outra zona. |
+| `3-ressurreicao`, `3-respawn` | Confirmar A1, conferir rejeição de aliado como alvo de ataque e encerrar a primeira vez de H para o inimigo derrubar A1. Conferir o turno pulado. Usar a ressurreição antes da vitória no primeiro save. No segundo, vencer com A1 caído e conferir respawn e perda da próxima vez. |
+| `4-fuga-falha`, `4-fuga-total`, `4-fuga-e-derrota`, `4-limite-com-nocaute` | Confirmar A1. Testar a fuga de H nos três primeiros. Conferir custo e ataque livre na falha, fuga coletiva na segunda campanha e derrota com H fugido na terceira. Na última, conferir Sem fuga e encerrar o turno para atingir o limite com A1 nocauteado. H perde Pico e conserva Vigor 3. Só A1 sofre revés. |
+| `5-iniciador-caido`, `5-rodizio-humano` | No primeiro, recrutar A1 e A2 e deixar o inimigo nocautear H, para os dois sobreviventes repartirem 7 ouro em 3 para cada. No segundo, aceitar o convite de A1 e vencer após a fuga de A1. A prioridade padrão já coloca H antes de A2 em empate. Conferir Vigor explícito, a primeira carta pendente para H e a compra seguinte somente após a escolha. Conferir o rodízio H, A2, H e o ouro dividido em 3 para cada sobrevivente. |
+| `5-missao-vitoria`, `5-missao-fuga`, `5-missao-derrota` | Confirmar A1. Na vitória, H foge e A1 vence, com avanço único da etapa de H. Repetir com fuga coletiva e derrota em saves separados e conferir que a etapa continua aberta. |
+| `5-reflexao-solo`, `5-reflexao-grupo` | Confirmar lista vazia no solo e A1 no grupo. Atacar com H a 1 PV. Conferir vitória e nocaute nos dois, recompensa histórica no solo e ausência de recompensa de combate no grupo com zero sobreviventes. |
+| `6-reflexao`, `6-sem-vitoria`, `6-saque-com-respawn` | Confirmar A1. Conferir conclusão e prêmio após respawn na Reflexão fatal. Em Sem fuga, conferir rejeição da fuga e dimensão aberta com o item preservado após a derrota. No saque, deixar A1 cair antes da vitória de H e conferir origem e respawn pendentes até resolver a carta. |
+| `6-sucessora`, `6-premio-pendente` | No primeiro, H foge e A1 vence. Conferir bônus de combate de A1 e conclusão, prêmio máximo e transição para os dois. No segundo, vencer com H de pé e inventário cheio. Conferir decisão sobre o prêmio máximo após a transição, resolver e verificar conclusão única. |
+
+- **Pendente após esta preparação** — provisionar os saves e publicar no pacote da T-112 os IDs e resultados observados.
+
+## Cenários 3 a 6 — verificação sem sucessora e complemento do pacote da T-112
+
+- **Ambiente** — build local da API em `c98efdb`, em `http://localhost:3333`. A aplicação informa `contractVersion: "1.13"` em `/health`. Os percursos foram avaliados pelo CONTRATO v1.19. Catálogo sem sucessora, dimensão `fixture.test-dimension`, 1 coleção e 35 cartas.
+- **Verificação** — 19 percursos executados em cópias descartáveis. Conferidos os retornos HTTP, as revisões de GET e o estado no PostgreSQL, incluindo o RNG, as missões, os inventários e os recibos de combate. Os 19 saves reservados conservaram as revisões iniciais. Na primeira execução, a missão precisava começar em `ready`; o preparador foi corrigido e as campanhas foram recriadas. Também foram ajustadas a iniciativa do inimigo nas fixtures de nocaute e a preparação do convite no rodízio.
+- **Pacote para a T-112** — acrescente os saves reservados abaixo ao pacote anterior. Abrir `http://localhost:3333/parties/<save>` pela aplicação com MSW desligado. Todos começam com Pico 10 e ouro 10 por membro, RNG `[0,0,0,10]`, Vigor 10 salvo as exceções da tabela. A ordem dos PV iniciais é H/A1/A2. Salvo indicação, a vez é de H com 2 PA, todos estão no Porto e têm inventário vazio. Os checkpoints de chefe trazem um Fragmento T-117 no inventário de conclusão de H, quando aplicável ao percurso.
+
+| Percurso | Save reservado | Revisão inicial | PV iniciais e exceções | Resultado esperado e observado |
+| --- | --- | --- | --- | --- |
+| 3-recalculo-padrao | `acdd643a-4ede-4300-ad83-e3e492a3b60e` | 4 | 22/22/22 | Ciclo 1 A1, inimigo, A2, H. Ciclo 2 inimigo, A1, A2, H. Todos de pé com 11 Pico. |
+| 3-recalculo-humano | `35c15b85-a721-49f6-89a0-83f3fd7b1b09` | 4 | 22/22/22 | Ciclo 1 A1, inimigo, H, A2. Ciclo 2 inimigo, H, A1, A2. Todos de pé com 11 Pico. |
+| 3-apenas-ias | `3146a92d-9eee-40d6-a386-3120a02a5bf8` | 1 | 21/22/22. A1 com 1 PA, H na Mina Velha com uma poção. Abrir sessão. | A1 abre o ciclo pela prioridade padrão. A1 e A2 terminam com 12 Pico após dois encontros automáticos da sessão. H permanece fora com 10 Pico. |
+| 3-ressurreicao | `88fd8f37-c727-41ce-8571-fd876ba8c831` | 4 | 22/11. H com uma carta de ressurreição. | Ataque contra aliado recebe 409. A1 cai, perde a vez de combate e volta com 11 PV, sem respawn ou perda da próxima vez de exploração. Ambos ganham 1 Pico. |
+| 3-respawn | `6b739de1-ca62-4238-aa85-a09c64fd6f23` | 4 | 22/11 | Ataque contra aliado recebe 409. A1 fica caído, volta na Mina Velha com 2 PV, 9 Pico e 4 Vigor e perde a próxima vez. H ganha 1 Pico. |
+| 4-fuga-falha | `8311cfca-c422-4a0e-aa1a-0eb7f5c15af0` | 4 | 22/22 | H gasta 2 Vigor, falha e recebe o ataque livre antes da vez de A1. A1 vence. Ambos terminam com 11 Pico e H conserva 8 Vigor. |
+| 4-fuga-total | `ff0d50ce-30b3-40c5-8d12-4467bd705cbe` | 4 | 22/11 | H gasta 2 Vigor e A1 foge sem custo. Ambos terminam fugidos, com 8 Pico e 8 Vigor. |
+| 4-fuga-e-derrota | `e3e946e6-d7cc-49e7-9d46-0f88d1f762f7` | 4 | 22/22 | H foge com 8 Pico e mantém 10 ouro. A1 cai e volta com 9 Pico, 4 Vigor e 5 ouro após o revés. |
+| 4-limite-com-nocaute | `bebf9f8d-4a21-482c-b295-f7f1486437c0` | 4 | 22/11. H com 3 Vigor. | Fuga manual recebe 409. No limite H foge com 8 Pico, 3 Vigor e 10 ouro. A1 cai, volta na mina com 9 Pico, 4 Vigor e 5 ouro. |
+| 5-iniciador-caido | `906fea40-0ead-4d77-8465-2a8d09eaeece` | 4 | 1/22/22 | H cai e volta com 9 Pico, sem saque. A1 e A2 ganham 1 Pico e 3 ouro cada. A1 recebe poção e peixe. A2 recebe minério. |
+| 5-rodizio-humano | `4cdddf46-89b6-498c-9353-8906001408d6` | 3 | 21/11/22. A1 com 0 PA e convite pendente. H tem 6 Vigor e um minério. | A1 foge. H e A2 ganham 1 Pico e 3 ouro cada. Vigor de H sobe de 6 para 8. Rodízio H, A2, H. Deixar poção e peixe nas duas pausas de H. A2 recebe minério. O baralho tem duas cartas após a primeira compra e só avança com a resolução. |
+| 5-missao-vitoria | `b8113ab3-85e0-4529-90e1-0b981685dcc2` | 3 | 22/22 | H foge e termina com 8 Pico. A1 vence e termina com 11 Pico. A etapa de H fica completed. |
+| 5-missao-fuga | `43ec92fd-4a9e-4d1e-8fb8-8774aa184972` | 3 | 22/11 | Ambos fogem com 8 Pico. A etapa de H volta a ready. |
+| 5-missao-derrota | `24e336fb-ce4d-4489-ba2c-5a0e215f9e24` | 3 | 1/22 | Ambos caem, voltam com 9 Pico e 5 ouro. A etapa de H volta a ready. |
+| 5-reflexao-solo | `0a7fb1d7-6aa6-4c8e-9273-d612f794bd62` | 4 | 1/22 | Confirmar lista vazia. H vence e cai por Reflexão, volta com 2 PV e conserva o saque histórico de 7 ouro e três cartas. Um convite posterior pode abrir durante o avanço automático. |
+| 5-reflexao-grupo | `60d07c03-35a8-4ca7-9c6d-73f1cd66a9a8` | 3 | 1/11 | A1 foge, H vence e cai por Reflexão. Etapa completed, H respawna, ouro continua 10 para ambos e as três cartas continuam no baralho. |
+| 6-reflexao | `69c2c27e-398a-455c-96bc-6a44cc65117a` | 3 | 1/11 | H cai por Reflexão e A1 foge. Vitória sem saque de combate. Ambos ganham 25 Pico de conclusão e 5 ouro. Save congelado. |
+| 6-sem-vitoria | `7736a43c-4b27-4186-b2a2-012c27818863` | 3 | 1/22 | Fuga manual recebe 409. H cai, A1 foge no limite. A dimensão continua aberta, com o fragmento de H preservado. |
+| 6-saque-com-respawn | `a2b23835-5615-4b70-8432-81e663ad5901` | 3 | 22/11. H com um minério. | A1 está com 0 PV no Porto enquanto H decide sobre a carta. Deixar a carta move A1 para a Mina e congela o save. H termina com 50 Pico e 22 ouro. A1 termina com 34 Pico e 15 ouro. |
+
+### Evidências PostgreSQL
+
+| Percurso | Cópia executada | Revisão final | RNG final |
+| --- | --- | --- | --- |
+| 3-recalculo-padrao | `b878e1ef-dec5-42d4-8702-ce1b1d7fb045` | 8 | `[1036288346,2516065674,227852269,17]` |
+| 3-recalculo-humano | `cb818a7b-7ea0-467b-8db9-6ec38f2f5d44` | 8 | `[208100131,3623981895,2978614284,15]` |
+| 3-apenas-ias | `3141f786-949d-4aba-9fb2-a391c10d6f26` | 4 | `[0,90,20971531,12]` |
+| 3-ressurreicao | `34aae510-b5a7-454a-81b7-42d47f7f41e7` | 8 | `[0,90,20971531,12]` |
+| 3-respawn | `cb9f60dc-7e0f-4e6f-9a55-1ad52e00ef76` | 7 | `[0,90,20971531,12]` |
+| 4-fuga-falha | `dd34b9a1-db81-4171-807d-8ae23bbf62ca` | 6 | `[90,188743779,23079014,13]` |
+| 4-fuga-total | `bcc7bb91-6d11-4964-99de-47a62a9da3fc` | 6 | `[0,0,10,11]` |
+| 4-fuga-e-derrota | `7325d36d-9d7a-4f6a-9604-0251562b7743` | 6 | `[0,0,10,11]` |
+| 4-limite-com-nocaute | `bccfda09-183a-46a3-b860-3c6d7b3fe484` | 6 | `[0,0,10,11]` |
+| 5-iniciador-caido | `4d0af080-e652-4f6e-9048-def26cb50212` | 6 | `[0,90,20971531,12]` |
+| 5-rodizio-humano | `e2c7ab6d-585c-4c15-bc02-2b5bdd3028e2` | 10 | `[0,0,10,11]` |
+| 5-missao-vitoria | `08a6edc1-fbc2-4615-87b0-5592f13b49dd` | 5 | `[0,0,10,11]` |
+| 5-missao-fuga | `630a91cf-2f53-42cb-bbef-3e136acfbf4e` | 5 | `[0,0,10,11]` |
+| 5-missao-derrota | `f0fe86b5-c7e1-4547-ba93-d8daad2759b2` | 5 | `[90,188743779,23079014,13]` |
+| 5-reflexao-solo | `6ae743bd-afa6-4679-af83-8aa8c2049e1e` | 7 | `[0,0,10,11]` |
+| 5-reflexao-grupo | `c53822f3-0adb-4c82-92f1-fdf2a0421055` | 5 | `[0,0,10,11]` |
+| 6-reflexao | `8935c045-e3ff-4b4b-be32-190eea97f93d` | 5 | `[0,0,10,11]` |
+| 6-sem-vitoria | `a118cce2-7ae1-4958-914f-5ea9a085ea8d` | 5 | `[0,90,20971531,12]` |
+| 6-saque-com-respawn | `47013486-5dc0-4c34-a285-db20307bb0fb` | 7 | `[0,90,20971531,12]` |
+
+- **Pendente** — executar `6-sucessora` e `6-premio-pendente` numa segunda instância da API com o catálogo publicado. A T-117 e a T-112 seguem abertas.
+
+## Cenário 6 — verificação com sucessora publicada
+
+- **Ambiente** — mesma revisão da API (`c98efdb`) e mesmo PostgreSQL, com processo em `http://localhost:3335`. Catálogo gerado por `node test/prepare-feat-22.cjs content successor`, 2 coleções, 37 cartas e sucessora `fixture-next.next-dimension`. `/health` respondeu `200`, `contractVersion: "1.13"`.
+- **Entrada para a T-112** — abrir os saves abaixo pela API da porta 3335 com MSW desligado. Ambos estão na revisão 3, fase de recrutamento do Guardião, com H na vez, 2 PA, ordem de campanha A1/H e RNG `[0,0,0,10]`. Ambos os participantes começam no Porto com 10 Pico, 10 Vigor e 10 ouro. H tem o Fragmento T-117. Para os demais saves do pacote, usar a API da porta 3333.
+
+| Percurso | Save reservado | Estado inicial e resultado esperado e observado |
+| --- | --- | --- |
+| `6-sucessora` | `aa36bad9-21a9-4491-b93e-5e43fd90fbff` | H com 22 PV e A1 com 11 PV, inventários vazios. Confirmar A1 e fugir com H. A1 vence dois inimigos Chefe e ganha 30 Pico de combate. H perde 2 Pico pela fuga. Após a transição, ambos ganham 25 Pico de conclusão, 5 ouro e uma poção. Pico final H 33, A1 65. Ambos chegam à Segunda Dimensão com 15 ouro. |
+| `6-premio-pendente` | `2f88c12b-65c9-4576-a99d-77af2869fd9b` | Ambos com 22 PV. H ocupa a única vaga com minério. Confirmar A1 e atacar com H. Ambos ganham 15 Pico de combate, 25 de conclusão e 5 ouro. A1 recebe a poção. Na revisão 5 H está na Segunda Dimensão com escolha pendente de origem `grandPrize`. Deixar a poção encerra a escolha na revisão 6 e preserva o minério. Pico final 50 e ouro final 15 para ambos. |
+
+| Percurso | Cópia executada | Revisão final | RNG final |
+| --- | --- | --- | --- |
+| `6-sucessora` | `3f6a240e-8915-4687-8b80-49ea8cd47b7e` | 5 | `[1867888323,3042011790,2545076664,133]` |
+| `6-premio-pendente` | `6dc1a14a-42f4-4b85-84f0-613662a4b3ad` | 6 | `[1735363102,1957979894,207632832,131]` |
+
+- **Verificações** — GET e PostgreSQL concordaram nas revisões. Os saves reservados permaneceram na revisão 3. Cada cópia teve um único recibo de ação com `combatEnded`. Reenviar a ação vencedora com a chave original devolveu o `200` da revisão 5 e preservou estado e revisão no banco, inclusive após resolver o prêmio.
+- **Entrega** — 21 variações dos cenários 3 a 6 verificadas nesta retomada. Os cenários 1, 2 e 7 e as verificações anteriores continuam registrados acima. O CONTRATO v1.20 marca a FEAT-22 como `implementado (BE)` e o ROADMAP v1.09 registra a entrega. O roteiro segue os critérios do CONTRATO v1.19. Arquivos finais desta retomada: o preparador, este registro, o índice do devlog, o contrato e o roadmap.
+- **Retomada** — aguardar o retorno dos cenários restantes da T-112 antes de marcar `validado` e fechar a FEAT-22. Para a validação integrada, manter PostgreSQL e as APIs nas portas 3333 e 3335 disponíveis.
