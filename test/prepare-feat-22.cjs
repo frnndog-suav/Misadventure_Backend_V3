@@ -18,6 +18,11 @@ const questCardId = 'fixture.t117-combat-quest'
 const successorId = 'fixture-next.next-dimension'
 const rngState = [0, 0, 0, 10]
 const lootCards = [potion, 'fixture.iron-ore', 'fixture.silver-fish']
+const retryFleeProfiles = [
+  '4-fuga-do-iniciador',
+  '5-iniciador-fugido',
+  '6-iniciador-fugido',
+]
 const pendingProfiles = [
   ['3-recalculo-padrao', 2],
   ['3-recalculo-humano', 2],
@@ -472,7 +477,15 @@ async function prepareCampaigns(profile) {
               ([scenario]) =>
                 !['6-sucessora', '6-premio-pendente'].includes(scenario)
             )
-          : rosterProfiles
+          : profile === 'retry'
+            ? [
+                ['2-responsavel-incorreto', 1],
+                ...rosterProfiles.filter(([scenario]) =>
+                  retryFleeProfiles.includes(scenario)
+                ),
+                ['7-injecao-browser', 1],
+              ]
+            : rosterProfiles
     for (const [scenario, aiHelperCount] of profiles) {
       const { id } = await api('/parties', {
         name: 'T-117 ' + scenario,
@@ -488,7 +501,8 @@ async function prepareCampaigns(profile) {
       const state = row.state
       assert.equal(state.dimension.dimensionCardId, dimensionId)
       const [human, helper, declining, remote] = state.members
-      const pending = profile !== undefined
+      const pending = profile === 'pending' || profile === 'successor'
+      const wrongOwner = scenario === '2-responsavel-incorreto'
       const aiFirst =
         scenario.startsWith('2-') ||
         scenario.startsWith('7-') ||
@@ -537,6 +551,8 @@ async function prepareCampaigns(profile) {
       }
       human.player.automaticEventEscape =
         scenario.includes('fuga') || scenario.includes('fugido')
+      if (profile === 'retry' && retryFleeProfiles.includes(scenario))
+        human.player.modifiers.celerity = 12
       if (scenario === '4-limite') state.config.maxCombatCycles = 1
       if (boss) human.player.completionItems = [{ cardId: shard, quantity: 1 }]
       if (scenario === '6-saque-pendente') {
@@ -614,6 +630,19 @@ async function prepareCampaigns(profile) {
           id,
         ])
       }
+      if (wrongOwner) {
+        const session = await api(path + '/session', {})
+        assert.equal(session.pendingCombatDecision?.type, 'invite')
+        const {
+          rows: [checkpoint],
+        } = await db.query('select state from parties where id = $1', [id])
+        checkpoint.state.combatRecruitment.decision.memberId =
+          session.pendingCombatDecision.initiatorMemberId
+        await db.query('update parties set state = $1 where id = $2', [
+          checkpoint.state,
+          id,
+        ])
+      }
       const party = await api(path)
       if (!invite) assert.equal(party.turn.memberId, state.turn.memberId)
       const {
@@ -631,7 +660,7 @@ async function prepareCampaigns(profile) {
           trigger:
             roster || (!pending && (loot || limit))
               ? 'roster'
-              : invite
+              : invite || wrongOwner
                 ? 'invite'
                 : aiFirst
                   ? 'session'
@@ -640,7 +669,7 @@ async function prepareCampaigns(profile) {
                     : 'startEvent',
           turn: party.turn,
           turnOrder: initial.state.turnOrder,
-          ...(pending && {
+          ...((pending || profile === 'retry') && {
             questId: human.player.openZoneQuests?.[0]?.questId,
             pendingCombatDecision: party.pendingCombatDecision,
             maxCombatCycles: initial.state.config.maxCombatCycles,
@@ -668,7 +697,7 @@ const profile = process.argv[3]
 if (
   (operation === 'content' && [undefined, 'successor'].includes(profile)) ||
   (operation === 'saves' &&
-    [undefined, 'pending', 'successor'].includes(profile))
+    [undefined, 'pending', 'successor', 'retry'].includes(profile))
 ) {
   ;(operation === 'content'
     ? prepareContent(profile === 'successor')
@@ -678,6 +707,6 @@ if (
     process.exitCode = 1
   })
 } else {
-  console.error('Use content [successor] ou saves [pending|successor].')
+  console.error('Use content [successor] ou saves [pending|successor|retry].')
   process.exitCode = 1
 }
