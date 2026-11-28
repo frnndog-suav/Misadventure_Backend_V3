@@ -142,6 +142,7 @@ Registro de cada etapa, escrito para que **outra IA consiga replicar o projeto**
 | 122 | T-115 | [Recompensas e desfecho de combate em grupo](122-T-115-recompensas-e-desfecho-em-grupo.md) | concluída |
 | 123 | T-116 | [Decisões HTTP e retomada de combate em grupo](123-T-116-decisoes-http-e-retomada-de-combate.md) | concluída |
 | 124 | T-117 | [Campanhas e verificação da FEAT-22](124-T-117-campanhas-feat-22.md) | concluída, FEAT-22 validada |
+| 125 | FEAT-30 | [Validação solo com API real](125-feat-30-validacao-solo-api.md) | validada no frontend |
 
 ## Como replicar
 1. `CLAUDE.md` com a constituição (domínio puro, determinístico, hexagonal; contrato primeiro; AVISO DE FRONTEND; instruções do README III.1).
